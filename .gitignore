@@ -1,0 +1,16 @@
+/.build
+/tmp
+/MdBoss.app
+.watch_timestamp
+.DS_Store
+app/Resources/build-commit.txt
+
+# Swift / Xcode
+.swiftpm/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# loose dev screenshots
+/shot*.png
+/side*.png

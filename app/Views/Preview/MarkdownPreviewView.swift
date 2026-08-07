@@ -1,0 +1,208 @@
+import SwiftUI
+import WebKit
+
+/// The rendered document.
+///
+/// Two-phase rendering, because `baseURL` can only be set at load time:
+/// opening a file loads the whole page once, and everything after that - typing, a theme
+/// switch, a text-size change - is a JavaScript call into the live page. A reload would
+/// flash white, lose the scroll position, and re-inline 162KB of libraries per keystroke.
+struct MarkdownPreviewView: NSViewRepresentable {
+    /// The markdown file's own URL, used as the page's base so relative hrefs reach the
+    /// navigation delegate already absolute. RFC 3986 replaces the last path segment,
+    /// exactly as a browser does.
+    let fileURL: URL?
+    let markdown: String
+    let theme: Theme
+    let fontSize: CGFloat
+    let measure: CGFloat
+    var anchor: String?
+    var onLink: (MarkdownLinkTarget) -> Void
+    var onScroll: ((Double) -> Void)?
+
+    func makeNSView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.setURLSchemeHandler(LocalFileSchemeHandler(), forURLScheme: LocalFileSchemeHandler.scheme)
+        configuration.userContentController.add(context.coordinator, name: Coordinator.bridgeName)
+
+        let webView = PreviewWebView(frame: .zero, configuration: configuration)
+        webView.fileURL = fileURL
+        webView.navigationDelegate = context.coordinator
+        // Without this the rubber-band overscroll area stays white on a dark page.
+        webView.underPageBackgroundColor = theme.nsColor(.bg)
+        webView.setValue(false, forKey: "drawsBackground")
+        #if DEBUG
+        webView.isInspectable = true
+        #endif
+
+        context.coordinator.owner = self
+        context.coordinator.load(webView, page: page(context.coordinator))
+        return webView
+    }
+
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.owner = self
+        (webView as? PreviewWebView)?.fileURL = fileURL
+
+        // A changed base URL means a different document - only that needs a real load.
+        guard coordinator.loadedURL == fileURL?.absoluteString else {
+            webView.underPageBackgroundColor = theme.nsColor(.bg)
+            coordinator.load(webView, page: page(coordinator))
+            return
+        }
+
+        if coordinator.renderedMarkdown != markdown {
+            coordinator.renderedMarkdown = markdown
+            coordinator.run(webView, "mdRender(\(JSLiteral.string(markdown)));")
+        }
+
+        if coordinator.renderedTheme != theme.id {
+            coordinator.renderedTheme = theme.id
+            webView.underPageBackgroundColor = theme.nsColor(.bg)
+            coordinator.run(webView, "mdSetTheme(\(theme.rootCSSLiteral));")
+        }
+
+        if coordinator.renderedFontSize != fontSize {
+            coordinator.renderedFontSize = fontSize
+            coordinator.run(webView, "mdSetFontSize(\(Int(fontSize)));")
+        }
+
+        if coordinator.renderedMeasure != measure {
+            coordinator.renderedMeasure = measure
+            coordinator.run(webView, "mdSetMeasure(\(MarkdownPageBuilder.trim(measure)));")
+        }
+
+        if let anchor, coordinator.pendingAnchor != anchor {
+            coordinator.pendingAnchor = anchor
+            coordinator.run(webView, "mdScrollToAnchor(\(JSLiteral.string(anchor)));")
+        }
+    }
+
+    static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: Coordinator.bridgeName)
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    /// Scrolls the page to a 0...1 position. Used by split mode.
+    static func scroll(_ webView: WKWebView, toFraction fraction: Double) {
+        webView.evaluateJavaScript("mdScrollToFraction(\(fraction));")
+    }
+
+    private func page(_ coordinator: Coordinator) -> String {
+        coordinator.renderedMarkdown = markdown
+        coordinator.renderedTheme = theme.id
+        coordinator.renderedFontSize = fontSize
+        coordinator.renderedMeasure = measure
+        coordinator.loadedURL = fileURL?.absoluteString
+        coordinator.pendingAnchor = anchor
+        return MarkdownPageBuilder.page(
+            markdown: markdown,
+            theme: theme,
+            fontSize: fontSize,
+            measure: measure,
+            nonce: MarkdownPageBuilder.makeNonce()
+        )
+    }
+
+    // MARK: - Coordinator
+
+    @MainActor
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        static let bridgeName = "mdboss"
+
+        var owner: MarkdownPreviewView?
+
+        var loadedURL: String?
+        var renderedMarkdown = ""
+        var renderedTheme: ThemeID?
+        var renderedFontSize: CGFloat = 0
+        var renderedMeasure: CGFloat = 0
+        var pendingAnchor: String?
+
+        private var isReady = false
+        private var queued: [String] = []
+
+        func load(_ webView: WKWebView, page: String) {
+            isReady = false
+            queued.removeAll()
+            webView.loadHTMLString(page, baseURL: owner?.fileURL)
+        }
+
+        /// Calls made before the page signals `ready` are queued rather than dropped -
+        /// a theme toggle during load must not be lost.
+        func run(_ webView: WKWebView, _ script: String) {
+            guard isReady else {
+                queued.append(script)
+                return
+            }
+            webView.evaluateJavaScript(script)
+        }
+
+        // MARK: WKNavigationDelegate
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
+        ) {
+            guard navigationAction.navigationType == .linkActivated,
+                  let url = navigationAction.request.url else {
+                decisionHandler(.allow)
+                return
+            }
+
+            // The preview never navigates away from the document it is rendering.
+            decisionHandler(.cancel)
+            owner?.onLink(MarkdownLinkTarget.resolve(url))
+        }
+
+        // MARK: WKScriptMessageHandler
+
+        func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard let body = message.body as? [String: Any],
+                  let kind = body["kind"] as? String else { return }
+
+            switch kind {
+            case "ready":
+                isReady = true
+                let pending = queued
+                queued.removeAll()
+                if let webView = message.webView {
+                    for script in pending { webView.evaluateJavaScript(script) }
+                    if let anchor = pendingAnchor {
+                        webView.evaluateJavaScript("mdScrollToAnchor(\(JSLiteral.string(anchor)));")
+                    }
+                }
+            case "scroll":
+                guard let fraction = body["fraction"] as? Double else { return }
+                owner?.onScroll?(min(1, max(0, fraction)))
+            case "anchorMiss":
+                guard let id = body["id"] as? String else { return }
+                MdBossManager.shared.showError("No heading: \(id)")
+            case "error":
+                guard let message = body["message"] as? String else { return }
+                MdBossManager.shared.showError("Preview: \(message)")
+            default:
+                break
+            }
+        }
+    }
+}
+
+/// WKWebView with md-boss items in its context menu. On macOS the only hook for that is
+/// `willOpenMenu`, so the web view has to be subclassed.
+final class PreviewWebView: WKWebView {
+    var fileURL: URL?
+
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        super.willOpenMenu(menu, with: event)
+        guard let fileURL else { return }
+
+        let manager = MdBossManager.shared
+        menu.insertItem(BlockMenuItem("Copy Path") { manager.copyPath(fileURL) }, at: 0)
+        menu.insertItem(BlockMenuItem("Reveal in Finder") { manager.revealInFinder(fileURL) }, at: 1)
+        menu.insertItem(.separator(), at: 2)
+    }
+}

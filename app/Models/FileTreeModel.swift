@@ -1,0 +1,347 @@
+import SwiftUI
+
+// MARK: - Nodes
+
+struct FileNode: Identifiable, Equatable, Sendable {
+    let url: URL
+    let isDirectory: Bool
+
+    var id: String { url.path }
+    var name: String { url.lastPathComponent }
+}
+
+/// One visible line in the sidebar. The tree is flattened rather than nested so keyboard
+/// navigation is index arithmetic and expansion state is one `Set<String>` of paths.
+struct FlatRow: Identifiable, Equatable {
+    let node: FileNode
+    let depth: Int
+    /// Directory we were not allowed to read. Non-sandboxed still means TCC prompts for
+    /// ~/Desktop, ~/Documents and ~/Downloads, and "denied" must not look like "empty".
+    let isDenied: Bool
+
+    var id: String { node.id }
+}
+
+// MARK: - Listing (pure, off-actor)
+
+enum FileTree {
+    /// What the sidebar lists and the preview renders. Plain text is included and rendered
+    /// through the same markdown pipeline - a .txt is just markdown that mostly turns into
+    /// paragraphs.
+    static let documentExtensions: Set<String> = [
+        "md", "markdown", "mdown", "mkd", "mkdn", "mdwn", "qmd", "rmd", "txt"
+    ]
+
+    static func isDocument(_ url: URL) -> Bool {
+        documentExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    enum Listing: Sendable {
+        case entries([FileNode])
+        case denied
+        case missing
+    }
+
+    /// Runs off the main actor - a cold iCloud or network folder blocks for seconds, and a
+    /// subfolder's document scan walks its whole subtree.
+    nonisolated static func list(_ directory: URL, skipFolders: Set<String>) -> Listing {
+        let keys: [URLResourceKey] = [.isDirectoryKey]
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        ) else {
+            // The same throw covers "gone" and "not allowed", and the sidebar has to say
+            // something different for each - so ask, but only on the failure path.
+            return FileManager.default.fileExists(atPath: directory.path) ? .denied : .missing
+        }
+
+        let nodes = contents.compactMap { url -> FileNode? in
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDirectory {
+                guard !skipFolders.contains(url.lastPathComponent),
+                      DocumentScanner.shared.containsDocuments(url, skipFolders: skipFolders) else { return nil }
+            } else {
+                guard isDocument(url) else { return nil }
+            }
+            return FileNode(url: url, isDirectory: isDirectory)
+        }
+
+        return .entries(sorted(nodes))
+    }
+
+    /// Folders first, then Finder's natural order - `9.md` before `10.md`.
+    nonisolated static func sorted(_ nodes: [FileNode]) -> [FileNode] {
+        nodes.sorted { lhs, rhs in
+            if lhs.isDirectory != rhs.isDirectory { return lhs.isDirectory }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    /// Walks the active root's contents, descending only into expanded directories, so the
+    /// cost is proportional to the number of visible rows rather than the size of the tree.
+    ///
+    /// The root itself is never a row - the sidebar names it in the select box above the
+    /// tree and dives straight into its contents, which is why it is implicitly expanded.
+    static func flatten(
+        root: URL?,
+        children: [String: [FileNode]],
+        expanded: Set<String>,
+        denied: Set<String>
+    ) -> [FlatRow] {
+        guard let root else { return [] }
+        var rows: [FlatRow] = []
+
+        func append(_ node: FileNode, depth: Int) {
+            rows.append(FlatRow(node: node, depth: depth, isDenied: denied.contains(node.id)))
+
+            guard node.isDirectory, expanded.contains(node.id) else { return }
+            for child in children[node.id] ?? [] {
+                append(child, depth: depth + 1)
+            }
+        }
+
+        for child in children[root.path] ?? [] {
+            append(child, depth: 0)
+        }
+        return rows
+    }
+}
+
+// MARK: - Model
+
+@MainActor
+final class FileTreeModel: ObservableObject {
+    @Published private(set) var rows: [FlatRow] = []
+    @Published var cursor = 0
+
+    private let folders: RootFoldersManager
+    private let settings = AppSettings.shared
+
+    private var children: [String: [FileNode]] = [:]
+    private var denied: Set<String> = []
+    private var missing: Set<String> = []
+    private var expanded: Set<String> = []
+    private var listing: Set<String> = []
+
+    private var watcher: DirectoryWatcher?
+    private var rootsObserver: Task<Void, Never>?
+    /// What the last rebuild was showing, so switching folders can reset the cursor.
+    private var lastActive: String?
+    /// A reveal target whose row has not been listed yet.
+    private var pendingReveal: URL?
+
+    var watchersSaturated: Bool { watcher?.isSaturated ?? false }
+
+    /// The active folder is unreachable - an unmounted drive, or renamed in Finder.
+    var activeIsMissing: Bool { folders.active.map { missing.contains($0.path) } ?? false }
+
+    var activeIsDenied: Bool { folders.active.map { denied.contains($0.path) } ?? false }
+
+    init(folders: RootFoldersManager = .shared) {
+        self.folders = folders
+        expanded = Set(settings.expandedPaths)
+
+        watcher = DirectoryWatcher { [weak self] url, event in
+            self?.handleWatchEvent(url, event)
+        }
+
+        rootsObserver = Task { [weak self] in
+            for await roots in folders.$roots.values {
+                self?.rootsChanged(roots)
+            }
+        }
+    }
+
+    deinit {
+        rootsObserver?.cancel()
+    }
+
+    // MARK: Expansion
+
+    func isExpanded(_ node: FileNode) -> Bool { expanded.contains(node.id) }
+
+    func toggle(_ node: FileNode) {
+        guard node.isDirectory else { return }
+        if expanded.contains(node.id) {
+            collapse(node)
+        } else {
+            expand(node)
+        }
+    }
+
+    func expand(_ node: FileNode) {
+        guard node.isDirectory, !expanded.contains(node.id) else { return }
+        expanded.insert(node.id)
+        persistExpansion()
+        refresh(node.url)
+        rebuild()
+    }
+
+    func collapse(_ node: FileNode) {
+        guard expanded.remove(node.id) != nil else { return }
+        persistExpansion()
+        rebuild()
+    }
+
+    /// Expands every ancestor of `url` under its root, so a followed link can be revealed.
+    /// A link into a different root switches the sidebar to it first.
+    func reveal(_ url: URL) {
+        guard let root = folders.root(containing: url) else { return }
+        folders.select(root)
+
+        var ancestors: [URL] = []
+        var current = url.standardizedFileURL.deletingLastPathComponent()
+        // The root is implicitly expanded, so stop one level below it.
+        while current.path.hasPrefix(root.path + "/") {
+            ancestors.append(current)
+            current = current.deletingLastPathComponent()
+        }
+
+        refresh(root)
+        for directory in ancestors.reversed() {
+            expanded.insert(directory.path)
+            refresh(directory)
+        }
+        persistExpansion()
+        // Listing is async, so the row may not exist yet - rebuild() retries until it does.
+        pendingReveal = url.standardizedFileURL
+        rebuild()
+    }
+
+    // MARK: Cursor
+
+    func moveCursor(to url: URL) {
+        guard let index = rows.firstIndex(where: { $0.id == url.standardizedFileURL.path }) else { return }
+        cursor = index
+    }
+
+    var cursorRow: FlatRow? { rows.indices.contains(cursor) ? rows[cursor] : nil }
+
+    // MARK: Listing
+
+    /// Lists a directory off the main actor and merges the result in. Merging rather than
+    /// replacing keeps the cursor and any expanded subfolders in place when a build tool
+    /// touches the folder.
+    func refresh(_ directory: URL) {
+        let path = directory.path
+        guard !listing.contains(path) else { return }
+        listing.insert(path)
+
+        let skip = Set(settings.skipFolders)
+        Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) {
+                FileTree.list(directory, skipFolders: skip)
+            }.value
+
+            guard let self else { return }
+            self.listing.remove(path)
+
+            switch result {
+            case .entries(let nodes):
+                self.denied.remove(path)
+                self.missing.remove(path)
+                self.children[path] = nodes
+                // Drop expansion for subfolders that no longer exist.
+                let names = Set(nodes.filter(\.isDirectory).map(\.id))
+                self.expanded = self.expanded.filter { expandedPath in
+                    guard expandedPath.hasPrefix(path + "/") else { return true }
+                    let relative = expandedPath.dropFirst(path.count + 1)
+                    guard !relative.contains("/") else { return true }
+                    return names.contains(expandedPath)
+                }
+            case .denied:
+                self.denied.insert(path)
+                self.missing.remove(path)
+                self.children[path] = []
+
+            case .missing:
+                self.denied.remove(path)
+                self.missing.insert(path)
+                self.children[path] = []
+            }
+
+            self.rebuild()
+        }
+    }
+
+    func refreshAll() {
+        guard let active = folders.active else { return }
+        refresh(active)
+        for path in expanded where path.hasPrefix(active.path + "/") {
+            refresh(URL(fileURLWithPath: path))
+        }
+    }
+
+    // MARK: Internals
+
+    /// Only the active root is listed - the others cost nothing until they are picked.
+    private func rootsChanged(_ roots: [URL]) {
+        if let active = roots.first, children[active.path] == nil {
+            refresh(active)
+        }
+        rebuild()
+    }
+
+    private func rebuild() {
+        let active = folders.active
+        rows = FileTree.flatten(
+            root: active,
+            children: children,
+            expanded: expanded,
+            denied: denied
+        )
+
+        if active?.path != lastActive {
+            lastActive = active?.path
+            cursor = 0
+        } else {
+            cursor = min(cursor, max(0, rows.count - 1))
+        }
+
+        if let target = pendingReveal, rows.contains(where: { $0.id == target.path }) {
+            pendingReveal = nil
+            moveCursor(to: target)
+        }
+
+        syncWatchers()
+    }
+
+    private func syncWatchers() {
+        guard let active = folders.active else {
+            watcher?.sync(to: [])
+            return
+        }
+
+        var targets: Set<URL> = [active]
+        for path in expanded where children[path] != nil && path.hasPrefix(active.path + "/") {
+            targets.insert(URL(fileURLWithPath: path))
+        }
+        watcher?.sync(to: targets)
+    }
+
+    private func handleWatchEvent(_ url: URL, _ event: DirectoryWatcher.Event) {
+        switch event {
+        case .changed:
+            // A new document deep in a subtree can make ancestors worth showing, so the
+            // "contains documents" answer has to be dropped for this path and its line.
+            DocumentScanner.shared.invalidate(url)
+            refresh(url)
+        case .vanished:
+            // A root is dimmed rather than dropped - the drive may just be unmounted.
+            if folders.contains(url) {
+                missing.insert(url.path)
+                children[url.path] = []
+            } else {
+                children[url.path] = nil
+                expanded.remove(url.path)
+            }
+            rebuild()
+        }
+    }
+
+    private func persistExpansion() {
+        // Capped so a runaway browsing session cannot bloat settings.json.
+        settings.expandedPaths = Array(expanded.sorted().prefix(500))
+    }
+}

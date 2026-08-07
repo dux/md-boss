@@ -1,0 +1,198 @@
+/* Preview page structure. Every colour is a var(--token) injected by Theme.rootCSS -
+   never a literal, and never a colour-scheme media query. See doc/THEMES.md. */
+
+:root {
+  --serif: ui-serif, "New York", "Iowan Old Style", Charter, Palatino, Georgia, serif;
+  --mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  --body-size: 17px;
+  --measure: 48em;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+}
+
+body {
+  font-family: var(--serif);
+  font-size: var(--body-size);
+  line-height: 1.7;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* Oldstyle figures are what make numbers in prose look typeset rather than tabular. */
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  overflow-wrap: break-word;
+  hyphens: none;
+}
+
+/* The measure is adjustable from the toggle bar; --measure is injected by Swift.
+   The tall bottom padding lets the last paragraph scroll to mid-viewport instead of
+   sticking to the bottom edge. */
+#content {
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 40px 32px 45vh;
+}
+
+/* Headings - spacing does the work, no underline rules. */
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin: 1.7em 0 0.55em;
+}
+
+#content > :first-child { margin-top: 0; }
+
+h1 { font-size: 2em; line-height: 1.2; }
+h2 { font-size: 1.5em; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1.05em; }
+h5, h6 { font-size: 1em; color: var(--muted); }
+
+p { margin: 0 0 1.15em; }
+
+a {
+  color: var(--link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+a:hover { text-decoration-thickness: 2px; }
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 2.2em 0;
+}
+
+/* Lists */
+
+ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+li { margin: 0.25em 0; }
+li > ul, li > ol { margin-bottom: 0; }
+
+/* Task lists read as checkboxes, not as bullets with a box next to them. */
+li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.3em; }
+li > input[type="checkbox"] {
+  margin-right: 0.5em;
+  accent-color: var(--accent);
+}
+
+/* Quotes */
+
+blockquote {
+  margin: 1.4em 0;
+  padding: 0.1em 0 0.1em 1.1em;
+  border-left: 3px solid var(--quote-bar);
+  color: var(--quote-text);
+  font-style: italic;
+}
+
+blockquote > :last-child { margin-bottom: 0; }
+
+/* Code - mono runs larger at the same nominal size than the serif, hence 0.88em. */
+
+code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  font-variant-numeric: normal;
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin: 1.4em 0;
+  /* Wide code and ASCII diagrams scroll inside the block; the page never does. */
+  overflow-x: auto;
+  line-height: 1.5;
+}
+
+pre code {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  white-space: pre;
+}
+
+/* Tables */
+
+table {
+  border-collapse: collapse;
+  margin: 1.4em 0;
+  font-size: 0.95em;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+th, td {
+  border: 1px solid var(--border);
+  padding: 7px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+th { background: var(--table-head); font-weight: 600; }
+tbody tr:nth-child(even) { background: var(--table-stripe); }
+
+/* Media */
+
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+/* An anchor jump must not land the heading under nothing - give it breathing room. */
+:target { scroll-margin-top: 24px; }
+
+kbd {
+  font-family: var(--mono);
+  font-size: 0.82em;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0.1em 0.4em;
+  background: var(--surface);
+}
+
+mark { background: var(--selection); color: var(--text); }
+
+/* highlight.js - token colours come from the same theme tokens as everything else. */
+
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-doctag {
+  color: var(--hl-keyword);
+}
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-meta .hljs-string {
+  color: var(--hl-string);
+}
+.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-link, .hljs-selector-attr {
+  color: var(--hl-number);
+}
+.hljs-title, .hljs-title.function_, .hljs-title.class_, .hljs-name {
+  color: var(--hl-title);
+}
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-variable, .hljs-template-variable, .hljs-attr, .hljs-property, .hljs-params {
+  color: var(--hl-variable);
+}
+.hljs-type, .hljs-built_in, .hljs-class .hljs-title, .hljs-selector-class {
+  color: var(--hl-type);
+}
+.hljs-meta, .hljs-deletion, .hljs-tag, .hljs-punctuation { color: var(--hl-meta); }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }

@@ -1,0 +1,161 @@
+require 'fileutils'
+
+# Hammerfile - build / install / run helpers for md-boss.
+# Run with: hammer <command>   (https://github.com/dux/hammer)
+
+APP_NAME    ||= 'MdBoss'
+BINARY_NAME ||= 'MdBoss'
+BUNDLE_DIR  ||= "#{APP_NAME}.app"
+INSTALL_DIR ||= '/Applications'
+BUILD_CFG   ||= 'debug'
+RES_BUNDLE  ||= "#{BINARY_NAME}_#{BINARY_NAME}.bundle"
+STAMP_FILE  ||= 'app/Resources/build-commit.txt'
+
+# Package.swift declares build-commit.txt as a resource but it is gitignored, so every
+# task that touches SwiftPM has to write it first.
+STAMP_CMD   ||= "(git rev-parse HEAD 2>/dev/null || echo unknown) > #{STAMP_FILE}"
+
+task :clean do
+  desc 'Remove build artifacts'
+  proc do
+    say 'cleaning build artifacts', :cyan
+    sh 'swift package clean'
+    sh 'rm -rf .build'
+    sh "rm -rf #{BUNDLE_DIR}"
+    say.green 'clean complete'
+  end
+end
+
+task :lint do
+  desc 'Run SwiftLint'
+  proc { sh 'swiftlint lint --quiet' }
+end
+
+task :test do
+  desc 'Run swift test'
+  proc do
+    sh STAMP_CMD
+    sh 'swift test'
+  end
+end
+
+task :build do
+  desc 'Lint, test, build, assemble .app bundle and install to /Applications'
+  proc do
+    sh STAMP_CMD
+    hammer :lint
+    hammer :test
+
+    say "building #{APP_NAME}", :cyan
+    sh 'swift build'
+
+    say 'creating app bundle', :cyan
+    sh "mkdir -p #{BUNDLE_DIR}/Contents/MacOS"
+    sh "mkdir -p #{BUNDLE_DIR}/Contents/Resources"
+    sh "cp app/Info.plist #{BUNDLE_DIR}/Contents/"
+    sh "cp .build/#{BUILD_CFG}/#{BINARY_NAME} #{BUNDLE_DIR}/Contents/MacOS/#{BINARY_NAME}"
+    sh "cp app/Resources/AppIcon.icns #{BUNDLE_DIR}/Contents/Resources/"
+    # Bundle.module looks next to the executable AND at the .app root - it needs both copies.
+    sh "cp -R .build/#{BUILD_CFG}/#{RES_BUNDLE} #{BUNDLE_DIR}/Contents/Resources/"
+    sh "cp -R .build/#{BUILD_CFG}/#{RES_BUNDLE} #{BUNDLE_DIR}/"
+    `codesign --force --sign - --entitlements #{APP_NAME}.entitlements #{BUNDLE_DIR}/Contents/MacOS/#{BINARY_NAME} 2>/dev/null`
+
+    # Ask nicely, then insist. A running instance with unsaved edits puts up a save
+    # prompt on SIGTERM, which would stall the build waiting for a click.
+    `pkill -x "#{BINARY_NAME}" 2>/dev/null`
+    sleep 0.5
+    `pkill -9 -x "#{BINARY_NAME}" 2>/dev/null`
+    sleep 0.2
+    sh "rm -rf #{INSTALL_DIR}/#{BUNDLE_DIR}"
+    sh "cp -R #{BUNDLE_DIR} #{INSTALL_DIR}/"
+    sh "rm -rf #{BUNDLE_DIR}"
+    say.green "installed to #{INSTALL_DIR}/#{BUNDLE_DIR}"
+
+    hammer :link
+    hammer :register
+  end
+end
+
+task :run do
+  desc 'Open the installed app'
+  proc { sh "open #{INSTALL_DIR}/#{BUNDLE_DIR}" }
+end
+
+task :dev do
+  desc 'Build + install + run (default inner-loop)'
+  proc do
+    hammer :build
+    hammer :run
+  end
+end
+
+task :link do
+  desc 'Install the md-boss CLI shim into ~/bin'
+  proc do
+    target = File.expand_path('~/bin/md-boss')
+    FileUtils.mkdir_p File.dirname(target)
+    # `open -a APP <path>` sends an open-document event, which reaches a running instance.
+    # `--args` would only be seen on a cold launch.
+    File.write target, <<~SH
+      #!/bin/sh
+      # Installed by `hammer link`. Opens a folder or file in md-boss.
+      # `md-boss .` adds the current directory to the sidebar.
+      APP="#{INSTALL_DIR}/#{BUNDLE_DIR}"
+      if [ -n "$1" ]; then
+        # CDPATH makes a bare `cd` echo the directory, so send that to /dev/null.
+        exec open -a "$APP" "$(cd -- "$(dirname -- "$1")" >/dev/null 2>&1 && pwd)/$(basename -- "$1")"
+      else
+        exec open -a "$APP"
+      fi
+    SH
+    FileUtils.chmod 0o755, target
+    say.green "linked #{target}"
+  end
+end
+
+task :icon do
+  desc 'Regenerate AppIcon.icns from AppIcon.svg'
+  proc do
+    iconset = 'tmp/AppIcon.iconset'
+    sh "rm -rf #{iconset} && mkdir -p #{iconset}"
+    [16, 32, 128, 256, 512].each do |size|
+      sh "rsvg-convert -w #{size} -h #{size} app/Resources/AppIcon.svg -o #{iconset}/icon_#{size}x#{size}.png"
+      sh "rsvg-convert -w #{size * 2} -h #{size * 2} app/Resources/AppIcon.svg -o #{iconset}/icon_#{size}x#{size}@2x.png"
+    end
+    sh "iconutil -c icns #{iconset} -o app/Resources/AppIcon.icns"
+    sh "rm -rf #{iconset}"
+    say.green 'icon regenerated'
+  end
+end
+
+task :register do
+  desc 'Re-register with LaunchServices so .md files bind to this build'
+  proc do
+    lsregister = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
+    sh "#{lsregister} -f #{INSTALL_DIR}/#{BUNDLE_DIR}"
+    say.green 'registered'
+  end
+end
+
+task :watch do
+  desc 'Rebuild + reinstall on Swift file changes'
+  proc do
+    say.cyan 'watching app/ for changes (ctrl-c to stop)'
+    stamp = '.watch_timestamp'
+    `touch #{stamp}`
+    loop do
+      changed = `find app -name "*.swift" -newer #{stamp} 2>/dev/null`.strip
+      unless changed.empty?
+        say.green 'change detected, rebuilding'
+        `touch #{stamp}`
+        `pkill -x "#{BINARY_NAME}" 2>/dev/null`
+        begin
+          hammer :dev
+        rescue StandardError => e
+          say.red "build failed: #{e.message}"
+        end
+      end
+      sleep 1
+    end
+  end
+end
