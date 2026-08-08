@@ -78,6 +78,12 @@ ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
 li { margin: 0.25em 0; }
 li > ul, li > ol { margin-bottom: 0; }
 
+/* A loose list wraps every item in a <p>, so the paragraph rule above would stack 1.15em on
+   top of the item spacing and make one list look nothing like the next. Items keep their own
+   spacing and nothing else; a second paragraph in the same item gets the same step. */
+li > p { margin: 0; }
+li > p + p { margin-top: 0.25em; }
+
 /* Task lists read as checkboxes, not as bullets with a box next to them. `.md-task` is put
    there by the script - a loose list wraps the item in a <p>, so nothing here can find the
    box on its own.
