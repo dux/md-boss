@@ -115,6 +115,13 @@ final class MarkdownDocument {
         watcher?.rearm(url)
     }
 
+    /// Takes the version on disk and says so. Plain `reload()` stays silent, because its
+    /// other callers - `revert` and the link rewriter - each announce a reason of their own.
+    func reloadFromDisk() {
+        reload()
+        Toast.shared.info("Reloaded \(url.lastPathComponent)")
+    }
+
     /// Keeps the buffer and dismisses the banner; the next save overwrites what is on disk.
     /// The recorded version moves forward so the same change is not reported twice.
     func keepMine() {
@@ -143,10 +150,11 @@ final class MarkdownDocument {
         let current = Self.stamp(of: url)
         guard current != lastKnownStamp else { return }   // that write was ours
 
-        // Nothing to lose - take the new version silently. This is the common case: you
-        // edited the file in another editor and came back.
+        // Nothing to lose - take the new version. This is the common case: you edited the
+        // file in another editor and came back, and the toast is what says the pane moved
+        // under you rather than leaving it to be noticed.
         guard isDirty else {
-            reload()
+            reloadFromDisk()
             return
         }
 

@@ -49,7 +49,7 @@ struct EditorPane: View {
             Spacer()
 
             if change == .conflict {
-                Button("Reload from Disk") { document.reload() }
+                Button("Reload from Disk") { document.reloadFromDisk() }
                 Button("Keep My Version") { document.keepMine() }
             } else {
                 Button("Dismiss") { document.keepMine() }

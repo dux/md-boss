@@ -39,7 +39,7 @@ app/
     PromptPanel.swift      NSAlert text prompt, plus BlockMenuItem
     PaneToggleBar.swift    the raw/view/notes segments at the top of the sidebar
     NotesPane.swift        notes in three scopes: file, project, all projects
-    StatusBarView.swift    one-line footer, right-click to copy the path
+    StatusBarView.swift    footer: the Save button, the path, right-click to copy
     SidebarView.swift      pane toggles, root select box, tree, keyboard navigation
     SidebarRow.swift       one flattened row
     RootPicker.swift       the root folder select box and its dropdown

@@ -147,6 +147,23 @@ struct DocumentTests {
         #expect(document.reloadToken != before)
     }
 
+    @Test("an external reload says so")
+    func announcesExternalReload() throws {
+        let root = try Fixture.make(["a.md": "before\n"])
+        defer { Fixture.remove(root) }
+        let url = root.appendingPathComponent("a.md")
+
+        let document = MarkdownDocument(url: url)
+        Toast.shared.dismiss()
+
+        try "after\n".write(to: url, atomically: false, encoding: .utf8)
+        document.syncWithDisk()
+
+        // Replacing the whole document without a word is what this is not.
+        #expect(Toast.shared.current?.text == "Reloaded a.md")
+        #expect(Toast.shared.current?.kind == .info)
+    }
+
     @Test("an external write against unsaved edits raises a conflict")
     func reportsConflictWhenDirty() throws {
         let root = try Fixture.make(["a.md": "before\n"])
