@@ -2,10 +2,52 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
-// Moving a file out of the sidebar, and the reference fix-up that has to go with it.
-// Kept in an extension for the same reason the menu commands are - MdBossManager.swift
-// stays about state.
+// Creating a file in the sidebar, moving one out of it, and the reference fix-up that has
+// to go with a move. Kept in an extension for the same reason the menu commands are -
+// MdBossManager.swift stays about state.
 extension MdBossManager {
+    // MARK: Creating
+
+    /// Creates an empty document in the active folder and opens it.
+    ///
+    /// ⌘N and the blank space below the tree both mean that folder: with several subfolders
+    /// expanded at once there is no "current" one, and picking the cursor's would be a guess
+    /// the user cannot see before the file lands.
+    func newFile() {
+        guard let root = RootFoldersManager.shared.active else { return }
+
+        guard let typed = PromptPanel.text(
+            title: "New File",
+            message: "Created in \(root.lastPathComponent)",
+            value: "",
+            placeholder: "notes.md",
+            confirm: "Create"
+        ) else { return }
+
+        let url = root.appendingPathComponent(FileTree.documentName(typed))
+
+        guard !FileManager.default.fileExists(atPath: url.path) else {
+            showError("\(url.lastPathComponent) already exists")
+            return
+        }
+
+        do {
+            // .withoutOverwriting rather than trusting the check above - the answer can
+            // change between asking and writing, and clobbering a file here is silent.
+            try Data().write(to: url, options: .withoutOverwriting)
+        } catch {
+            showError("Could not create \(url.lastPathComponent): \(error.localizedDescription)")
+            return
+        }
+
+        // The watcher would get there on its own; refreshing now is what puts the row under
+        // the cursor at once rather than at kqueue's pace.
+        tree.refresh(root)
+        open(url, reveal: true)
+    }
+
+    // MARK: Moving
+
     /// Whether a drop on `destination` would do anything. Drives the highlight, so it must
     /// be cheap and must not complain about anything.
     func canMove(_ source: URL, into destination: URL) -> Bool {

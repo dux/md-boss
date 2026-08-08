@@ -1,36 +1,31 @@
 import SwiftUI
 
-/// The right-hand side: a toggle stripe over whichever panes are switched on, side by side
-/// in `Pane.allCases` order.
+/// The right-hand side: whichever panes are switched on, side by side in `Pane.allCases`
+/// order. The toggles that switch them live at the top of the sidebar.
 ///
-/// Notes take a fixed 300pt column; raw and preview share whatever is
+/// Notes take the fixed column `Pane.fixedWidth` names; raw and preview share whatever is
 /// left, split by a draggable divider.
 struct DocumentPane: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var manager = MdBossManager.shared
 
-    private static let fixedPaneWidth: CGFloat = 300
     private static let dividerWidth: CGFloat = 5
 
     private var theme: Theme { settings.theme }
 
     var body: some View {
-        VStack(spacing: 0) {
-            PaneToggleBar()
+        GeometryReader { geometry in
+            let panes = settings.panes
+            let widths = documentWidths(in: geometry.size.width, panes: panes)
 
-            GeometryReader { geometry in
-                let panes = settings.panes
-                let widths = documentWidths(in: geometry.size.width, panes: panes)
-
-                HStack(spacing: 0) {
-                    ForEach(Array(panes.enumerated()), id: \.element) { index, pane in
-                        if index > 0 { separator(before: pane, after: panes[index - 1], total: widths.available) }
-                        content(for: pane)
-                            .frame(width: pane.fixedWidth ?? widthFor(pane, widths: widths))
-                    }
+            HStack(spacing: 0) {
+                ForEach(Array(panes.enumerated()), id: \.element) { index, pane in
+                    if index > 0 { separator(before: pane, after: panes[index - 1], total: widths.available) }
+                    content(for: pane)
+                        .frame(width: pane.fixedWidth ?? widthFor(pane, widths: widths))
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(theme[.bg])
     }

@@ -247,6 +247,56 @@ enum NoteSections {
     }
 }
 
+/// Rules that span several `.md-boss` files at once. Pure, so the duplicate case can be
+/// tested without a store on disk.
+enum NoteStores {
+    /// One note per (path, line) across *every* store, not just within one file.
+    ///
+    /// `AnnotationFile.fold` keeps a single file honest, but nothing used to keep two of them
+    /// honest against each other: a file annotated outside every root landed in the fallback,
+    /// and once its folder became a root the next write went to the project's own `.md-boss`
+    /// instead - leaving one line with a record in each.
+    ///
+    /// The copies fold together field-wise, the same rule the decoder and `repoint` use, so
+    /// nothing anyone typed is dropped. `home` names the store a note *should* be in, and a
+    /// contested one goes there when it has a copy to spare - otherwise the project's own
+    /// `.md-boss` could lose a note to the fallback on nothing but alphabetical luck, and the
+    /// point of a `.md-boss` is that it is committed next to the documents it points at.
+    ///
+    /// A note sitting on its own is never moved. Stores emptied by the fold still come back
+    /// in the result, because the caller has to write them out to finish the repair.
+    static func deduplicated(
+        _ stores: [String: AnnotationFile],
+        preferring home: (Note) -> String? = { _ in nil }
+    ) -> [String: AnnotationFile] {
+        // Sorted, so the tie-break does not depend on dictionary ordering.
+        var copies: [String: [(store: String, note: Note)]] = [:]
+        for path in stores.keys.sorted() {
+            for note in stores[path]?.notes ?? [] {
+                copies[note.id, default: []].append((path, note))
+            }
+        }
+
+        var merged = stores.mapValues { _ in [Note]() }
+        for found in copies.values {
+            merged[keeper(among: found, preferring: home), default: []] += found.map(\.note)
+        }
+
+        return merged.mapValues { AnnotationFile(notes: AnnotationFile.fold($0)) }
+    }
+
+    private static func keeper(
+        among found: [(store: String, note: Note)],
+        preferring home: (Note) -> String?
+    ) -> String {
+        guard found.count > 1 else { return found[0].store }
+        guard let wanted = home(found[0].note), found.contains(where: { $0.store == wanted }) else {
+            return found[0].store
+        }
+        return wanted
+    }
+}
+
 // MARK: - Store
 
 /// Notes, kept in a `.md-boss` JSON file at the root of each sidebar folder so they can be
@@ -309,22 +359,26 @@ final class AnnotationStore: ObservableObject {
             .sorted { $0.line < $1.line }
     }
 
+    /// Every store, not just the one `storeURL` would pick today - that answer moves, and a
+    /// lookup that missed is what used to offer "Add Note" on a line that already had one.
     func note(for url: URL, line: Int) -> Note? {
         let path = AnnotationPath.store(url)
-        return files[storeURL(for: url).path]?.notes.first { $0.path == path && $0.line == line }
+        return files.values
+            .flatMap(\.notes)
+            .first { $0.path == path && $0.line == line }
     }
 
     /// Asked on every edit in the raw pane, before anything more expensive is done, so a
     /// document nobody has annotated costs nothing to type in.
     func hasNotes(for url: URL) -> Bool {
         let path = AnnotationPath.store(url)
-        return files[storeURL(for: url).path]?.notes.contains { $0.path == path } ?? false
+        return files.values.contains { file in file.notes.contains { $0.path == path } }
     }
 
-    /// Line -> hover text for one document. The raw gutter, the tooltip and the preview's
-    /// markers all want the same answer, so it is given once here rather than assembled in
-    /// each pane. Two `.md-boss` files can name the same (path, line), so the first one wins
-    /// rather than trapping.
+    /// Line -> hover text for one document. The raw gutter's markers and both panes' hover
+    /// all want the same answer, so it is given once here rather than assembled in each pane.
+    /// Two `.md-boss` files can name the same (path, line), so the first one wins rather
+    /// than trapping.
     func noteTexts(for url: URL?) -> [Int: String] {
         guard let url else { return [:] }
         return Dictionary(notes(for: url).map { ($0.line, $0.tooltip) }, uniquingKeysWith: { first, _ in first })
@@ -336,7 +390,7 @@ final class AnnotationStore: ObservableObject {
     /// nothing to show in the pane and nothing to click. Clearing a body no longer deletes
     /// the note, which is what leaves a plain jump point reachable.
     func setNote(_ url: URL, line: Int, title: String, body: String) {
-        mutate(url) { file in
+        mutate(store(forNoteAt: url, line: line)) { file in
             let entry = Note(path: AnnotationPath.store(url), line: line, title: title, body: body)
             file.notes.removeAll { $0.id == entry.id }
             if !entry.isEmpty {
@@ -347,7 +401,7 @@ final class AnnotationStore: ObservableObject {
     }
 
     func remove(_ note: Note) {
-        mutate(note.url) { file in
+        mutate(store(forNoteAt: note.url, line: note.line)) { file in
             file.notes.removeAll { $0.id == note.id }
         }
     }
@@ -366,17 +420,21 @@ final class AnnotationStore: ObservableObject {
     func shift(_ url: URL, from old: LineIndex, to new: LineIndex, after edit: NoteShift.Edit) {
         let path = AnnotationPath.store(url)
 
-        mutate(url) { file in
-            file.notes = file.notes.map { note in
-                guard note.path == path,
-                      let line = NoteShift.line(note.line, from: old, to: new, after: edit) else { return note }
-                var moved = note
-                moved.line = line
-                return moved
+        // Every store holding a note on this document, not the one `storeURL` names: a note
+        // written under a different root still has to follow the text it points at.
+        for store in stores(holding: path) {
+            mutate(store) { file in
+                file.notes = file.notes.map { note in
+                    guard note.path == path,
+                          let line = NoteShift.line(note.line, from: old, to: new, after: edit) else { return note }
+                    var moved = note
+                    moved.line = line
+                    return moved
+                }
+                // Deleting a span that held two noted lines lands them both on the line the
+                // edit began at. `fold` is the rule for that everywhere else in here.
+                file.notes = AnnotationFile.fold(file.notes)
             }
-            // Deleting a span that held two noted lines lands them both on the line the edit
-            // began at. `fold` is the rule for that everywhere else in here.
-            file.notes = AnnotationFile.fold(file.notes)
         }
     }
 
@@ -414,10 +472,33 @@ final class AnnotationStore: ObservableObject {
 
     // MARK: Files
 
-    /// The `.md-boss` that owns annotations for `url`.
+    /// The `.md-boss` a *new* annotation for `url` belongs in.
+    ///
+    /// Not necessarily the one an existing note is already in: `root(containing:)` answers
+    /// from `roots`, which is MRU-ordered, so nested roots swap places, and a file annotated
+    /// before its folder became a root has its note in the fallback. Anything touching a note
+    /// that already exists goes through `store(forNoteAt:line:)` instead.
     func storeURL(for url: URL) -> URL {
         guard let root = folders.root(containing: url) else { return Self.fallbackFile }
         return root.appendingPathComponent(Self.fileName)
+    }
+
+    /// Where a change to one note has to land: wherever it already lives, or - for a new one -
+    /// the store that owns the document. Writing to `storeURL` regardless is what used to put
+    /// a second record on a line that already had one.
+    private func store(forNoteAt url: URL, line: Int) -> URL {
+        let path = AnnotationPath.store(url)
+        let owner = files.keys.sorted().first { key in
+            files[key]?.notes.contains { $0.path == path && $0.line == line } ?? false
+        }
+        return owner.map { URL(fileURLWithPath: $0) } ?? storeURL(for: url)
+    }
+
+    /// Every loaded store with a note on this document. One, normally.
+    private func stores(holding path: String) -> [URL] {
+        files.keys.sorted()
+            .filter { files[$0]?.notes.contains { $0.path == path } ?? false }
+            .map { URL(fileURLWithPath: $0) }
     }
 
     func reload() {
@@ -428,15 +509,25 @@ final class AnnotationStore: ObservableObject {
             guard let file = Self.read(store) else { continue }
             loaded[store.path] = file
         }
-        files = loaded
+
+        // A contested note goes to the store that owns its document today, so a repair moves
+        // it into the project rather than stranding it in the fallback.
+        let healed = NoteStores.deduplicated(loaded) { self.storeURL(for: $0.url).path }
+        files = healed
+
+        // A repair rather than a view, so it is written back instead of re-done on every
+        // launch, and only the stores that actually lost a copy are touched. It converges:
+        // the reload our own write provokes finds nothing left to fold.
+        for (path, file) in healed where file != loaded[path] {
+            Self.write(file, to: URL(fileURLWithPath: path))
+        }
 
         // Only existing files can be watched; a root gains a watcher when its first
         // annotation creates the file.
         watcher?.sync(to: Set(candidates.filter { FileManager.default.fileExists(atPath: $0.path) }))
     }
 
-    private func mutate(_ url: URL, _ change: (inout AnnotationFile) -> Void) {
-        let store = storeURL(for: url)
+    private func mutate(_ store: URL, _ change: (inout AnnotationFile) -> Void) {
         var file = files[store.path] ?? AnnotationFile()
         let before = file
         change(&file)

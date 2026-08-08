@@ -18,6 +18,10 @@ final class LineNumberRuler: NSRulerView {
         /// Muted is tuned for readable secondary *text*; the gutter should recede further
         /// than that so the eye lands on the line, not on its number.
         static let numberAlpha: CGFloat = 0.55
+        /// The note marker. Sits inside the existing right-hand padding, so a file gaining
+        /// its first note does not widen the gutter and shift the text.
+        static let dot: CGFloat = 4
+        static let dotGap: CGFloat = 2
     }
 
     var theme: Theme {
@@ -32,6 +36,15 @@ final class LineNumberRuler: NSRulerView {
         didSet {
             guard bodyFont != oldValue else { return }
             refresh()
+        }
+    }
+
+    /// Lines carrying a note. Their numbers are drawn in the accent colour with a dot beside
+    /// them, so a marked line can be found without opening the notes pane.
+    var noteLines: Set<Int> = [] {
+        didSet {
+            guard noteLines != oldValue else { return }
+            needsDisplay = true
         }
     }
 
@@ -67,6 +80,7 @@ final class LineNumberRuler: NSRulerView {
         center.addObserver(self, selector: #selector(redraw), name: NSView.frameDidChangeNotification, object: textView)
     }
 
+    @available(*, unavailable)
     required init(coder: NSCoder) {
         fatalError("LineNumberRuler is created in code, never from a nib")
     }
@@ -149,14 +163,31 @@ final class LineNumberRuler: NSRulerView {
     }
 
     private func draw(_ number: Int, baseline: CGFloat, in textView: NSTextView) {
-        let attributes = self.attributes
+        let marked = noteLines.contains(number)
+        var attributes = self.attributes
+        // Colour only, never weight: a semibold digit is a different font instance with its
+        // own advances, and a wider label would collide with the dot.
+        if marked { attributes[.foregroundColor] = theme.nsColor(.accent) }
+
         let label = String(number) as NSString
         let size = label.size(withAttributes: attributes)
 
         let font = numberFont
-        let y = convert(NSPoint(x: 0, y: baseline), from: textView).y - font.ascender
+        let y = convert(NSPoint(x: 0, y: baseline), from: textView).y
         let x = ruleThickness - Metric.padding - size.width
 
-        label.draw(at: NSPoint(x: x, y: y), withAttributes: attributes)
+        label.draw(at: NSPoint(x: x, y: y - font.ascender), withAttributes: attributes)
+
+        guard marked else { return }
+        // Between the number and the text, so it points at the line it belongs to, and
+        // centred on the digits rather than on the fragment.
+        let dot = NSRect(
+            x: ruleThickness - Metric.dot - Metric.dotGap,
+            y: y - font.xHeight / 2 - Metric.dot / 2,
+            width: Metric.dot,
+            height: Metric.dot
+        )
+        theme.nsColor(.accent).setFill()
+        NSBezierPath(ovalIn: dot).fill()
     }
 }

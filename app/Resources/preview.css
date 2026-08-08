@@ -172,6 +172,20 @@ kbd {
 
 mark { background: var(--selection); color: var(--text); }
 
+/* Notes */
+
+/* A noted block carries its text in `title` and nothing else - the page stays a reading
+   surface, and opening the note from the pane is what points at it. `data-note` is only
+   bookkeeping for the script, which is why nothing here styles it. */
+
+/* Where a note jump landed. The spread bleeds the highlight past the text box without
+   taking up any room, so nothing below it moves. */
+.md-target {
+  border-radius: 3px;
+  background: var(--selection);
+  box-shadow: 0 0 0 0.3em var(--selection);
+}
+
 /* highlight.js - token colours come from the same theme tokens as everything else. */
 
 .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-doctag {

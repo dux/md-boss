@@ -165,8 +165,10 @@ struct NotesPane: View {
             }
 
             if hasBoth {
+                // Same size as the title above it - a note's body is its content, not a
+                // caption on it. Only the colour steps back.
                 Text(note.body)
-                    .textStyle(.small)
+                    .textStyle(.default)
                     .foregroundColor(theme[.muted])
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)

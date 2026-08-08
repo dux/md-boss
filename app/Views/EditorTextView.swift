@@ -13,9 +13,32 @@ final class EditorTextView: NSTextView {
     /// to NSTextView's own text drag-and-drop.
     var onDropFiles: (([URL], Int) -> Bool)?
 
+    /// Note text for a character index. The view holds no line index of its own, so the
+    /// answer comes from the coordinator that does.
+    var noteTooltip: ((Int) -> String?)?
+
+    /// The line a note jump landed on. A note marks a whole line, so the band is drawn full
+    /// width, and a soft-wrapped line gets all of its fragments.
+    var highlightedRange: NSRange? {
+        didSet {
+            guard highlightedRange != oldValue else { return }
+            needsDisplay = true
+        }
+    }
+
+    /// Set from the theme by MarkdownTextView, alongside the caret and selection colours.
+    var highlightFill: NSColor = .clear {
+        didSet {
+            guard highlightFill != oldValue, highlightedRange != nil else { return }
+            needsDisplay = true
+        }
+    }
+
     /// Restored if the drag leaves again - the caret tracks the drop point while a file is
     /// over the view, and a drag that ends elsewhere should not have moved it.
     private var selectionBeforeDrag: NSRange?
+
+    private var hoverTracking: NSTrackingArea?
 
     override init(frame: NSRect, textContainer: NSTextContainer?) {
         super.init(frame: frame, textContainer: textContainer)
@@ -55,6 +78,72 @@ final class EditorTextView: NSTextView {
         selectionBeforeDrag = nil
         guard !urls.isEmpty, let onDropFiles else { return super.performDragOperation(sender) }
         return onDropFiles(urls, insertionIndex(sender))
+    }
+
+    // MARK: The landing band
+
+    /// On top of the view's own background fill and under the text, which is what
+    /// `drawBackground(in:)` is for. Overriding `draw(_:)` instead would put the band
+    /// underneath the background colour, where nothing would ever see it.
+    override func drawBackground(in rect: NSRect) {
+        super.drawBackground(in: rect)
+
+        guard let range = highlightedRange,
+              let layoutManager,
+              let container = textContainer else { return }
+
+        let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        let span = layoutManager.boundingRect(forGlyphRange: glyphs, in: container)
+        // Full width: a note marks the line, not the characters that happen to be on it.
+        let band = NSRect(
+            x: 0,
+            y: span.minY + textContainerInset.height,
+            width: bounds.width,
+            height: span.height
+        )
+        guard band.intersects(rect) else { return }
+
+        highlightFill.setFill()
+        band.fill()
+    }
+
+    // MARK: Hover
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTracking { removeTrackingArea(hoverTracking) }
+
+        let area = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self
+        )
+        addTrackingArea(area)
+        hoverTracking = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        guard let noteTooltip else { return }
+        toolTip = hoveredCharacter(at: convert(event.locationInWindow, from: nil)).flatMap(noteTooltip)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        toolTip = nil
+    }
+
+    /// Nil past the end of the laid-out text, so the empty space under a short file does not
+    /// answer with the last line's note. Only the vertical band is checked - hovering to the
+    /// right of a short line is still that line.
+    private func hoveredCharacter(at point: NSPoint) -> Int? {
+        guard let layoutManager, let container = textContainer else { return nil }
+
+        let used = layoutManager.usedRect(for: container)
+            .offsetBy(dx: textContainerInset.width, dy: textContainerInset.height)
+        guard point.y >= used.minY, point.y <= used.maxY else { return nil }
+
+        return characterIndexForInsertion(at: point)
     }
 
     // MARK: Internals

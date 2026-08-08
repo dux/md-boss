@@ -12,6 +12,9 @@ struct MarkdownTextView: NSViewRepresentable {
     @ObservedObject var document: MarkdownDocument
     let theme: Theme
     let fontSize: CGFloat
+    /// Notes on the open document, line -> hover text. Drives the gutter markers and the
+    /// tooltip; the pane never reaches the store itself.
+    var notes: [Int: String] = [:]
     /// Indent width in spaces, used by Tab and Shift-Tab.
     var indent = 2
 
@@ -47,9 +50,14 @@ struct MarkdownTextView: NSViewRepresentable {
         // Nothing in the chain from the scroll view down holds these, and losing them
         // leaves an editor that is empty rather than one that crashes.
         context.coordinator.retain(storage: storage, layout: layout)
+        // Every character change passes through here, which is what notes are shifted on.
+        storage.delegate = context.coordinator
         textView.onDropFiles = { [weak textView] urls, index in
             guard let textView else { return false }
             return context.coordinator.insertLinks(to: urls, at: index, in: textView)
+        }
+        textView.noteTooltip = { [weak coordinator = context.coordinator] charIndex in
+            coordinator?.note(at: charIndex)
         }
 
         textView.delegate = context.coordinator
@@ -77,10 +85,12 @@ struct MarkdownTextView: NSViewRepresentable {
 
         context.coordinator.loadedToken = document.reloadToken
         context.coordinator.loadedURL = document.url
+        context.coordinator.notes = notes
         context.coordinator.load(document.text, into: textView)
         apply(theme: textView, context.coordinator)
 
         let ruler = LineNumberRuler(scrollView: scrollView, textView: textView, theme: theme, bodyFont: editorFont)
+        ruler.noteLines = Set(notes.keys)
         scrollView.hasVerticalRuler = true
         scrollView.verticalRulerView = ruler
         scrollView.rulersVisible = true
@@ -94,6 +104,7 @@ struct MarkdownTextView: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else { return }
         context.coordinator.document = document
         context.coordinator.indent = indent
+        context.coordinator.notes = notes
 
         // Only replace the string when the document identity changed or an external reload
         // happened. Assigning it unconditionally would destroy the selection, the undo
@@ -109,12 +120,14 @@ struct MarkdownTextView: NSViewRepresentable {
 
         // After the swap, so a "open this file at line N" request lands in the new text.
         context.coordinator.applyScrollRequest(to: textView)
+        context.coordinator.applyHighlight(to: textView)
 
         apply(theme: textView, context.coordinator)
 
         if let ruler = scrollView.verticalRulerView as? LineNumberRuler {
             ruler.theme = theme
             ruler.bodyFont = editorFont
+            ruler.noteLines = Set(notes.keys)
             // Setting `string` in code posts no NSText.didChangeNotification.
             ruler.refresh()
         }
@@ -143,6 +156,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.textColor = theme.nsColor(.text)
         textView.insertionPointColor = theme.nsColor(.accent)
         textView.selectedTextAttributes = [.backgroundColor: theme.nsColor(.selection)]
+        (textView as? EditorTextView)?.highlightFill = theme.nsColor(.selection)
         textView.typingAttributes = [
             .font: font,
             .foregroundColor: theme.nsColor(.text),
@@ -159,7 +173,10 @@ struct MarkdownTextView: NSViewRepresentable {
     // MARK: - Coordinator
 
     @MainActor
-    final class Coordinator: NSObject, NSTextViewDelegate {
+    // NSTextStorageDelegate carries no actor of its own, and the conformance is
+    // @preconcurrency for that reason alone: AppKit only ever edits this storage from the
+    // main thread, since the text view driving it is on it.
+    final class Coordinator: NSObject, NSTextViewDelegate, @preconcurrency NSTextStorageDelegate {
         var document: MarkdownDocument
         var indent: Int
         var loadedToken: UUID?
@@ -167,7 +184,13 @@ struct MarkdownTextView: NSViewRepresentable {
         /// a switch to another one.
         var loadedURL: URL?
         var appliedTheme: Theme?
+        /// Line -> hover text, mirrored from the pane so the tooltip can be answered without
+        /// reaching into the store on every mouse move.
+        var notes: [Int: String] = [:]
         private var appliedScroll: MdBossManager.ScrollRequest?
+        /// Set while the whole text is being replaced, so the swap is not mistaken for an
+        /// edit that notes should follow.
+        private var isSwapping = false
 
         /// Rebuilt on every edit. Bisected on every scroll frame, which is why it exists.
         private var index = LineIndex("")
@@ -233,13 +256,50 @@ struct MarkdownTextView: NSViewRepresentable {
             let restore = keepingPosition ? position(of: textView) : nil
 
             textView.delegate = nil
+            isSwapping = true
             textView.string = text
+            isSwapping = false
             textView.delegate = self
 
             textView.undoManager?.removeAllActions()
             reindex(textView)
             if let restore { apply(restore, to: textView) }
-            reportCursor(textView)
+            // A file arriving in the pane is not the reader moving off the line a note just
+            // pointed at, so this must not dismiss the landing band.
+            reportCursor(textView, navigated: false)
+        }
+
+        // MARK: Notes following the text
+
+        /// Notes anchor to a line, so an edit that moves a line start has to take them with
+        /// it. The text storage delegate rather than `textDidChange`, because this is the
+        /// only hook carrying the edited range - and unlike `shouldChangeTextIn` it sees
+        /// programmatic mutations too: the outdent path, undo, a paste.
+        func textStorage(
+            _ storage: NSTextStorage,
+            didProcessEditing mask: NSTextStorageEditActions,
+            range: NSRange,
+            changeInLength delta: Int
+        ) {
+            guard mask.contains(.editedCharacters), !isSwapping else { return }
+            // Asked first: a document nobody has annotated must not pay for a second index.
+            guard AnnotationStore.shared.hasNotes(for: document.url) else { return }
+
+            // `range` is in the new text; the span that was replaced is the same start with
+            // the delta undone.
+            let edit = NoteShift.Edit(
+                range: NSRange(location: range.location, length: range.length - delta),
+                length: range.length
+            )
+            let old = index
+            index = LineIndex(storage.string)
+            AnnotationStore.shared.shift(document.url, from: old, to: index, after: edit)
+        }
+
+        /// The note on the line a character index falls on, for the hover tooltip.
+        func note(at charIndex: Int) -> String? {
+            guard !notes.isEmpty else { return nil }
+            return notes[index.line(at: charIndex)]
         }
 
         // MARK: Holding position across a reload
@@ -302,11 +362,15 @@ struct MarkdownTextView: NSViewRepresentable {
 
         /// Notes anchor to the caret, so the manager needs to know where it
         /// is and what is on that line.
-        private func reportCursor(_ textView: NSTextView) {
+        private func reportCursor(_ textView: NSTextView, navigated: Bool = true) {
             let text = textView.string as NSString
             let caret = min(textView.selectedRange().location, text.length)
             let line = index.line(at: caret)
-            MdBossManager.shared.reportCursor(line: line, text: self.text(ofLine: line, in: text))
+            MdBossManager.shared.reportCursor(
+                line: line,
+                text: self.text(ofLine: line, in: text),
+                navigated: navigated
+            )
         }
 
         /// A line's text, clamped to what the view actually holds. An index that has fallen
@@ -327,6 +391,15 @@ struct MarkdownTextView: NSViewRepresentable {
             textView.setSelectedRange(NSRange(location: range.location, length: 0))
             textView.scrollRangeToVisible(range)
             textView.window?.makeFirstResponder(textView)
+        }
+
+        /// The band on the line a note jump landed on. Read off the manager rather than
+        /// passed in, the same way the scroll request above is - both are transient, and
+        /// DocumentPane observes the manager, so a change re-runs `updateNSView`.
+        func applyHighlight(to textView: NSTextView) {
+            guard let view = textView as? EditorTextView else { return }
+            view.highlightedRange = MdBossManager.shared.highlightedLine
+                .flatMap { index.range(ofLine: $0) }
         }
 
         // MARK: Scroll sync

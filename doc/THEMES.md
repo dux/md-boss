@@ -67,8 +67,9 @@ piece of UI.
   `ui-serif` resolves to New York on macOS; Iowan Old Style is the warm oldstyle fallback.
 * Chrome: the SwiftUI system font, sized from `AppSettings` through `.textStyle(...)`.
 * Mono: `"SF Mono", ui-monospace, Menlo, monospace`.
-* Measure 48em by default, adjustable from the toggle bar in 2em steps and stored in
-  `previewMeasure`. It is held in em, not px, so the column tracks the text size.
+* Measure 48em by default, adjustable from the arrows pinned to the preview's top-right corner
+  in 2em steps and stored in `previewMeasure`.
+  It is held in em, not px, so the column tracks the text size.
 * Base 17px, line-height 1.7.
 
 ## Rules

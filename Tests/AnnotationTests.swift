@@ -39,6 +39,23 @@ struct SuggestedTitleTests {
     }
 }
 
+@Suite("Note hover text")
+struct NoteTooltipTests {
+    @Test("the body is what a hover has to say")
+    func showsBody() {
+        let note = Note(path: "~/a.md", line: 7, title: "The plan", body: "revisit this")
+        #expect(note.tooltip == "revisit this")
+    }
+
+    @Test("a body-less note falls back to saying it is there")
+    func announcesItself() {
+        // Its title came off the source line you are already hovering, so repeating it
+        // would say nothing.
+        let note = Note(path: "~/a.md", line: 7, title: "The plan")
+        #expect(note.tooltip == "Note on line 7")
+    }
+}
+
 @Suite("Annotation paths")
 struct AnnotationPathTests {
     @Test("paths are stored tilde-abbreviated and round-trip back")
@@ -378,7 +395,7 @@ struct PaneTests {
 
     @Test("only the notes pane claims a fixed width")
     func fixesListPaneWidths() {
-        #expect(Pane.notes.fixedWidth == 300)
+        #expect(Pane.notes.fixedWidth == 350)
         #expect(Pane.raw.fixedWidth == nil)
         #expect(Pane.preview.fixedWidth == nil)
     }
@@ -414,5 +431,103 @@ struct NoteRepointTests {
 
         #expect(folded.count == 3)
         #expect(folded.filter { $0.line == 1 }.count == 1)
+    }
+}
+
+@Suite("One note per line across stores")
+struct NoteStoreDedupTests {
+    /// The shape the bug left behind: annotated while the file was outside every root, so a
+    /// copy sits in the fallback, then annotated again once its folder became a root.
+    private let split = [
+        "~/.config/md-boss/annotations.json": AnnotationFile(notes: [
+            Note(path: "~/work/a.md", line: 3, title: "Third", body: "written first")
+        ]),
+        "~/work/.md-boss": AnnotationFile(notes: [
+            Note(path: "~/work/a.md", line: 3, body: "written again"),
+            Note(path: "~/work/a.md", line: 9, title: "Ninth")
+        ])
+    ]
+
+    @Test("a line with a record in two stores comes back with one")
+    func collapsesToOne() {
+        let healed = NoteStores.deduplicated(split)
+        let all = healed.values.flatMap(\.notes)
+
+        #expect(all.filter { $0.id == "~/work/a.md:3" }.count == 1)
+        #expect(all.count == 2)
+    }
+
+    /// With no preference expressed, sorted keys break the tie and `~/.config/...` claims it.
+    @Test("the first store by path keeps it, and the other's copy folds in")
+    func foldsIntoTheKeeper() throws {
+        let healed = NoteStores.deduplicated(split)
+
+        let kept = try #require(healed["~/.config/md-boss/annotations.json"]?.notes.first)
+        #expect(kept.line == 3)
+        #expect(kept.title == "Third")
+        // First non-empty wins per field, so the surviving body is the one written first.
+        #expect(kept.body == "written first")
+        #expect(healed["~/work/.md-boss"]?.notes.map(\.line) == [9])
+    }
+
+    /// The real caller names the project as home, which is the whole point of a `.md-boss`:
+    /// the survivor has to be the file that gets committed, not the fallback.
+    @Test("a contested note goes to the store that owns its document")
+    func prefersTheOwningStore() throws {
+        let healed = NoteStores.deduplicated(split) { _ in "~/work/.md-boss" }
+
+        let kept = try #require(healed["~/work/.md-boss"]?.notes.first { $0.line == 3 })
+        #expect(kept.body == "written first")
+        #expect(healed["~/work/.md-boss"]?.notes.map(\.line) == [3, 9])
+        #expect(healed["~/.config/md-boss/annotations.json"]?.notes.isEmpty == true)
+    }
+
+    @Test("a home that holds no copy of the note is ignored rather than invented")
+    func ignoresAnAbsentHome() {
+        let healed = NoteStores.deduplicated(split) { _ in "~/elsewhere/.md-boss" }
+
+        #expect(healed["~/elsewhere/.md-boss"] == nil)
+        #expect(healed["~/.config/md-boss/annotations.json"]?.notes.map(\.line) == [3])
+    }
+
+    /// Only a contested note is ever relocated - a clean store is not reorganised on load.
+    @Test("a note sitting on its own is left where it is, whatever home says")
+    func neverMovesAnUncontestedNote() {
+        let healed = NoteStores.deduplicated(split) { _ in "~/.config/md-boss/annotations.json" }
+
+        #expect(healed["~/work/.md-boss"]?.notes.map(\.line) == [9])
+    }
+
+    @Test("a store emptied by the fold still comes back, so the caller can write it out")
+    func keepsEmptiedStores() {
+        let healed = NoteStores.deduplicated([
+            "~/a/.md-boss": AnnotationFile(notes: [Note(path: "~/x.md", line: 1, title: "One")]),
+            "~/b/.md-boss": AnnotationFile(notes: [Note(path: "~/x.md", line: 1, body: "dupe")])
+        ])
+
+        #expect(healed["~/b/.md-boss"]?.notes.isEmpty == true)
+    }
+
+    @Test("stores that never disagreed are handed back untouched")
+    func leavesCleanStoresAlone() {
+        let clean = [
+            "~/a/.md-boss": AnnotationFile(notes: [Note(path: "~/a/x.md", line: 1, title: "One")]),
+            "~/b/.md-boss": AnnotationFile(notes: [Note(path: "~/b/y.md", line: 1, title: "Two")])
+        ]
+
+        #expect(NoteStores.deduplicated(clean) == clean)
+    }
+
+    /// The same line in two *different* files is not a duplicate.
+    @Test("identity is the path and the line together, not the line alone")
+    func lineAloneIsNotIdentity() {
+        let healed = NoteStores.deduplicated([
+            "~/a/.md-boss": AnnotationFile(notes: [
+                Note(path: "~/a/x.md", line: 4, title: "X"),
+                Note(path: "~/a/y.md", line: 4, title: "Y")
+            ])
+        ])
+
+        #expect(healed["~/a/.md-boss"]?.notes.count == 2)
     }
 }

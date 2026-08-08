@@ -34,4 +34,14 @@ enum JSLiteral {
               let literal = String(bytes: data, encoding: .utf8) else { return "\"\"" }
         return literal.replacingOccurrences(of: "</", with: "<\\/")
     }
+
+    /// A `{"42":"text"}` object literal, for handing the page a line-keyed map. Keys are
+    /// sorted, so the same notes always produce the same script and change detection
+    /// upstream is not defeated by dictionary ordering.
+    static func map(_ values: [Int: String]) -> String {
+        let pairs = values.keys.sorted().map { key in
+            "\(string(String(key))):\(string(values[key] ?? ""))"
+        }
+        return "{\(pairs.joined(separator: ","))}"
+    }
 }

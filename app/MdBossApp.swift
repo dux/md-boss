@@ -76,6 +76,7 @@ struct MdBossApp: App {
 struct MdBossCommands: Commands {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var manager = MdBossManager.shared
+    @ObservedObject private var folders = RootFoldersManager.shared
 
     /// Writes through the manager rather than the settings struct, so picking a theme from
     /// the menu flashes the same toast as Cmd-Shift-D.
@@ -89,6 +90,10 @@ struct MdBossCommands: Commands {
         }
 
         CommandGroup(replacing: .newItem) {
+            Button("New File…") { manager.newFile() }
+                .keyboardShortcut("n", modifiers: .command)
+                .disabled(folders.active == nil)
+            Divider()
             Button("Open Folder…") { manager.openFolderPanel() }
                 .keyboardShortcut("o", modifiers: .command)
             Button("Open File…") { manager.openFilePanel() }
@@ -121,11 +126,11 @@ struct MdBossCommands: Commands {
         // .sidebar lands in the system View menu. A CommandMenu("View") would create a
         // second one next to it.
         CommandGroup(replacing: .sidebar) {
-            ForEach(Array(Pane.allCases.enumerated()), id: \.element) { index, pane in
+            ForEach(Pane.allCases) { pane in
                 Button("\(settings.isVisible(pane) ? "Hide" : "Show") \(pane.title)") {
                     manager.togglePane(pane)
                 }
-                .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                .keyboardShortcut(pane.shortcut, modifiers: [.command, .option])
             }
 
             Button("Raw & Preview") { manager.toggleSideBySide() }

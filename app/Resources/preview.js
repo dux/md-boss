@@ -2,7 +2,7 @@
 // stay readable and the regexes can be linted. Inlined into the page by MarkdownPageBuilder.
 //
 // Swift -> page: mdRender, mdSetTheme, mdSetFontSize, mdSetMeasure, mdScrollToAnchor,
-//                mdScrollToLine.
+//                mdScrollToLine, mdSetNotes, mdHighlightLine.
 // Page -> Swift: window.webkit.messageHandlers.mdboss.postMessage({kind, ...}).
 
 (function () {
@@ -23,6 +23,14 @@
   var anchors = null;
   // One past the last source line, so "at the end of the document" has a number.
   var totalLines = 1;
+
+  // [{line, node}] for every [data-line]. Unlike `anchors` this depends only on the DOM,
+  // not on where anything ended up, so it survives a resize or a font change.
+  var blocks = null;
+  // { "42": "note text" }, as Swift last sent it.
+  var notes = {};
+  // The source line a note jump landed on, or null.
+  var targetLine = null;
 
   function post(message) {
     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mdboss) {
@@ -131,6 +139,7 @@
 
     totalLines = 1 + newlines(source);
     content.innerHTML = html;
+    blocks = null;
     tagListItems(stamped);
   }
 
@@ -194,6 +203,59 @@
     return low;
   }
 
+  // MARK: notes
+
+  function blockList() {
+    if (blocks) { return blocks; }
+
+    var list = [];
+    content.querySelectorAll('[data-line]').forEach(function (node) {
+      list.push({ line: Number(node.getAttribute('data-line')), node: node });
+    });
+    // Stable, so an <li> sharing its list's line still comes after the <ul> and wins below.
+    list.sort(function (a, b) { return a.line - b.line; });
+
+    blocks = list;
+    return list;
+  }
+
+  // Which rendered block owns a source line: the last anchor at or before it. A note on
+  // line 43 inside a paragraph that starts at 40 belongs to that paragraph.
+  function blockFor(line) {
+    var list = blockList();
+    if (!list.length || line < list[0].line) { return null; }
+    return list[bisect(list, 'line', line)].node;
+  }
+
+  // Hover text only - the page draws no marker of its own. `data-note` records what we
+  // touched, so the next pass knows which titles are ours to clear.
+  function applyNotes() {
+    content.querySelectorAll('[data-note]').forEach(function (node) {
+      node.removeAttribute('data-note');
+      node.removeAttribute('title');
+    });
+
+    // Integer-like keys iterate in ascending order, so two notes folded into one block read
+    // top to bottom.
+    Object.keys(notes).forEach(function (key) {
+      var node = blockFor(Number(key));
+      if (!node) { return; }
+      var existing = node.getAttribute('title');
+      node.setAttribute('data-note', '');
+      node.setAttribute('title', existing ? existing + '\n' + notes[key] : notes[key]);
+    });
+  }
+
+  function markTarget() {
+    var current = content.querySelector('.md-target');
+    if (current) { current.classList.remove('md-target'); }
+    if (targetLine === null) { return null; }
+
+    var node = blockFor(targetLine);
+    if (node) { node.classList.add('md-target'); }
+    return node;
+  }
+
   function maxScroll() {
     var scroller = document.scrollingElement;
     return Math.max(0, scroller.scrollHeight - scroller.clientHeight);
@@ -255,6 +317,9 @@
     rewriteLocalImages();
     highlight();
     invalidate();
+    // innerHTML threw both of these away with the old nodes.
+    applyNotes();
+    markTarget();
 
     // An image that has not arrived yet is still zero-height, so every anchor below it is
     // measured in the wrong place until it loads.
@@ -289,6 +354,26 @@
       target.scrollIntoView({ block: 'start' });
     } else {
       post({ kind: 'anchorMiss', id: decoded });
+    }
+  };
+
+  window.mdSetNotes = function (map) {
+    notes = map || {};
+    applyNotes();
+  };
+
+  window.mdHighlightLine = function (line) {
+    targetLine = (line === null || line === undefined) ? null : line;
+
+    var node = markTarget();
+    if (!node) { return; }
+
+    // Only when it is off screen. The scroll sync has usually brought it here already, and
+    // a second scroll would fight it.
+    var box = node.getBoundingClientRect();
+    if (box.bottom < 0 || box.top > window.innerHeight) {
+      suppressUntil = Date.now() + SETTLE;
+      node.scrollIntoView({ block: 'center' });
     }
   };
 

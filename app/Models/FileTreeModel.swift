@@ -36,6 +36,13 @@ enum FileTree {
         documentExtensions.contains(url.pathExtension.lowercased())
     }
 
+    /// The name a typed file name is created under. Anything the sidebar would not list
+    /// becomes markdown - creating a file the tree then hides is the one outcome here
+    /// worth ruling out.
+    static func documentName(_ typed: String) -> String {
+        isDocument(URL(fileURLWithPath: typed)) ? typed : typed + ".md"
+    }
+
     /// What the preview can serve through `previewfile://`, and therefore what a drop into
     /// the raw pane writes as `![...]` rather than `[...]`. The sidebar still lists only
     /// documents, so this is reached by dragging in from Finder.

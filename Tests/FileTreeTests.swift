@@ -14,6 +14,15 @@ struct FileTreeListingTests {
         }
     }
 
+    @Test("a typed name the sidebar would not list is created as markdown")
+    func namesNewDocuments() {
+        #expect(FileTree.documentName("notes") == "notes.md")
+        #expect(FileTree.documentName("notes.md") == "notes.md")
+        #expect(FileTree.documentName("notes.TXT") == "notes.TXT")
+        #expect(FileTree.documentName("script.sh") == "script.sh.md")
+        #expect(FileTree.documentName("v1.2 plan") == "v1.2 plan.md")
+    }
+
     @Test("folders come first, then Finder's natural order")
     func sortsFoldersFirstThenNaturally() {
         let nodes = [

@@ -67,17 +67,23 @@ enum Pane: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    var icon: String {
+    /// What the sidebar's segmented control says. Only preview differs: "Preview" does not
+    /// fit three ways across a 160pt sidebar, and the menu still says the long name.
+    var shortTitle: String { self == .preview ? "View" : title }
+
+    /// Option-Command, because plain Command would take Paste and New off the app - and a
+    /// menu shortcut wins over the responder chain, so ⌘V here would be ⌘V everywhere.
+    var shortcut: KeyEquivalent {
         switch self {
-        case .raw: return "chevron.left.forwardslash.chevron.right"
-        case .preview: return "doc.richtext"
-        case .notes: return "bookmark"
+        case .raw: return "r"
+        case .preview: return "v"
+        case .notes: return "n"
         }
     }
 
     /// Notes are a list, so they get a fixed column.
     /// Raw and preview are documents, so they share whatever is left.
-    var fixedWidth: CGFloat? { self == .notes ? 300 : nil }
+    var fixedWidth: CGFloat? { self == .notes ? 350 : nil }
 
     /// Written by builds from before bookmarks and comments were one pane. Without this a
     /// config naming either one decodes to nothing and the viewer silently resets.

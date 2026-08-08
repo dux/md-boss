@@ -3,6 +3,8 @@ import SwiftUI
 struct EditorPane: View {
     @ObservedObject var document: MarkdownDocument
     @ObservedObject private var settings = AppSettings.shared
+    /// Observed so a note added, deleted or shifted by an edit repaints the gutter.
+    @ObservedObject private var store = AnnotationStore.shared
 
     private var theme: Theme { settings.theme }
 
@@ -15,7 +17,8 @@ struct EditorPane: View {
             MarkdownTextView(
                 document: document,
                 theme: theme,
-                fontSize: settings.editorFontSize
+                fontSize: settings.editorFontSize,
+                notes: store.noteTexts(for: document.url)
             )
         }
         .background(theme[.bg])

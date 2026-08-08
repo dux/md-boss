@@ -167,4 +167,21 @@ struct JSLiteralTests {
         let literal = JSLiteral.string("`${x}`")
         #expect(literal == "\"`${x}`\"")
     }
+
+    @Test("a line-keyed map comes out sorted, so the same notes make the same script")
+    func mapsSortedKeys() {
+        #expect(JSLiteral.map([10: "ten", 2: "two"]) == "{\"2\":\"two\",\"10\":\"ten\"}")
+    }
+
+    @Test("map values are escaped like any other literal")
+    func mapEscapesValues() {
+        let literal = JSLiteral.map([1: "a\"b </script>"])
+        #expect(!literal.contains("</script>"))
+        #expect(literal.contains("\\\""))
+    }
+
+    @Test("no notes is an empty object, not a syntax error")
+    func mapHandlesEmpty() {
+        #expect(JSLiteral.map([:]) == "{}")
+    }
 }

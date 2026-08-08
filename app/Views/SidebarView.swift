@@ -17,21 +17,30 @@ struct SidebarView: View {
 
     private var theme: Theme { settings.theme }
 
-    /// Box height plus its padding - what the dropdown has to clear.
-    private var pickerInset: CGFloat { RootPickerBox.height + 10 + 6 }
+    /// Toggle bar, folder box and the padding around both - what the dropdown has to clear.
+    private var pickerInset: CGFloat { RootPickerBox.height * 2 + 22 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            RootPickerBox(isOpen: $pickerIsOpen)
+            PaneToggleBar()
                 .padding(.horizontal, 8)
                 .padding(.top, 10)
                 .padding(.bottom, 6)
 
-            if tree.rows.isEmpty {
-                EmptyPane(theme: theme, message: emptyMessage)
-            } else {
-                list
+            RootPickerBox(isOpen: $pickerIsOpen)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 6)
+
+            Group {
+                if tree.rows.isEmpty {
+                    EmptyPane(theme: theme, message: emptyMessage)
+                        .contentShape(Rectangle())
+                        .contextMenu { blankMenu }
+                } else {
+                    list
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme[.sidebarBg])
@@ -81,18 +90,33 @@ struct SidebarView: View {
 
     private var list: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 1) {
-                    ForEach(Array(tree.rows.enumerated()), id: \.element.id) { index, row in
-                        rowView(index: index, row: row)
+            GeometryReader { viewport in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        LazyVStack(alignment: .leading, spacing: 1) {
+                            ForEach(Array(tree.rows.enumerated()), id: \.element.id) { index, row in
+                                rowView(index: index, row: row)
+                            }
+                        }
+                        .padding(.horizontal, 4)
+                        .padding(.bottom, 8)
+
+                        // The empty column below the last row, as a view of its own inside
+                        // the scroll content - a right-click there lands on something that
+                        // owns a menu, rather than on an ancestor of the scroll view and
+                        // whatever AppKit does with the click on the way up. It collapses
+                        // to nothing once the rows outgrow the viewport.
+                        Color.clear
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .contentShape(Rectangle())
+                            .contextMenu { blankMenu }
                     }
+                    .frame(minHeight: viewport.size.height, alignment: .top)
                 }
-                .padding(.horizontal, 4)
-                .padding(.bottom, 8)
-            }
-            .onChange(of: tree.cursor) { _, index in
-                guard tree.rows.indices.contains(index) else { return }
-                proxy.scrollTo(tree.rows[index].id, anchor: nil)
+                .onChange(of: tree.cursor) { _, index in
+                    guard tree.rows.indices.contains(index) else { return }
+                    proxy.scrollTo(tree.rows[index].id, anchor: nil)
+                }
             }
         }
     }
@@ -171,6 +195,12 @@ struct SidebarView: View {
         Button("Copy Name") { manager.copyText(row.node.name) }
         Divider()
         Button("Reveal in Finder") { manager.revealInFinder(row.node.url) }
+    }
+
+    /// The blank space below the tree stands for the folder the tree is showing.
+    private var blankMenu: some View {
+        Button("New File…") { manager.newFile() }
+            .disabled(folders.active == nil)
     }
 
     // MARK: Actions

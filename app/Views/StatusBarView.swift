@@ -27,6 +27,14 @@ struct StatusBarView: View {
                     }
             }
 
+            // Moved off the pane toggles when they went into the sidebar - this sits next
+            // to the file it is talking about, and the window's close button says it too.
+            if manager.isDirty {
+                Text("edited")
+                    .textStyle(.small)
+                    .foregroundColor(theme[.accent])
+            }
+
             Spacer(minLength: 12)
         }
         .padding(.horizontal, 12)

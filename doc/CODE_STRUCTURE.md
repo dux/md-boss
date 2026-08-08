@@ -16,7 +16,7 @@ app/
     AppSettings.swift      SettingsData + the singleton that persists it
     MdBossManager.swift    central @MainActor singleton: open document, selection, messages
     MdBossManagerCommands.swift  extension holding the menu-bar entry points
-    MdBossManagerFiles.swift     extension: cut, move, and following the moved file
+    MdBossManagerFiles.swift     extension: new file, cut, move, and following the moved file
     MarkdownLinks.swift    relative paths, inline link scanning, link rewriting
     FileMove.swift         move validation and the rewrite plan
     RootFoldersManager.swift     the sidebar's root folders, stored in roots.txt, MRU-ordered
@@ -26,6 +26,7 @@ app/
     DirectoryWatcher.swift per-directory and per-file kqueue watching
     MarkdownDocument.swift one open file: text, dirty state, save, external changes
     Annotations.swift      the Note record and the .md-boss store
+    NoteShift.swift        how a line-anchored note moves when the text under it is edited
     MdBossManagerAnnotations.swift  extension: add, edit and jump to annotations
   Views/
     SettingsView.swift     the Settings window - the theme grid and the four font sizes
@@ -36,10 +37,10 @@ app/
     PaneDivider.swift      draggable divider (point width and split fraction flavours)
     Toast.swift            global transient messages + the overlay view
     PromptPanel.swift      NSAlert text prompt, plus BlockMenuItem
-    PaneToggleBar.swift    the raw/preview/notes stripe
+    PaneToggleBar.swift    the raw/view/notes segments at the top of the sidebar
     NotesPane.swift        notes in three scopes: file, project, all projects
     StatusBarView.swift    one-line footer, right-click to copy the path
-    SidebarView.swift      root select box, tree, keyboard navigation
+    SidebarView.swift      pane toggles, root select box, tree, keyboard navigation
     SidebarRow.swift       one flattened row
     RootPicker.swift       the root folder select box and its dropdown
     DocumentPane.swift     preview / editor / split, gated on width
@@ -49,6 +50,7 @@ app/
     LineIndex.swift        line starts, bisected - the one line-number answer
     Preview/
       PreviewPane.swift        debounced live rendering
+      MeasureControls.swift    the reading-measure arrows, pinned to the page's top-right corner
       MarkdownPreviewView.swift WKWebView bridge, link routing, JS bridge
       MarkdownPageBuilder.swift the HTML shell, CSP nonce, bundled resources
       MarkdownLinkTarget.swift  external / file / directory / missing (ported verbatim)
@@ -141,9 +143,13 @@ a recursive walk that early-exits on the first document found and memoises per p
 invalidating a path and its whole line on any change below it. A folder large enough to blow
 the 20,000-entry budget is shown rather than hidden - failing open beats hiding real content.
 
-**The viewer is a set of toggles, not a mode.** `Pane` declares the three panes and their
-on-screen order. `AppSettings.panes` always returns them in declaration order and never
-returns an empty set. Notes take a fixed 300pt column; raw and preview
+**The viewer is a set of toggles, not a mode.** `Pane` declares the three panes, their
+on-screen order, and the key that switches each one. `AppSettings.panes` always returns them
+in declaration order and never returns an empty set. The toggles are a segmented control at
+the top of the *sidebar* rather than a stripe over the viewer, so the document panes start at
+the window's top edge and the chrome is all in one column. Their shortcuts are ⌥⌘R/V/N: a
+menu shortcut is matched before the responder chain, so plain ⌘V would have taken Paste out
+of the editor, and ⌘N belongs to New File. Notes take a fixed 350pt column; raw and preview
 share what is left, split by the draggable divider that drives `editorSplit`.
 `Pane.named` maps the retired `bookmarks` and `comments` values onto `notes`, so a config
 written before they were one pane still opens with the panes it asked for.
@@ -169,6 +175,53 @@ A moved file drags its notes with it. `AnnotationStore.repoint` is written out r
 routed through `mutate`, because the destination can be owned by a different `.md-boss` -
 notes have to leave one file and land in another, and `mutate` only knows about one. Landing
 on a line that already has a note folds field-wise, the same rule as decoding.
+
+**Which `.md-boss` holds a note is bookkeeping; identity is (path, line) across all of them.**
+`storeURL(for:)` answers from `RootFoldersManager.root(containing:)`, which is
+`roots.first { isUnder }` - and `roots` is MRU-ordered, so that answer *moves*. Nested roots
+swap places as you use them, and a file annotated before its folder became a root has its note
+in the fallback. Reads always scanned every store, so the pane was right; writes went to
+`storeURL` alone, so once the answer flipped, `note(for:line:)` missed, the dialog offered
+"Add Note" on a line that already had one, and `setNote` wrote a second record into the other
+file. `remove` on such a note did nothing and `shift` left it behind.
+
+So every read scans all stores, and `store(forNoteAt:line:)` sends a write to the file the
+note is *already* in, falling back to `storeURL` only for a genuinely new one. `shift` walks
+every store holding notes for the document rather than the one `storeURL` names.
+
+`NoteStores.deduplicated` heals what the old rule already wrote. It runs in `reload`, folds
+the copies field-wise like everything else here, and hands the survivor to the store that owns
+the document today - so a repair pulls a note into the project's own `.md-boss` instead of
+stranding it in the fallback on alphabetical luck. A note sitting on its own is never moved,
+and only stores that actually changed are written back, so a clean set of files comes through
+byte-identical and the reload our own write provokes finds nothing left to do.
+
+**A note marks a whole line, which is what lets it survive editing.** What it really anchors
+to is that line's *start offset*, so `NoteShift` slides it the way a text marker moves rather
+than diffing anything: an edit entirely at or before the anchor slides it, an edit after it
+leaves it alone, and an edit that swallows it drops it back to where the edit began.
+Insertion exactly at the anchor slides it, so pressing Enter at the head of a noted line takes
+the note down with its text instead of leaving it on the new blank line. The new line number
+is then read back out of the *new* text rather than counted as a delta - which is the only way
+to get a same-length replacement right, since swapping two characters for a newline and a
+character moves no offset but still gains everything below it a line.
+
+The hook is `NSTextStorageDelegate`, not `textDidChange`: it is the only one carrying the
+edited range, and unlike `shouldChangeTextIn` it sees programmatic mutations too - the outdent
+path, undo, a paste. Two notes landing on one line go through `AnnotationFile.fold`, the same
+rule as decoding and `repoint`.
+
+`mutate` skips the write when the file came out unchanged, and that is what makes this
+affordable: the shift runs on every edit in the raw pane and moves nothing on almost all of
+them, so typing a paragraph touches the disk zero times. `hasNotes` is asked before any of it,
+so a document nobody has annotated never even builds the second `LineIndex`.
+
+Two things it deliberately does not do. An external change - a `git pull` under an open file -
+swaps the whole text and hands us no edit to follow, so notes keep their line numbers, the
+same as they would for any other tool reading the file. And the write goes straight through
+rather than waiting for the document to be saved, because adding a note mid-edit rewrites the
+whole file anyway, shifted numbers included; holding them back would only be half true. The
+cost is that discarding unsaved changes leaves the notes where the edits put them.
 
 **A bookmark was a note nobody had written anything on.** They used to be two structs with the
 same two keys and a third called `title` in one and `body` in the other, and everything
@@ -318,8 +371,13 @@ Plus drag and drop: a file dragged into the raw pane becomes a relative link to 
 a file dragged onto a folder - or cut and dropped through "Move Here" - moves and takes every
 reference to it with it.
 
+Plus notes that show where they apply: a marked line carries an accent number and a dot in the
+raw gutter, hovering it in either pane says what the note says, opening one bands the line in
+the raw pane and highlights the block in the preview, and an edit above a note takes the note
+with it. The preview draws no marker of its own - it stays a reading surface, and opening the
+note from the pane is what points at it.
+
 Still open, from phase 5-6 of the plan:
-new/rename/delete in the sidebar, moving folders rather than files, rewriting the moved file's
+rename/delete in the sidebar, moving folders rather than files, rewriting the moved file's
 own outbound links, dropping a folder on the window, print/export, word count,
-clickable task lists, and `hammer gh_pub`. Opening a note still forces the raw pane open
-rather than scrolling the preview to it.
+clickable task lists, and `hammer gh_pub`.

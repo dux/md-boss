@@ -18,6 +18,11 @@ struct MarkdownPreviewView: NSViewRepresentable {
     let fontSize: CGFloat
     let measure: CGFloat
     var anchor: String?
+    /// Notes on this document, line -> hover text. The block each one falls in gets it as a
+    /// `title`; the page draws no marker, since opening the note is what points at it.
+    var notes: [Int: String] = [:]
+    /// The line a note jump landed on, highlighted until the caret moves off it.
+    var highlightLine: Int?
     var onLink: (MarkdownLinkTarget) -> Void
 
     func makeNSView(context: Context) -> WKWebView {
@@ -79,6 +84,16 @@ struct MarkdownPreviewView: NSViewRepresentable {
             coordinator.pendingAnchor = anchor
             coordinator.run(webView, "mdScrollToAnchor(\(JSLiteral.string(anchor)));")
         }
+
+        if coordinator.renderedNotes != notes {
+            coordinator.renderedNotes = notes
+            coordinator.run(webView, "mdSetNotes(\(JSLiteral.map(notes)));")
+        }
+
+        if coordinator.renderedHighlight != highlightLine {
+            coordinator.renderedHighlight = highlightLine
+            coordinator.run(webView, "mdHighlightLine(\(highlightLine.map(String.init) ?? "null"));")
+        }
     }
 
     static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
@@ -117,6 +132,8 @@ struct MarkdownPreviewView: NSViewRepresentable {
         var renderedFontSize: CGFloat = 0
         var renderedMeasure: CGFloat = 0
         var pendingAnchor: String?
+        var renderedNotes: [Int: String] = [:]
+        var renderedHighlight: Int?
 
         private var isReady = false
         private var queued: [String] = []
@@ -127,6 +144,15 @@ struct MarkdownPreviewView: NSViewRepresentable {
             queued.removeAll()
             ScrollSync.shared.reset()
             webView.loadHTMLString(page, baseURL: owner?.fileURL)
+
+            // Queued until the page says ready, so a freshly loaded document arrives already
+            // marked up rather than waiting for whenever the next update pass happens to run.
+            renderedNotes = owner?.notes ?? [:]
+            renderedHighlight = owner?.highlightLine
+            run(webView, "mdSetNotes(\(JSLiteral.map(renderedNotes)));")
+            if let line = renderedHighlight {
+                run(webView, "mdHighlightLine(\(line));")
+            }
         }
 
         func observeScrolling(of webView: WKWebView) {
