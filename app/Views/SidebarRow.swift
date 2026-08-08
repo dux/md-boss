@@ -10,7 +10,7 @@ struct SidebarRow: View {
     let onOpen: () -> Void
 
     @State private var isHovered = false
-    @ObservedObject private var settings = AppSettings.shared
+    private let settings = AppSettings.shared
 
     /// Everything in the row is measured off the sidebar font, so the tree keeps its
     /// proportions at any size instead of clipping at the fixed 22pt height.

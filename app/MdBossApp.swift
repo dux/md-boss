@@ -74,9 +74,9 @@ struct MdBossApp: App {
 // MARK: - Menus
 
 struct MdBossCommands: Commands {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var manager = MdBossManager.shared
-    @ObservedObject private var folders = RootFoldersManager.shared
+    private let settings = AppSettings.shared
+    private let manager = MdBossManager.shared
+    private let folders = RootFoldersManager.shared
 
     /// Writes through the manager rather than the settings struct, so picking a theme from
     /// the menu flashes the same toast as Cmd-Shift-D.

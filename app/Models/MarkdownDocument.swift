@@ -3,7 +3,8 @@ import SwiftUI
 /// One open file: its text, whether it differs from disk, and what to do when something
 /// else changes it underneath us.
 @MainActor
-final class MarkdownDocument: ObservableObject {
+@Observable
+final class MarkdownDocument {
     enum ExternalChange: Equatable {
         /// Changed on disk while we hold unsaved edits.
         case conflict
@@ -14,15 +15,15 @@ final class MarkdownDocument: ObservableObject {
     /// Only `relocate(to:)` moves it, and only to follow a file the sidebar just moved.
     private(set) var url: URL
 
-    @Published var text: String
-    @Published private(set) var savedText: String
-    @Published private(set) var externalChange: ExternalChange?
+    var text: String
+    private(set) var savedText: String
+    private(set) var externalChange: ExternalChange?
     /// Not decodable as UTF-8. Shown, never written - re-encoding would destroy the original.
-    @Published private(set) var isReadOnly: Bool
+    private(set) var isReadOnly: Bool
 
     /// Bumped only on open and on an external reload. `MarkdownTextView` pushes the string
     /// into the text view only when this changes, so typing never resets the selection.
-    @Published private(set) var reloadToken = UUID()
+    private(set) var reloadToken = UUID()
 
     var isDirty: Bool { text != savedText }
 

@@ -6,8 +6,9 @@ import SwiftUI
 /// Notes take the fixed column `Pane.fixedWidth` names; raw and preview share whatever is
 /// left, split by a draggable divider.
 struct DocumentPane: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var manager = MdBossManager.shared
+    /// Bindable for the raw/preview divider, which writes the split straight back.
+    @Bindable private var settings = AppSettings.shared
+    private let manager = MdBossManager.shared
 
     private static let dividerWidth: CGFloat = 5
 

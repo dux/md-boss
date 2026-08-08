@@ -3,8 +3,8 @@ import SwiftUI
 /// One-line footer showing what is open. Transient messages go to the Toast overlay
 /// instead - a markdown reader should not push the text around to say something.
 struct StatusBarView: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var manager = MdBossManager.shared
+    private let settings = AppSettings.shared
+    private let manager = MdBossManager.shared
 
     let url: URL?
 

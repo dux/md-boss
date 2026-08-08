@@ -7,9 +7,9 @@ import SwiftUI
 /// leaving you wondering whether the pane is broken. The two wider ones fold, and start
 /// folded, so the notes on what you are actually reading stay at the top of the column.
 struct NotesPane: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var store = AnnotationStore.shared
-    @ObservedObject private var manager = MdBossManager.shared
+    private let settings = AppSettings.shared
+    private let store = AnnotationStore.shared
+    private let manager = MdBossManager.shared
 
     private var theme: Theme { settings.theme }
 

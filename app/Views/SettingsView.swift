@@ -11,7 +11,7 @@ import SwiftUI
 /// `MarkdownTextView`, the preview through the existing `mdSetTheme` / `mdSetFontSize`
 /// bridge calls.
 struct SettingsView: View {
-    @ObservedObject private var settings = AppSettings.shared
+    private let settings = AppSettings.shared
 
     private var theme: Theme { settings.theme }
 

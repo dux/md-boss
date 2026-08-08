@@ -9,9 +9,16 @@ import Combine
 /// fenced code block, or `--` turning into an em dash in YAML front matter, is the bug that
 /// makes a markdown editor unusable.
 struct MarkdownTextView: NSViewRepresentable {
-    @ObservedObject var document: MarkdownDocument
+    let document: MarkdownDocument
+    /// Read off the document by the pane rather than here, so a reload reaches this view:
+    /// observation is per property, and nothing else in the pane reads it.
+    let reloadToken: UUID
     let theme: Theme
     let fontSize: CGFloat
+    /// Where the raw pane has been asked to scroll, and the line a note jump landed on.
+    /// Both are transient state on the manager, passed in for the same reason as the token.
+    var scrollRequest: MdBossManager.ScrollRequest?
+    var highlightLine: Int?
     /// Notes on the open document, line -> hover text. Drives the gutter markers and the
     /// tooltip; the pane never reaches the store itself.
     var notes: [Int: String] = [:]
@@ -83,7 +90,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.isGrammarCheckingEnabled = false
         textView.smartInsertDeleteEnabled = false
 
-        context.coordinator.loadedToken = document.reloadToken
+        context.coordinator.loadedToken = reloadToken
         context.coordinator.loadedURL = document.url
         context.coordinator.notes = notes
         context.coordinator.load(document.text, into: textView)
@@ -109,18 +116,18 @@ struct MarkdownTextView: NSViewRepresentable {
         // Only replace the string when the document identity changed or an external reload
         // happened. Assigning it unconditionally would destroy the selection, the undo
         // stack and any in-progress input-method composition on every keystroke.
-        if context.coordinator.loadedToken != document.reloadToken {
+        if context.coordinator.loadedToken != reloadToken {
             // Same file coming back from disk - keep the reader where they were. A different
             // file opens at the top.
             let sameFile = context.coordinator.loadedURL == document.url
-            context.coordinator.loadedToken = document.reloadToken
+            context.coordinator.loadedToken = reloadToken
             context.coordinator.loadedURL = document.url
             context.coordinator.load(document.text, into: textView, keepingPosition: sameFile)
         }
 
         // After the swap, so a "open this file at line N" request lands in the new text.
-        context.coordinator.applyScrollRequest(to: textView)
-        context.coordinator.applyHighlight(to: textView)
+        context.coordinator.applyScrollRequest(scrollRequest, to: textView)
+        context.coordinator.applyHighlight(highlightLine, to: textView)
 
         apply(theme: textView, context.coordinator)
 
@@ -383,8 +390,8 @@ struct MarkdownTextView: NSViewRepresentable {
 
         // MARK: Scrolling
 
-        func applyScrollRequest(to textView: NSTextView) {
-            guard let request = MdBossManager.shared.scrollRequest, request != appliedScroll else { return }
+        func applyScrollRequest(_ request: MdBossManager.ScrollRequest?, to textView: NSTextView) {
+            guard let request, request != appliedScroll else { return }
             appliedScroll = request
 
             guard let range = index.range(ofLine: request.line) else { return }
@@ -393,13 +400,10 @@ struct MarkdownTextView: NSViewRepresentable {
             textView.window?.makeFirstResponder(textView)
         }
 
-        /// The band on the line a note jump landed on. Read off the manager rather than
-        /// passed in, the same way the scroll request above is - both are transient, and
-        /// DocumentPane observes the manager, so a change re-runs `updateNSView`.
-        func applyHighlight(to textView: NSTextView) {
+        /// The band on the line a note jump landed on.
+        func applyHighlight(_ line: Int?, to textView: NSTextView) {
             guard let view = textView as? EditorTextView else { return }
-            view.highlightedRange = MdBossManager.shared.highlightedLine
-                .flatMap { index.range(ofLine: $0) }
+            view.highlightedRange = line.flatMap { index.range(ofLine: $0) }
         }
 
         // MARK: Scroll sync

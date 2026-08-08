@@ -3,12 +3,12 @@ import SwiftUI
 /// The rendered side. Re-renders 250ms after typing stops, through a JavaScript call into
 /// the live page rather than a reload - so the scroll position and selection survive.
 struct PreviewPane: View {
-    @ObservedObject var document: MarkdownDocument
+    let document: MarkdownDocument
 
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var manager = MdBossManager.shared
+    private let settings = AppSettings.shared
+    private let manager = MdBossManager.shared
     /// Observed so a note added, deleted or shifted by an edit updates the page's hover text.
-    @ObservedObject private var store = AnnotationStore.shared
+    private let store = AnnotationStore.shared
     @State private var rendered = ""
 
     var body: some View {

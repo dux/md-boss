@@ -224,6 +224,31 @@ struct RootFoldersTests {
         // "/work/notes-old" must not match "/work/notes".
         #expect(folders.root(containing: URL(fileURLWithPath: "/work/notes-old/a.md")) == nil)
     }
+
+    /// The tree used to reach the folders through `@Published.values`; it now re-arms an
+    /// observation instead, and that is a loop of our own that can silently stop firing.
+    @Test("a folder added after launch reaches the tree")
+    @MainActor
+    func treeFollowsRoots() async throws {
+        let store = try Fixture.makeFile()
+        defer { Fixture.remove(store.deletingLastPathComponent()) }
+
+        let root = try Fixture.make(["notes.md": "# notes"])
+        defer { Fixture.remove(root) }
+
+        let folders = RootFoldersManager(file: store)
+        let tree = FileTreeModel(folders: folders)
+        #expect(tree.rows.isEmpty)
+
+        folders.add(root, atTop: true)
+
+        // The observation reports on the next turn and the listing itself runs off-actor.
+        for _ in 0..<100 where tree.rows.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(tree.rows.map(\.node.name) == ["notes.md"])
+    }
 }
 
 // MARK: - Fixtures

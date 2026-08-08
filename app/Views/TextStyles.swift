@@ -35,7 +35,7 @@ private struct TextStyleModifier: ViewModifier {
     let style: TextStyle
     let weight: Font.Weight?
     let mono: Bool
-    @ObservedObject private var settings = AppSettings.shared
+    private let settings = AppSettings.shared
 
     private var resolvedSize: CGFloat { style.size }
 
@@ -74,7 +74,7 @@ private struct IconStyleModifier: ViewModifier {
     let style: TextStyle
     let scale: CGFloat
     let weight: Font.Weight
-    @ObservedObject private var settings = AppSettings.shared
+    private let settings = AppSettings.shared
 
     func body(content: Content) -> some View {
         content.font(.system(size: (style.size * scale).rounded(), weight: weight))

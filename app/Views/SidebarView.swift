@@ -2,10 +2,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct SidebarView: View {
-    @ObservedObject var tree: FileTreeModel
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var folders = RootFoldersManager.shared
-    @ObservedObject private var manager = MdBossManager.shared
+    let tree: FileTreeModel
+    private let settings = AppSettings.shared
+    private let folders = RootFoldersManager.shared
+    private let manager = MdBossManager.shared
 
     @FocusState private var isFocused: Bool
     @State private var typeAhead = ""

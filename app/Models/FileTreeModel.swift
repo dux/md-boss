@@ -151,9 +151,10 @@ enum FileTree {
 // MARK: - Model
 
 @MainActor
-final class FileTreeModel: ObservableObject {
-    @Published private(set) var rows: [FlatRow] = []
-    @Published var cursor = 0
+@Observable
+final class FileTreeModel {
+    private(set) var rows: [FlatRow] = []
+    var cursor = 0
 
     private let folders: RootFoldersManager
     private let settings = AppSettings.shared
@@ -165,7 +166,6 @@ final class FileTreeModel: ObservableObject {
     private var listing: Set<String> = []
 
     private var watcher: DirectoryWatcher?
-    private var rootsObserver: Task<Void, Never>?
     /// What the last rebuild was showing, so switching folders can reset the cursor.
     private var lastActive: String?
     /// A reveal target whose row has not been listed yet.
@@ -186,15 +186,22 @@ final class FileTreeModel: ObservableObject {
             self?.handleWatchEvent(url, event)
         }
 
-        rootsObserver = Task { [weak self] in
-            for await roots in folders.$roots.values {
-                self?.rootsChanged(roots)
-            }
-        }
+        observeRoots()
     }
 
-    deinit {
-        rootsObserver?.cancel()
+    /// Builds the tree for the folders as they stand, and again after every change to them.
+    ///
+    /// Observation reports once and fires before the new value lands, so the list is read on
+    /// the next turn and tracking is re-armed there. The weak self is what ends the loop:
+    /// the last release of the model is the last re-arm.
+    private func observeRoots() {
+        rootsChanged(folders.roots)
+
+        withObservationTracking {
+            _ = folders.roots
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.observeRoots() }
+        }
     }
 
     // MARK: Expansion

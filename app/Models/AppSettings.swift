@@ -156,7 +156,8 @@ enum FontSetting: String, CaseIterable, Sendable, Identifiable {
 
 @MainActor
 @dynamicMemberLookup
-final class AppSettings: ObservableObject {
+@Observable
+final class AppSettings {
     static let shared = AppSettings()
 
     // nonisolated: the debounced write runs off the main actor, and RootFoldersManager
@@ -165,7 +166,7 @@ final class AppSettings: ObservableObject {
         .appendingPathComponent(".config/md-boss")
     nonisolated static let configFile = configDir.appendingPathComponent("settings.json")
 
-    @Published var data: SettingsData {
+    var data: SettingsData {
         didSet {
             guard data != oldValue else { return }
             if data.themeID != oldValue.themeID { applyAppearance() }
@@ -180,7 +181,8 @@ final class AppSettings: ObservableObject {
     }
 
     /// Reads and writes settings by property name: `settings.sidebarWidth = 300`.
-    /// SwiftUI bindings go through the published value instead: `$settings.data.sidebarWidth`.
+    /// SwiftUI bindings go through the stored value instead, off a `@Bindable` reference:
+    /// `$settings.data.sidebarWidth`.
     subscript<T>(dynamicMember keyPath: WritableKeyPath<SettingsData, T>) -> T {
         get { data[keyPath: keyPath] }
         set { data[keyPath: keyPath] = newValue }

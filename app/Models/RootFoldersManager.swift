@@ -5,10 +5,11 @@ import Foundation
 /// Stored as one absolute path per line so the file stays hand-editable, the same reasoning
 /// as file_explorer_swift's `folders.txt`.
 @MainActor
-final class RootFoldersManager: ObservableObject {
+@Observable
+final class RootFoldersManager {
     static let shared = RootFoldersManager()
 
-    @Published private(set) var roots: [URL] = []
+    private(set) var roots: [URL] = []
 
     private let file: URL
 

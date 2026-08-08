@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 /// Central app state.
 ///
@@ -7,39 +6,36 @@ import Combine
 /// `.commands` closures live outside the view hierarchy and cannot read view state -
 /// the menu bar has to reach the same instance the views are rendering.
 @MainActor
-final class MdBossManager: ObservableObject {
+@Observable
+final class MdBossManager {
     static let shared = MdBossManager()
 
     let tree = FileTreeModel()
 
-    @Published private(set) var document: MarkdownDocument?
+    private(set) var document: MarkdownDocument?
     /// Heading the preview should scroll to, when the file was reached by a `#anchor` link.
-    @Published private(set) var previewAnchor: String?
-
-    /// Mirrored from the open document so menu items and the window's edited dot can
-    /// react - a nested ObservableObject does not republish through its owner.
-    @Published private(set) var isDirty = false
+    private(set) var previewAnchor: String?
 
     /// Caret position in the raw pane, 1-based, plus the text of that line. Notes anchor to
     /// it, and the pane uses it to highlight the entry you are on.
-    @Published private(set) var currentLine = 1
+    private(set) var currentLine = 1
     private(set) var currentLineText = ""
 
     /// A request for the raw pane to scroll to a line. Carries an id so asking for the same
     /// line twice still moves the view.
-    @Published private(set) var scrollRequest: ScrollRequest?
+    private(set) var scrollRequest: ScrollRequest?
 
     /// The line a note jump landed on. Painted as a band in the raw pane and highlighted in
     /// the preview, until the caret moves off it - so "where did I land" outlives the scroll.
-    @Published private(set) var highlightedLine: Int?
+    private(set) var highlightedLine: Int?
 
     /// The file waiting for a "Move Here". Cleared by Escape in the sidebar and by the move.
-    @Published var cutFile: URL?
+    var cutFile: URL?
 
     /// The row a drag started on, set before the pasteboard has decoded anything. A drop
     /// target has to decide whether to light up while the drag is still in the air, and an
     /// `isTargeted` binding cannot see the payload.
-    @Published var draggedFile: URL?
+    var draggedFile: URL?
 
     struct ScrollRequest: Equatable {
         let line: Int
@@ -48,9 +44,12 @@ final class MdBossManager: ObservableObject {
 
     var selectedFile: URL? { document?.url }
 
+    /// Read straight off the document: a view reading this tracks the document's own text,
+    /// so there is nothing to mirror.
+    var isDirty: Bool { document?.isDirty ?? false }
+
     private var settings: AppSettings { AppSettings.shared }
     private var folders: RootFoldersManager { .shared }
-    private var documentObserver: AnyCancellable?
 
     private init() {}
 
@@ -83,10 +82,7 @@ final class MdBossManager: ObservableObject {
 
         let opened = MarkdownDocument(url: url)
         document = opened
-        documentObserver = opened.objectWillChange.sink { [weak self] _ in
-            // objectWillChange fires before the value lands, so read it on the next turn.
-            Task { @MainActor in self?.syncWindowEditedState() }
-        }
+        observeDirtyState(of: opened)
         previewAnchor = anchor
         settings.lastOpenedFile = url.path
         syncWindowEditedState()
@@ -116,11 +112,26 @@ final class MdBossManager: ObservableObject {
         }
     }
 
-    /// Drives the dot in the window's close button and the enabled state of Save.
+    /// Drives the dot in the window's close button.
     func syncWindowEditedState() {
-        let dirty = document?.isDirty ?? false
-        if isDirty != dirty { isDirty = dirty }
-        NSApp.windows.first?.isDocumentEdited = dirty
+        NSApp.windows.first?.isDocumentEdited = isDirty
+    }
+
+    /// The window's dot is an AppKit property, so nothing observes it on our behalf.
+    ///
+    /// Observation reports once and fires before the value lands, so this reads on the next
+    /// turn and re-arms there. A document that is no longer the open one is dropped, which
+    /// is also what ends the loop.
+    private func observeDirtyState(of document: MarkdownDocument) {
+        withObservationTracking {
+            _ = document.isDirty
+        } onChange: { [weak self, weak document] in
+            Task { @MainActor in
+                guard let self, let document, self.document === document else { return }
+                self.syncWindowEditedState()
+                self.observeDirtyState(of: document)
+            }
+        }
     }
 
     /// Where a link clicked inside the preview goes.

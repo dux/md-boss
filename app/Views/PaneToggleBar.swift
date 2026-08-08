@@ -3,9 +3,9 @@ import SwiftUI
 /// The segmented control at the top of the sidebar. Each segment toggles one pane in or out;
 /// the panes then sit side by side in `Pane.allCases` order.
 struct PaneToggleBar: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var manager = MdBossManager.shared
-    @ObservedObject private var store = AnnotationStore.shared
+    private let settings = AppSettings.shared
+    private let manager = MdBossManager.shared
+    private let store = AnnotationStore.shared
 
     private var theme: Theme { settings.theme }
 

@@ -303,17 +303,17 @@ enum NoteStores {
 /// committed alongside the documents they point at.
 /// Anything opened outside every root falls back to one file in the config directory.
 @MainActor
-final class AnnotationStore: ObservableObject {
+@Observable
+final class AnnotationStore {
     static let shared = AnnotationStore()
 
     static let fileName = ".md-boss"
     static let fallbackFile = AppSettings.configDir.appendingPathComponent("annotations.json")
 
     /// Keyed by the `.md-boss` file's path, so a write goes back where it came from.
-    @Published private(set) var files: [String: AnnotationFile] = [:]
+    private(set) var files: [String: AnnotationFile] = [:]
 
     private var folders: RootFoldersManager { .shared }
-    private var rootsObserver: Task<Void, Never>?
     private var watcher: DirectoryWatcher?
 
     private init() {
@@ -323,16 +323,23 @@ final class AnnotationStore: ObservableObject {
             self?.reload()
         }
         reload()
-
-        rootsObserver = Task { [weak self] in
-            for await _ in RootFoldersManager.shared.$roots.values {
-                self?.reload()
-            }
-        }
+        observeRoots()
     }
 
-    deinit {
-        rootsObserver?.cancel()
+    /// A folder arriving or leaving brings its own `.md-boss` with it.
+    ///
+    /// Observation reports once and fires before the new value lands, so the reload happens
+    /// on the next turn and tracking is re-armed there.
+    private func observeRoots() {
+        withObservationTracking {
+            _ = folders.roots
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.reload()
+                self.observeRoots()
+            }
+        }
     }
 
     // MARK: Counts, for the pane toggle bar

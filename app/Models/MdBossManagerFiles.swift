@@ -121,9 +121,6 @@ extension MdBossManager {
 
         document.relocate(to: target)
         AppSettings.shared.lastOpenedFile = target.path
-        // `selectedFile` is computed off the document, and a document that only changed its
-        // URL republishes nothing - the sidebar highlight and the status bar read it.
-        objectWillChange.send()
     }
 
     // MARK: The tree

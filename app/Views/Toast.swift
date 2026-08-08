@@ -5,7 +5,8 @@ import SwiftUI
 /// Global on purpose - models, menu commands and the web-view bridge all need to say
 /// something to the user, and none of them can reach a view.
 @MainActor
-final class Toast: ObservableObject {
+@Observable
+final class Toast {
     static let shared = Toast()
 
     enum Kind {
@@ -30,7 +31,7 @@ final class Toast: ObservableObject {
         static func == (lhs: Self, rhs: Self) -> Bool { lhs.id == rhs.id }
     }
 
-    @Published private(set) var current: Message?
+    private(set) var current: Message?
 
     private var dismissTask: Task<Void, Never>?
 
@@ -62,8 +63,8 @@ final class Toast: ObservableObject {
 // MARK: - View
 
 struct ToastView: View {
-    @ObservedObject private var toast = Toast.shared
-    @ObservedObject private var settings = AppSettings.shared
+    private let toast = Toast.shared
+    private let settings = AppSettings.shared
 
     private var theme: Theme { settings.theme }
 

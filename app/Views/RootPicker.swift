@@ -12,9 +12,9 @@ import UniformTypeIdentifiers
 struct RootPickerBox: View {
     @Binding var isOpen: Bool
 
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var folders = RootFoldersManager.shared
-    @ObservedObject private var manager = MdBossManager.shared
+    private let settings = AppSettings.shared
+    private let folders = RootFoldersManager.shared
+    private let manager = MdBossManager.shared
 
     @State private var isHovered = false
     @State private var isDropTarget = false
@@ -121,8 +121,8 @@ struct RootPickerList: View {
     /// Room the sidebar has left below the box. Twenty entries are taller than a short window.
     let maxHeight: CGFloat
 
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var folders = RootFoldersManager.shared
+    private let settings = AppSettings.shared
+    private let folders = RootFoldersManager.shared
 
     @State private var hovered: String?
 

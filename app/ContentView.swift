@@ -2,8 +2,9 @@ import SwiftUI
 import AppKit
 
 struct ContentView: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var manager = MdBossManager.shared
+    /// Bindable for the divider below, which writes the width straight back into settings.
+    @Bindable private var settings = AppSettings.shared
+    private let manager = MdBossManager.shared
 
     private var theme: Theme { settings.theme }
 

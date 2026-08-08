@@ -6,8 +6,8 @@ import SwiftUI
 /// Pinned to the preview's top-right corner rather than sitting in the toggle stripe: the
 /// stripe spans every pane, and this only affects the rendered column.
 struct MeasureControls: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var manager = MdBossManager.shared
+    private let settings = AppSettings.shared
+    private let manager = MdBossManager.shared
 
     private var theme: Theme { settings.theme }
 
