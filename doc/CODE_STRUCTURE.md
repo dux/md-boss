@@ -300,6 +300,16 @@ white, lose the scroll position, and re-inline 162KB of libraries per keystroke.
 Typing is debounced 250ms by `.task(id: document.text)`, which cancels the pending task on
 every keystroke.
 
+## Task lists take three states, and no bullet
+
+`preview.js` rewrites a bare `[x] item` line to the `- [x] item` GFM insists on before it
+lexes, skipping fenced code.
+The rewrite adds characters but never a newline, so every `data-line` anchor stays where it
+was.
+`[*]` is a third state - started, not finished.
+Marked knows nothing about it, so it reaches the DOM as literal text at the head of the item
+and a post-render pass swaps it for the spinner `preview.css` draws.
+
 ## Scroll sync runs on source lines, not on percentages
 
 Every block in the preview carries a `data-line`, so the two panes agree on positions rather

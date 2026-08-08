@@ -78,12 +78,71 @@ ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
 li { margin: 0.25em 0; }
 li > ul, li > ol { margin-bottom: 0; }
 
-/* Task lists read as checkboxes, not as bullets with a box next to them. */
-li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.3em; }
-li > input[type="checkbox"] {
-  margin-right: 0.5em;
-  accent-color: var(--accent);
+/* Task lists read as checkboxes, not as bullets with a box next to them. `.md-task` is put
+   there by the script - a loose list wraps the item in a <p>, so nothing here can find the
+   box on its own.
+
+   All three markers are drawn here rather than left to the platform. An input does not
+   inherit the page font, so an em on the native box resolved against 13px while the same em
+   on the spinner resolved against the body size - three states, three sizes, three columns.
+   `font: inherit` puts them back on one scale and `appearance: none` stops AppKit drawing
+   its own control at whatever size it likes. */
+li.md-task { list-style: none; }
+
+.md-task input[type="checkbox"], .md-spinner {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-block;
+  font: inherit;
+  width: 1em;
+  height: 1em;
+  /* Pulled back by exactly its own width, so the marker sits in the bullet column while the
+     text stays on the column an ordinary bullet's text uses - and a nested list still
+     indents by the full step instead of by what is left over. The right margin is the only
+     gap between marker and text: the script strips the space that follows both. */
+  margin: 0 0.45em 0 -1.45em;
+  vertical-align: -0.12em;
+  border: 1.5px solid var(--border-strong);
+  background: transparent;
 }
+
+.md-task input[type="checkbox"] {
+  position: relative;
+  border-radius: 0.25em;
+}
+
+.md-task input[type="checkbox"]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The tick is two sides of an empty box, turned - drawn rather than set as a glyph so it
+   scales with the marker instead of with whatever font answers for a checkmark. */
+.md-task input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 0.29em;
+  top: 0.1em;
+  width: 0.2em;
+  height: 0.44em;
+  border: solid var(--bg);
+  border-width: 0 0.13em 0.13em 0;
+  transform: rotate(43deg);
+}
+
+/* `[*]` - started, not finished. A ring rather than a box, because the point is that it is
+   still turning. */
+.md-spinner {
+  border-width: 2px;
+  border-radius: 50%;
+  border-top-color: var(--accent);
+  animation: md-spin 0.9s linear infinite;
+}
+
+@keyframes md-spin { to { transform: rotate(360deg); } }
+
+/* The ring alone still reads as "in progress" - the motion is decoration. */
+@media (prefers-reduced-motion: reduce) { .md-spinner { animation: none; } }
 
 /* Quotes */
 

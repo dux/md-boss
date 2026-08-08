@@ -89,6 +89,69 @@
     });
   }
 
+  // MARK: task lists
+
+  // GFM wants a bullet before the box; a bare `[x] item` line is what people actually type,
+  // so it gets the bullet here. Same line count, so every anchor below stays put. `[*]` is
+  // ours - a third state, still running - and rides through the lexer as plain text.
+  var TASK = /^([ \t]*)\[([ xX*])\]([ \t])/;
+  var FENCE = /^ {0,3}(`{3,}|~{3,})/;
+
+  function expandTasks(source) {
+    var lines = source.split('\n');
+    var fence = null;
+
+    for (var i = 0; i < lines.length; i += 1) {
+      var open = FENCE.exec(lines[i]);
+      if (open) {
+        var mark = open[1].charAt(0);
+        if (!fence) { fence = mark; } else if (mark === fence) { fence = null; }
+      } else if (!fence) {
+        lines[i] = lines[i].replace(TASK, '$1- [$2]$3');
+      }
+    }
+    return lines.join('\n');
+  }
+
+  // The text node an item starts with - directly for a tight list, inside the wrapping <p>
+  // for a loose one.
+  function itemHead(item) {
+    var node = item.firstChild;
+    if (node && node.nodeType === 1 && node.tagName === 'P') { node = node.firstChild; }
+    return node && node.nodeType === 3 ? node : null;
+  }
+
+  // `[*]` arrives as literal text at the head of the item; swapping it for a spinner here
+  // keeps the third state out of the lexer entirely. Boxed items are tagged in the same
+  // pass rather than matched in CSS, because a loose list wraps the item in a <p> and no
+  // child selector survives that.
+  function markTasks() {
+    content.querySelectorAll('li').forEach(function (item) {
+      var head = itemHead(item);
+      var match = head && /^\[\*\][ \t]/.exec(head.nodeValue);
+
+      if (match) {
+        head.nodeValue = head.nodeValue.slice(match[0].length);
+        var spinner = document.createElement('span');
+        spinner.className = 'md-spinner';
+        spinner.setAttribute('aria-label', 'in progress');
+        head.parentNode.insertBefore(spinner, head);
+        item.classList.add('md-task');
+        return;
+      }
+
+      // A nested list's checkbox belongs to its own item, not to this one.
+      var box = item.querySelector('input[type="checkbox"]');
+      if (!box || box.closest('li') !== item) { return; }
+      item.classList.add('md-task');
+
+      // Marked leaves the space it split the item on sitting after the box, which would put
+      // the text a quarter em right of where a spinner puts it. The marker owns that gap.
+      var text = box.nextSibling;
+      if (text && text.nodeType === 3) { text.nodeValue = text.nodeValue.replace(/^\s+/, ''); }
+    });
+  }
+
   // MARK: source lines
 
   function newlines(text) {
@@ -106,6 +169,8 @@
   }
 
   function toHTML(source) {
+    source = expandTasks(source);
+
     var tokens = marked.lexer(source);
     var stamped = [];
     var html = '';
@@ -140,6 +205,7 @@
     totalLines = 1 + newlines(source);
     content.innerHTML = html;
     blocks = null;
+    markTasks();
     tagListItems(stamped);
   }
 
