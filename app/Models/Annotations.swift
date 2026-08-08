@@ -29,6 +29,10 @@ struct Note: Codable, Equatable, Identifiable {
     /// without re-reading the file they point at.
     var label: String { title.isEmpty ? body : title }
 
+    /// What a hover over the line says. A note with no body carries no information beyond
+    /// its own existence - its title came off the source line you are already looking at.
+    var tooltip: String { body.isEmpty ? "Note on line \(line)" : body }
+
     var isEmpty: Bool {
         title.isEmpty && body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -310,6 +314,22 @@ final class AnnotationStore: ObservableObject {
         return files[storeURL(for: url).path]?.notes.first { $0.path == path && $0.line == line }
     }
 
+    /// Asked on every edit in the raw pane, before anything more expensive is done, so a
+    /// document nobody has annotated costs nothing to type in.
+    func hasNotes(for url: URL) -> Bool {
+        let path = AnnotationPath.store(url)
+        return files[storeURL(for: url).path]?.notes.contains { $0.path == path } ?? false
+    }
+
+    /// Line -> hover text for one document. The raw gutter, the tooltip and the preview's
+    /// markers all want the same answer, so it is given once here rather than assembled in
+    /// each pane. Two `.md-boss` files can name the same (path, line), so the first one wins
+    /// rather than trapping.
+    func noteTexts(for url: URL?) -> [Int: String] {
+        guard let url else { return [:] }
+        return Dictionary(notes(for: url).map { ($0.line, $0.tooltip) }, uniquingKeysWith: { first, _ in first })
+    }
+
     // MARK: Writing
 
     /// A note with neither a title nor a body is removed rather than stored - there would be
@@ -329,6 +349,34 @@ final class AnnotationStore: ObservableObject {
     func remove(_ note: Note) {
         mutate(note.url) { file in
             file.notes.removeAll { $0.id == note.id }
+        }
+    }
+
+    /// Follows an edit in the raw pane, so a note stays on the line it was put on rather
+    /// than on the number that line used to have. `NoteShift` holds the rule.
+    ///
+    /// Written straight through rather than held until the document is saved: adding a note
+    /// mid-edit rewrites the whole file anyway, shifted numbers included, so holding them
+    /// back would only be half true. The cost of that is that discarding unsaved changes
+    /// leaves the notes where the edits put them.
+    ///
+    /// An external change - a `git pull` under an open file - swaps the whole text and hands
+    /// us no edit to follow, so it shifts nothing. Notes keep their line numbers there, the
+    /// same as they would for any other tool reading the file.
+    func shift(_ url: URL, from old: LineIndex, to new: LineIndex, after edit: NoteShift.Edit) {
+        let path = AnnotationPath.store(url)
+
+        mutate(url) { file in
+            file.notes = file.notes.map { note in
+                guard note.path == path,
+                      let line = NoteShift.line(note.line, from: old, to: new, after: edit) else { return note }
+                var moved = note
+                moved.line = line
+                return moved
+            }
+            // Deleting a span that held two noted lines lands them both on the line the edit
+            // began at. `fold` is the rule for that everywhere else in here.
+            file.notes = AnnotationFile.fold(file.notes)
         }
     }
 
@@ -390,7 +438,11 @@ final class AnnotationStore: ObservableObject {
     private func mutate(_ url: URL, _ change: (inout AnnotationFile) -> Void) {
         let store = storeURL(for: url)
         var file = files[store.path] ?? AnnotationFile()
+        let before = file
         change(&file)
+        // An unchanged file is not rewritten. Note shifting runs on every edit in the raw
+        // pane and moves nothing on almost all of them.
+        guard file != before else { return }
         files[store.path] = file
         Self.write(file, to: store)
         // The atomic write replaced the inode, so the watcher has to be pointed at the
