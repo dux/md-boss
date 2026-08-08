@@ -122,7 +122,7 @@ struct SettingsView: View {
         }
     }
 
-    /// Matches the chrome of the measure controls in `PaneToggleBar` - same corner radius,
+    /// Matches the chrome of `MeasureControls` - same corner radius,
     /// same border, same plain buttons.
     private func stepper(_ setting: FontSetting) -> some View {
         HStack(spacing: 0) {

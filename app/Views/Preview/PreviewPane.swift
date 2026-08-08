@@ -20,6 +20,12 @@ struct PreviewPane: View {
             onLink: manager.followLink
         )
         .background(settings.theme[.bg])
+        // Outside the page's scroll, so it stays in the corner while the page moves under it.
+        .overlay(alignment: .topTrailing) {
+            MeasureControls()
+                .padding(.trailing, 12)
+                .padding(.top, 10)
+        }
         // Opening or reloading a file shows immediately.
         .task(id: document.reloadToken) {
             rendered = document.text
