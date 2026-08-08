@@ -162,6 +162,20 @@
     return count;
   }
 
+  // Markdown folds any run of blank lines into a single break, but someone who left three of
+  // them in the file meant to see three. The ordinary gap between two blocks is two newlines -
+  // the one that ends the block plus the blank line - and every one past that comes back as a
+  // <br>. Where the run sits depends on the block: headings, tables and raw HTML swallow the
+  // blank lines below them into their own text while everything else leaves them to a `space`
+  // token, so counting the whitespace each token ends on covers both without a special case.
+  function blankBreaks(raw) {
+    var html = '';
+    for (var extra = newlines(/[ \t\n]*$/.exec(raw)[0]) - 2; extra > 0; extra -= 1) {
+      html += '<br>';
+    }
+    return html;
+  }
+
   // Marked's tokens carry their source text but not their position, so the line a block
   // starts on is the running total of the newlines in everything before it.
   function stamp(html, line) {
@@ -197,9 +211,10 @@
       var piece = marked.parser(one);
       var tagged = stamp(piece, start);
       // Blank lines render to nothing, and a raw-HTML token can start with text; neither
-      // gets an anchor.
+      // gets an anchor. The breaks go on unstamped for the same reason - a gap is not a
+      // block to scroll to or hang a note on.
       if (tagged !== piece) { stamped.push({ token: token, line: start }); }
-      html += tagged;
+      html += tagged + blankBreaks(token.raw);
     });
 
     totalLines = 1 + newlines(source);
