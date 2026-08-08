@@ -36,6 +36,17 @@ enum FileTree {
         documentExtensions.contains(url.pathExtension.lowercased())
     }
 
+    /// What the preview can serve through `previewfile://`, and therefore what a drop into
+    /// the raw pane writes as `![...]` rather than `[...]`. The sidebar still lists only
+    /// documents, so this is reached by dragging in from Finder.
+    static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff", "tif", "heic", "heif", "svg", "avif"
+    ]
+
+    static func isImage(_ url: URL) -> Bool {
+        imageExtensions.contains(url.pathExtension.lowercased())
+    }
+
     enum Listing: Sendable {
         case entries([FileNode])
         case denied
@@ -68,6 +79,28 @@ enum FileTree {
         }
 
         return .entries(sorted(nodes))
+    }
+
+    /// Every document below `directory`, however deep. `list` answers one level and hides
+    /// folders; this one is for the passes that have to read the whole project - rewriting
+    /// links after a move, so far.
+    nonisolated static func documents(under directory: URL, skipFolders: Set<String>) -> [URL] {
+        guard let walker = FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var found: [URL] = []
+        for case let url as URL in walker {
+            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+            if isDirectory {
+                if skipFolders.contains(url.lastPathComponent) { walker.skipDescendants() }
+            } else if isDocument(url) {
+                found.append(url)
+            }
+        }
+        return found
     }
 
     /// Folders first, then Finder's natural order - `9.md` before `10.md`.

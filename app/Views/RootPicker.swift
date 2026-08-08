@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// The sidebar's root-folder select box.
 ///
@@ -16,6 +17,7 @@ struct RootPickerBox: View {
     @ObservedObject private var manager = MdBossManager.shared
 
     @State private var isHovered = false
+    @State private var isDropTarget = false
 
     private var theme: Theme { settings.theme }
 
@@ -56,7 +58,12 @@ struct RootPickerBox: View {
                     .fill(theme[.bg])
                     .overlay(
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(theme[isHovered || isOpen ? .borderStrong : .border], lineWidth: 1)
+                            .stroke(
+                                // The plain button gives no drop feedback of its own, so the
+                                // border it already has does the work.
+                                theme[isDropTarget ? .accent : (isHovered || isOpen ? .borderStrong : .border)],
+                                lineWidth: isDropTarget ? 1.5 : 1
+                            )
                     )
             )
             .contentShape(Rectangle())
@@ -64,12 +71,37 @@ struct RootPickerBox: View {
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
         .help(folders.active?.path ?? "Add a folder (⌘O)")
+        .onDrop(of: [.fileURL], isTargeted: dropBinding) { providers in
+            isDropTarget = false
+            guard let active = folders.active else { return false }
+            return manager.acceptDrop(providers, into: active)
+        }
         .contextMenu { menu }
+    }
+
+    private var dropBinding: Binding<Bool> {
+        Binding(
+            get: { isDropTarget },
+            set: { isTargeted in
+                guard isTargeted else {
+                    isDropTarget = false
+                    return
+                }
+                guard let active = folders.active,
+                      let dragged = manager.draggedFile,
+                      manager.canMove(dragged, into: active) else { return }
+                isDropTarget = true
+            }
+        )
     }
 
     @ViewBuilder
     private var menu: some View {
         if let active = folders.active {
+            if let cut = manager.cutFile, manager.canMove(cut, into: active) {
+                Button("Move \(cut.lastPathComponent) Here") { manager.moveCut(into: active) }
+                Divider()
+            }
             Button("Copy Path") { manager.copyPath(active) }
             Button("Copy Name") { manager.copyText(active.lastPathComponent) }
             Divider()

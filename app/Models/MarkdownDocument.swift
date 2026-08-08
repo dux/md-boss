@@ -11,7 +11,8 @@ final class MarkdownDocument: ObservableObject {
         case detached
     }
 
-    let url: URL
+    /// Only `relocate(to:)` moves it, and only to follow a file the sidebar just moved.
+    private(set) var url: URL
 
     @Published var text: String
     @Published private(set) var savedText: String
@@ -45,13 +46,25 @@ final class MarkdownDocument: ObservableObject {
         savedText = loaded.text
         lastKnownStamp = Self.stamp(of: url)
 
-        // The event kind is deliberately ignored: `.vanished` is what an atomic rewrite
-        // looks like, so only the filesystem can say whether the file is really gone.
-        watcher = DirectoryWatcher { [weak self] _, _ in
-            self?.syncWithDisk()
+        watcher = DirectoryWatcher { [weak self] changed, _ in
+            self?.handleWatchEvent(changed)
         }
         watcher?.sync(to: [url])
         startPolling()
+    }
+
+    /// Follows the file after the sidebar moved it. The buffer, the undo stack and the
+    /// dirty flag are untouched - the only thing that changes is where the next save lands.
+    /// Reopening instead would put a save prompt in the middle of a drag and throw all
+    /// three away.
+    func relocate(to newURL: URL) {
+        guard newURL.standardizedFileURL.path != url.standardizedFileURL.path else { return }
+        url = newURL
+        externalChange = nil
+        lastKnownStamp = Self.stamp(of: newURL)
+        // Drops the old descriptor, so the rename's own .vanished - which lands after this
+        // runs - is discarded rather than raising a "moved or deleted" banner.
+        watcher?.sync(to: [newURL])
     }
 
     // MARK: Saving
@@ -137,6 +150,15 @@ final class MarkdownDocument: ObservableObject {
         }
 
         externalChange = .conflict
+    }
+
+    /// The event kind is deliberately ignored: `.vanished` is what an atomic rewrite looks
+    /// like, so only the filesystem can say whether the file is really gone.
+    private func handleWatchEvent(_ changed: URL) {
+        // An event queued against the path we just moved away from says nothing about the
+        // file we are now holding.
+        guard changed.standardizedFileURL.path == url.standardizedFileURL.path else { return }
+        syncWithDisk()
     }
 
     /// Not stored: the `guard let self` ends the loop a tick after the document is released,

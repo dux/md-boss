@@ -29,6 +29,14 @@ final class MdBossManager: ObservableObject {
     /// line twice still moves the view.
     @Published private(set) var scrollRequest: ScrollRequest?
 
+    /// The file waiting for a "Move Here". Cleared by Escape in the sidebar and by the move.
+    @Published var cutFile: URL?
+
+    /// The row a drag started on, set before the pasteboard has decoded anything. A drop
+    /// target has to decide whether to light up while the drag is still in the air, and an
+    /// `isTargeted` binding cannot see the payload.
+    @Published var draggedFile: URL?
+
     struct ScrollRequest: Equatable {
         let line: Int
         let id = UUID()

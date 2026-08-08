@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @ObservedObject var tree: FileTreeModel
@@ -11,6 +12,8 @@ struct SidebarView: View {
     @State private var typeAheadReset: Task<Void, Never>?
     @State private var pickerIsOpen = false
     @State private var pickerCursor = 0
+    /// The folder row a drag is currently over, by path.
+    @State private var dropTarget: String?
 
     private var theme: Theme { settings.theme }
 
@@ -81,21 +84,7 @@ struct SidebarView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(Array(tree.rows.enumerated()), id: \.element.id) { index, row in
-                        SidebarRow(
-                            row: row,
-                            theme: theme,
-                            isExpanded: tree.isExpanded(row.node),
-                            isSelected: manager.selectedFile?.path == row.id,
-                            isCursor: index == tree.cursor && isFocused
-                        ) {
-                            tree.toggle(row.node)
-                        } onOpen: {
-                            tree.cursor = index
-                            isFocused = true
-                            open(row)
-                        }
-                        .id(row.id)
-                        .contextMenu { menu(for: row) }
+                        rowView(index: index, row: row)
                     }
                 }
                 .padding(.horizontal, 4)
@@ -108,8 +97,76 @@ struct SidebarView: View {
         }
     }
 
+    /// `.onDrag` has to sit inside `.contextMenu`, or the menu swallows the right-click that
+    /// should open it.
+    @ViewBuilder
+    private func rowView(index: Int, row: FlatRow) -> some View {
+        let base = SidebarRow(
+            row: row,
+            theme: theme,
+            isExpanded: tree.isExpanded(row.node),
+            isSelected: manager.selectedFile?.path == row.id,
+            isCursor: index == tree.cursor && isFocused
+        ) {
+            tree.toggle(row.node)
+        } onOpen: {
+            tree.cursor = index
+            isFocused = true
+            open(row)
+        }
+        .id(row.id)
+        // The only sign that a file is queued for a "Move Here".
+        .opacity(manager.cutFile?.path == row.id ? 0.45 : 1)
+        .onDrag {
+            manager.draggedFile = row.node.url
+            return NSItemProvider(object: row.node.url as NSURL)
+        }
+
+        if row.node.isDirectory {
+            base
+                .overlay {
+                    if dropTarget == row.id {
+                        RoundedRectangle(cornerRadius: 5).stroke(theme[.accent], lineWidth: 1.5)
+                    }
+                }
+                .onDrop(of: [.fileURL], isTargeted: dropBinding(for: row)) { providers in
+                    dropTarget = nil
+                    return manager.acceptDrop(providers, into: row.node.url)
+                }
+                .contextMenu { menu(for: row) }
+        } else {
+            base.contextMenu { menu(for: row) }
+        }
+    }
+
+    /// Lights up only for a drop that would actually do something, so an invalid target
+    /// never invites the drag in the first place.
+    private func dropBinding(for row: FlatRow) -> Binding<Bool> {
+        Binding(
+            get: { dropTarget == row.id },
+            set: { isTargeted in
+                guard isTargeted else {
+                    if dropTarget == row.id { dropTarget = nil }
+                    return
+                }
+                guard let dragged = manager.draggedFile, manager.canMove(dragged, into: row.node.url) else { return }
+                dropTarget = row.id
+            }
+        )
+    }
+
     @ViewBuilder
     private func menu(for row: FlatRow) -> some View {
+        if row.node.isDirectory {
+            if let cut = manager.cutFile, manager.canMove(cut, into: row.node.url) {
+                // The dimmed row says something is pending; only the menu can say what.
+                Button("Move \(cut.lastPathComponent) Here") { manager.moveCut(into: row.node.url) }
+                Divider()
+            }
+        } else {
+            Button("Cut") { manager.cutFile = row.node.url }
+            Divider()
+        }
         Button("Copy Path") { manager.copyPath(row.node.url) }
         Button("Copy Name") { manager.copyText(row.node.name) }
         Divider()
@@ -145,6 +202,12 @@ struct SidebarView: View {
         case .return, .space:
             guard let row = tree.cursorRow else { return .ignored }
             open(row)
+            return .handled
+        case .escape:
+            // Ignored rather than swallowed when there is nothing pending, so Escape stays
+            // available to whatever else wants it.
+            guard manager.cutFile != nil else { return .ignored }
+            manager.cutFile = nil
             return .handled
         default:
             return typeToSelect(press.characters)
