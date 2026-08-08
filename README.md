@@ -1,10 +1,12 @@
-# md-boss
+# MD-BOSS
 
 A macOS markdown viewer and editor that looks like paper.
 
 Folders and files on the left, the rendered document on the right.
-A stripe above the viewer toggles three panes - raw, preview, notes - which sit
-side by side. ⇧⌘D switches between the warm paper theme and a matching dark one.
+A stripe above the viewer toggles three panes - raw, preview, notes - which sit side by side.
+Raw and preview scroll together, anchored on source lines rather than on percentages, so a
+tall fenced block or an image does not pull the two out of step.
+⇧⌘D switches between light and dark, out of eight themes.
 The `<` and `>` arrows narrow and widen the reading column.
 
 Rendering is GitHub-flavored markdown - tables, task lists, code highlighting - done entirely
@@ -67,6 +69,40 @@ Files written before bookmarks and comments became one thing are read as they ar
 rewritten in this shape the next time you touch them. A line that carried both becomes one
 note with a title and a body.
 
+## Themes
+
+Eight of them: Paper and Dark, plus Solarized light and dark, GitHub, Nord, Dracula and
+Gruvbox.
+Pick one from the grid in Settings or from View > Theme.
+
+⇧⌘D stays a light/dark switch rather than a cycle through all eight: it remembers the last
+theme you used on each side of the line, so Nord to Paper and back lands on Nord again.
+
+Every palette is gated by the test suite at 7:1 contrast for body text and 4.5:1 for
+secondary text against its own background.
+Several of the ported schemes ship a contrast tuned for a terminal, which is not a
+long-form reading one, and those values are lifted rather than copied.
+
+See [doc/THEMES.md](doc/THEMES.md).
+
+## Moving files
+
+Drag a file onto a folder in the sidebar, or right-click it, pick Cut, and pick "Move Here"
+on the destination.
+Every `[text](path)` and `![alt](path)` under the active folder that pointed at that file is
+repointed, and its notes move with it.
+
+The scanner that finds those links is hand-written rather than a regular expression, because
+link text nests, destinations carry balanced parentheses, a code span closes only on a
+backtick run of its own length, and fences are line state.
+A link inside a fenced block is left alone.
+
+Moving is not undoable - ⌘Z belongs to the editor and undoes text, not the filesystem.
+A name collision stops the move rather than overwriting anything.
+
+Dragging a file into the raw pane inserts a relative markdown link to it instead, an image
+link if it is an image.
+
 ## Command line
 
 `hammer build` installs a shim at `~/bin/md-boss`:
@@ -87,8 +123,9 @@ Dropping a folder or a file on the Dock icon does the same thing.
 | ⌘\ | raw and preview side by side |
 | ⇧⌘K | add or edit a note on the current line |
 | ⇧⌘⌫ | delete the note on the current line |
-| ⇧⌘D | switch theme |
+| ⇧⌘D | switch between light and dark |
 | ⌘0 | show or hide the sidebar |
+| ⎋ | cancel a pending Cut in the sidebar |
 | ⌘+ / ⌘- / ⌥⌘0 | text size (⌥⌘0 also resets the column width) |
 | ⌘S | save |
 | ⌘F | find |
