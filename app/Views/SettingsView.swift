@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The Settings window. One section, four sizes.
+/// The Settings window. Two sections: the theme, and the four text sizes.
 ///
 /// Hand-rolled rather than a `Form` with system `Stepper`s for the same reason the layout
 /// and the root picker are hand-rolled: stock controls cannot be forced to the paper
@@ -8,14 +8,26 @@ import SwiftUI
 ///
 /// Every change writes straight through `AppSettings`, so the main window restyles live
 /// behind this one - the chrome through `TextStyleModifier`, the editor through
-/// `MarkdownTextView`, the preview through the existing `mdSetFontSize` bridge call.
+/// `MarkdownTextView`, the preview through the existing `mdSetTheme` / `mdSetFontSize`
+/// bridge calls.
 struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
 
     private var theme: Theme { settings.theme }
 
+    /// Three across fits all eight cards in three rows inside the existing 360pt window.
+    private let themeColumns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 3)
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            Text("Theme").textStyle(.title)
+
+            LazyVGrid(columns: themeColumns, spacing: 12) {
+                ForEach(Theme.all) { card($0) }
+            }
+
+            Divider().overlay(theme[.border])
+
             Text("Font size").textStyle(.title)
 
             VStack(spacing: 10) {
@@ -43,6 +55,54 @@ struct SettingsView: View {
 
     private var isDefault: Bool {
         FontSetting.allCases.allSatisfy { settings.fontSize($0) == $0.defaultValue }
+    }
+
+    /// One theme, painted in its own palette - the grid is a preview, not a list of names.
+    /// The selection ring is the exception: it belongs to the window's chrome, so it is
+    /// drawn in the *active* theme's accent rather than the card's.
+    private func card(_ candidate: Theme) -> some View {
+        let isSelected = candidate.id == theme.id
+
+        return Button {
+            settings.setTheme(candidate.id)
+        } label: {
+            VStack(spacing: 5) {
+                swatch(candidate)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(isSelected ? theme[.accent] : theme[.border],
+                                    lineWidth: isSelected ? 2 : 1)
+                    )
+
+                Text(candidate.title)
+                    .textStyle(.small)
+                    .foregroundColor(isSelected ? theme[.text] : theme[.muted])
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func swatch(_ candidate: Theme) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                ForEach([ThemeToken.surface, .accent, .link], id: \.self) { token in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(candidate[token])
+                        .frame(height: 8)
+                }
+            }
+
+            Text("Aa")
+                .textStyle(.small, weight: .semibold)
+                .foregroundColor(candidate[.text])
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(candidate[.bg])
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private func row(_ setting: FontSetting) -> some View {

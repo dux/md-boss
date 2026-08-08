@@ -77,6 +77,12 @@ struct MdBossCommands: Commands {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var manager = MdBossManager.shared
 
+    /// Writes through the manager rather than the settings struct, so picking a theme from
+    /// the menu flashes the same toast as Cmd-Shift-D.
+    private var themeSelection: Binding<ThemeID> {
+        Binding(get: { settings.theme.id }, set: { manager.setTheme($0) })
+    }
+
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About md-boss") { AboutPanel.show() }
@@ -127,7 +133,19 @@ struct MdBossCommands: Commands {
 
             Divider()
 
-            Button("\(settings.theme.id.next.title) Theme") { manager.toggleTheme() }
+            // An inline Picker is what gets AppKit to draw the checkmark next to the active
+            // theme; a list of Buttons would have to fake one in the label text.
+            Menu("Theme") {
+                Picker("Theme", selection: themeSelection) {
+                    ForEach(Theme.all) { theme in
+                        Text(theme.title).tag(theme.id)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
+
+            Button("Toggle Light/Dark") { manager.toggleTheme() }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
 
             Button(settings.showSidebar ? "Hide Sidebar" : "Show Sidebar") {

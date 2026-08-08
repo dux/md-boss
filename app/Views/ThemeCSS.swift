@@ -16,7 +16,7 @@ extension Theme {
         // color-scheme is orthogonal to the palette: it is what makes WebKit's scrollbars,
         // form controls and default caret match. Getting it wrong gives a light scrollbar
         // on a dark page.
-        return ":root {\n\(vars)\n  color-scheme: \(id == .dark ? "dark" : "light");\n}"
+        return ":root {\n\(vars)\n  color-scheme: \(isDark ? "dark" : "light");\n}"
     }
 
     /// JS string literal form, ready for evaluateJavaScript("mdSetTheme(...)").

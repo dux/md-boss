@@ -57,8 +57,9 @@ struct MarkdownPreviewView: NSViewRepresentable {
             coordinator.run(webView, "mdRender(\(JSLiteral.string(markdown)));")
         }
 
-        if coordinator.renderedTheme != theme.id {
-            coordinator.renderedTheme = theme.id
+        // Keyed on the whole palette rather than its id, so an edited palette repaints too.
+        if coordinator.renderedTheme != theme {
+            coordinator.renderedTheme = theme
             webView.underPageBackgroundColor = theme.nsColor(.bg)
             coordinator.run(webView, "mdSetTheme(\(theme.rootCSSLiteral));")
         }
@@ -92,7 +93,7 @@ struct MarkdownPreviewView: NSViewRepresentable {
 
     private func page(_ coordinator: Coordinator) -> String {
         coordinator.renderedMarkdown = markdown
-        coordinator.renderedTheme = theme.id
+        coordinator.renderedTheme = theme
         coordinator.renderedFontSize = fontSize
         coordinator.renderedMeasure = measure
         coordinator.loadedURL = fileURL?.absoluteString
@@ -116,7 +117,7 @@ struct MarkdownPreviewView: NSViewRepresentable {
 
         var loadedURL: String?
         var renderedMarkdown = ""
-        var renderedTheme: ThemeID?
+        var renderedTheme: Theme?
         var renderedFontSize: CGFloat = 0
         var renderedMeasure: CGFloat = 0
         var pendingAnchor: String?

@@ -9,6 +9,11 @@ import AppKit
 
 struct SettingsData: Codable, Sendable, Equatable {
     var themeID = ThemeID.paper.rawValue
+    /// The last theme used on each side of the light/dark line, so Cmd-Shift-D stays a
+    /// polarity switch instead of becoming a cycle through every palette.
+    var lightThemeID = ThemeID.paper.rawValue
+    var darkThemeID = ThemeID.dark.rawValue
+
     /// Which panes the viewer shows, left to right in Pane.allCases order.
     var visiblePanes = [Pane.preview.rawValue]
 
@@ -172,6 +177,28 @@ final class AppSettings: ObservableObject {
     // MARK: Derived
 
     var theme: Theme { Theme.named(ThemeID(rawValue: data.themeID) ?? .paper) }
+
+    // MARK: Theme
+
+    /// The three stored ids as the one value that carries the rules. See `ThemeChoice`.
+    var themeChoice: ThemeChoice {
+        ThemeChoice(
+            active: ThemeID(rawValue: data.themeID) ?? .paper,
+            light: ThemeID(rawValue: data.lightThemeID) ?? .paper,
+            dark: ThemeID(rawValue: data.darkThemeID) ?? .dark
+        )
+    }
+
+    /// The only two ways the theme changes.
+    func setTheme(_ id: ThemeID) { apply(themeChoice.selecting(id)) }
+
+    func toggleLightDark() { apply(themeChoice.flipped) }
+
+    private func apply(_ choice: ThemeChoice) {
+        data.themeID = choice.active.rawValue
+        data.lightThemeID = choice.light.rawValue
+        data.darkThemeID = choice.dark.rawValue
+    }
 
     /// Captions and section headers track the sidebar size instead of being settings of
     /// their own - a status bar still at 11pt under an 18pt tree reads as a bug.

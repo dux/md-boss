@@ -26,10 +26,17 @@ extension MdBossManager {
 
     // MARK: View
 
+    func setTheme(_ id: ThemeID) {
+        guard id != AppSettings.shared.theme.id else { return }
+        AppSettings.shared.setTheme(id)
+        flash("\(Theme.named(id).title) theme")
+    }
+
+    /// Cmd-Shift-D. Stays a light/dark switch with eight themes installed - see
+    /// AppSettings.toggleLightDark.
     func toggleTheme() {
-        let next = AppSettings.shared.theme.id.next
-        AppSettings.shared.themeID = next.rawValue
-        flash("\(next.title) theme")
+        AppSettings.shared.toggleLightDark()
+        flash("\(AppSettings.shared.theme.title) theme")
     }
 
     func toggleSidebar() {

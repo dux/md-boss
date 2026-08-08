@@ -1,68 +1,61 @@
 # Themes
 
-Two themes, both defined once in `app/Views/Theme.swift` and consumed by the SwiftUI chrome
-and the preview web page alike.
+Eight themes, every one of them defined once in `app/Views/ThemePalettes.swift` and consumed by
+the SwiftUI chrome and the preview web page alike.
 `ThemeToken`'s raw value is the CSS custom property name, so `--accent` in the page and
 `theme[.accent]` in a view are guaranteed to be the same color.
 
-## Paper
+`ThemePalettes.swift` is the authority; this file describes the shape and the rules, not the
+hexes, because a second copy of 200 token rows is a second thing to keep in sync.
 
-Warm cream stock, warm ink, burnt-sienna accent, ink-blue links.
-Text on background is about 13:1.
+## The list
 
-| token | hex | role |
-|---|---|---|
-| `bg` | `#FBF7EF` | reading canvas - warm ivory |
-| `surface` | `#F3EDE1` | header bars, banners, status bar |
-| `sidebar-bg` | `#F3EDE1` | sidebar recedes one step |
-| `text` | `#2B2723` | warm near-black ink, never `#000` |
-| `muted` | `#7A7166` | secondary and metadata |
-| `border` | `#E3D9C6` | hairlines inside a pane |
-| `border-strong` | `#CFC4AE` | pane dividers |
-| `accent` | `#9A5B34` | burnt sienna - focus, active row, caret |
-| `link` | `#1F5C8B` | muted ink blue |
-| `selection` | `#EADFC9` | selected row, text selection |
-| `code-bg` | `#F2EADA` | inline code and fenced blocks |
-| `code-border` | `#E0D5BF` | fenced block border |
-| `quote-bar` | `#D8C7A5` | blockquote left rule |
-| `quote-text` | `#5C554C` | blockquote body |
-| `table-stripe` | `#F5EFE3` | even rows |
-| `table-head` | `#EDE5D4` | header row |
-| `rule` | `#E3D9C6` | `<hr>` |
+`Theme.all` is the one list, in picker and menu order. It drives the Settings grid, the
+View > Theme submenu, `Theme.named` and the tests.
 
-Syntax colors are muted and print-like rather than neon:
-`hl-keyword #A03E52`, `hl-string #4C6B3C`, `hl-number #8A5A20`, `hl-title #6D4C9F`,
-`hl-comment #94897A` (italic), `hl-variable #2F5D8C`, `hl-type #8A5A20`, `hl-meta #94897A`.
+| theme | polarity | stock | accent | lineage |
+|---|---|---|---|---|
+| Paper | light | `#FBF7EF` warm ivory | `#9A5B34` burnt sienna | the house default |
+| Dark | dark | `#1E1C1A` warm charcoal | `#E0996A` amber | the house pair |
+| Solarized Light | light | `#FDF6E3` base3 | `#CB4B16` orange | Ethan Schoonover |
+| Solarized Dark | dark | `#002B36` base03 | `#CB4B16` orange | Ethan Schoonover |
+| GitHub Light | light | `#FFFFFF` | `#0969DA` blue | GitHub Primer |
+| Nord | dark | `#2E3440` nord0 | `#88C0D0` frost | Arctic Ice Studio |
+| Dracula | dark | `#282A36` | `#FF79C6` pink | Dracula |
+| Gruvbox Dark | dark | `#282828` bg0 | `#FE8019` orange | morhetz |
 
-## Dark
+Paper and Dark are the same hue family rotated, so switching between them reads as the same app
+at night rather than a different app. The six ports are there for people who already have a
+scheme they read in - Gruvbox is the closest of them to the house palette, GitHub Light the
+furthest.
 
-The same hue family rotated dark, so switching reads as the same app at night rather than a
-different app.
-Deliberately warm charcoal - not `#000`, not blue-black.
-Text on background is about 12:1.
+The ports are ports, not tributes. Where a scheme's canonical body text is a terminal contrast
+rather than a reading one, the emphasized value is used instead: Solarized Light's text is
+`base02` and its secondary text `base01`, not `base00`, which only manages 4.5:1 and 4.1:1
+against base3. Dracula's `muted` is lifted off `#6272A4` for the same reason - under 3:1 is not
+UI text. `ThemeTests` enforces both thresholds, so this cannot quietly regress.
 
-| token | hex | role |
-|---|---|---|
-| `bg` | `#1E1C1A` | soft warm charcoal |
-| `surface` | `#26231F` | header bars, banners, status bar |
-| `sidebar-bg` | `#1A1817` | sidebar recedes |
-| `text` | `#E6E0D6` | warm off-white, never `#FFF` |
-| `muted` | `#9A9287` | secondary |
-| `border` | `#38342E` | hairlines |
-| `border-strong` | `#4A443C` | pane dividers |
-| `accent` | `#E0996A` | amber, the dark sibling of terracotta |
-| `link` | `#7FB3D5` | soft ink blue |
-| `selection` | `#3A332B` | selected row |
-| `code-bg` | `#26231F` | code |
-| `code-border` | `#39342C` | fenced border |
-| `quote-bar` | `#6B5B45` | blockquote rule |
-| `quote-text` | `#B9B1A4` | blockquote body |
-| `table-stripe` | `#232019` | even rows |
-| `table-head` | `#2B2722` | header row |
-| `rule` | `#38342E` | `<hr>` |
+## Polarity
 
-Syntax: `hl-keyword #E88B9A`, `hl-string #A3C48A`, `hl-number #E0B87A`, `hl-title #C0A6E8`,
-`hl-comment #7E7566` (italic), `hl-variable #8FBBDE`, `hl-type #E0B87A`, `hl-meta #7E7566`.
+A theme's light/dark polarity is **derived**, never declared: `Theme.isDark` is the WCAG
+relative luminance of `bg` below 0.5. A stored flag that disagreed with the palette it describes
+would be a bug; the flag does not exist, so it cannot.
+
+Polarity drives two things - `NSApp.appearance` (titlebar, menus, `NSOpenPanel`, WebKit's own
+scrollers) and the `color-scheme` line in `rootCSS`.
+
+## Choosing one
+
+`ThemeChoice` holds the whole choice as one value: the active theme plus the last one used on
+each side of the light/dark line. It is pure, so the rules are tested without touching
+`~/.config/md-boss/settings.json`.
+
+* Settings (Cmd-,) shows every theme as a card painted in its own palette. The selection ring is
+  the one exception - it belongs to the window chrome, so it is drawn in the *active* theme's
+  accent.
+* View > Theme lists all eight with a checkmark on the active one.
+* Cmd-Shift-D stays a light/dark switch rather than becoming a cycle through eight: it flips
+  polarity and lands on whichever theme was last used on that side. Nord -> Paper -> Nord.
 
 ## Typography
 
@@ -84,5 +77,8 @@ piece of UI.
   theme to use so it can never disagree with the app around it.
 * `color-scheme: light|dark` **is** set on `:root`. That is orthogonal to the palette and is
   what makes WebKit's scrollbars and default caret match.
-* Adding a token means adding it to `ThemeToken` **and** to both palettes. `ThemeTests`
+* Adding a token means adding it to `ThemeToken` **and** to all eight palettes. `ThemeTests`
   fails otherwise.
+* Adding a theme means a case in `ThemeID`, a palette, and an entry in `Theme.all`. `ThemeTests`
+  fails if the enum and the list disagree, if the palette is a duplicate of another, or if its
+  text misses 7:1 or its `muted` misses 4.5:1 against its own background.
