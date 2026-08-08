@@ -29,6 +29,10 @@ final class MdBossManager: ObservableObject {
     /// line twice still moves the view.
     @Published private(set) var scrollRequest: ScrollRequest?
 
+    /// The line a note jump landed on. Painted as a band in the raw pane and highlighted in
+    /// the preview, until the caret moves off it - so "where did I land" outlives the scroll.
+    @Published private(set) var highlightedLine: Int?
+
     /// The file waiting for a "Move Here". Cleared by Escape in the sidebar and by the move.
     @Published var cutFile: URL?
 
@@ -221,14 +225,21 @@ final class MdBossManager: ObservableObject {
         open(url, reveal: true)
     }
 
+    /// Asks the raw pane to scroll, and marks the line both panes are heading for. One
+    /// mutation point, so the band and the scroll can never disagree about where you landed.
     func requestScroll(to line: Int) {
+        highlightedLine = line
         scrollRequest = ScrollRequest(line: line)
     }
 
     /// Reported by the editor on every selection change.
-    func reportCursor(line: Int, text: String) {
+    ///
+    /// `navigated: false` for a whole-text swap - a file arriving in the pane is not the
+    /// reader moving off the line a note just pointed at.
+    func reportCursor(line: Int, text: String, navigated: Bool = true) {
         currentLineText = text
         if currentLine != line { currentLine = line }
+        if navigated, let landed = highlightedLine, landed != line { highlightedLine = nil }
     }
 
     /// Reported by the preview when a block is right-clicked. It knows the source line from

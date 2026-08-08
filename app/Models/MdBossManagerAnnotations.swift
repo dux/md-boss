@@ -72,17 +72,22 @@ extension MdBossManager {
 
     // MARK: Navigating
 
-    /// Opens the note's file and scrolls to its line, showing the raw pane if it is hidden -
-    /// a line anchor is meaningless in a pane that cannot show lines. For a note on the open
-    /// file `open` early-returns and only the scroll happens; for one in another folder,
-    /// `reveal` switches the sidebar to that folder on the way.
+    /// Opens the note's file and scrolls to its line. For a note on the open file `open`
+    /// early-returns and only the scroll happens; for one in another folder, `reveal`
+    /// switches the sidebar to that folder on the way.
     func go(to note: Note) {
         open(note.url, reveal: true)
         go(toLine: note.line)
     }
 
+    /// The raw pane is only forced open when neither it nor the preview is up - both can
+    /// show the line and mark it, and a line anchor is meaningless in a window showing
+    /// nothing but the notes column.
     func go(toLine line: Int) {
-        AppSettings.shared.show(.raw)
+        let settings = AppSettings.shared
+        if !settings.isVisible(.raw) && !settings.isVisible(.preview) {
+            settings.show(.raw)
+        }
         requestScroll(to: line)
     }
 }
