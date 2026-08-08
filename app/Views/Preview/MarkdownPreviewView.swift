@@ -1,5 +1,6 @@
 import SwiftUI
 import WebKit
+import Combine
 
 /// The rendered document.
 ///
@@ -18,7 +19,6 @@ struct MarkdownPreviewView: NSViewRepresentable {
     let measure: CGFloat
     var anchor: String?
     var onLink: (MarkdownLinkTarget) -> Void
-    var onScroll: ((Double) -> Void)?
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -37,6 +37,7 @@ struct MarkdownPreviewView: NSViewRepresentable {
 
         context.coordinator.owner = self
         context.coordinator.load(webView, page: page(context.coordinator))
+        context.coordinator.observeScrolling(of: webView)
         return webView
     }
 
@@ -86,11 +87,6 @@ struct MarkdownPreviewView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    /// Scrolls the page to a 0...1 position. Used by split mode.
-    static func scroll(_ webView: WKWebView, toFraction fraction: Double) {
-        webView.evaluateJavaScript("mdScrollToFraction(\(fraction));")
-    }
-
     private func page(_ coordinator: Coordinator) -> String {
         coordinator.renderedMarkdown = markdown
         coordinator.renderedTheme = theme
@@ -124,11 +120,25 @@ struct MarkdownPreviewView: NSViewRepresentable {
 
         private var isReady = false
         private var queued: [String] = []
+        private var syncObserver: AnyCancellable?
 
         func load(_ webView: WKWebView, page: String) {
             isReady = false
             queued.removeAll()
+            ScrollSync.shared.reset()
             webView.loadHTMLString(page, baseURL: owner?.fileURL)
+        }
+
+        func observeScrolling(of webView: WKWebView) {
+            syncObserver = ScrollSync.shared.moves
+                .filter { $0.source != .preview }
+                .sink { [weak self, weak webView] move in
+                    // Dropped rather than queued while the page loads: a stale scroll
+                    // position is worth nothing by the time it would be flushed.
+                    guard let self, let webView, self.isReady else { return }
+                    webView.evaluateJavaScript("mdScrollToLine(\(move.line));")
+                    ScrollSync.shared.applied()
+                }
         }
 
         /// Calls made before the page signals `ready` are queued rather than dropped -
@@ -177,8 +187,11 @@ struct MarkdownPreviewView: NSViewRepresentable {
                     }
                 }
             case "scroll":
-                guard let fraction = body["fraction"] as? Double else { return }
-                owner?.onScroll?(min(1, max(0, fraction)))
+                guard let line = body["line"] as? Double else { return }
+                ScrollSync.shared.report(line: line, from: .preview)
+            case "context":
+                guard let line = body["line"] as? Double else { return }
+                MdBossManager.shared.reportCursor(line: Int(line))
             case "anchorMiss":
                 guard let id = body["id"] as? String else { return }
                 MdBossManager.shared.showError("No heading: \(id)")
@@ -197,13 +210,26 @@ struct MarkdownPreviewView: NSViewRepresentable {
 final class PreviewWebView: WKWebView {
     var fileURL: URL?
 
+    /// The page reports the right-clicked block's source line over the bridge, which is
+    /// asynchronous - but a `BlockMenuItem` fires when the item is *picked*, long after the
+    /// message has landed, so the line it acts on is the right one. Only a title computed
+    /// here could be stale, which is why it does not switch to "Edit" the way the raw pane's
+    /// does; the prompt itself still says Edit when there is already a note there.
     override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
         super.willOpenMenu(menu, with: event)
         guard let fileURL else { return }
 
         let manager = MdBossManager.shared
-        menu.insertItem(BlockMenuItem("Copy Path") { manager.copyPath(fileURL) }, at: 0)
-        menu.insertItem(BlockMenuItem("Reveal in Finder") { manager.revealInFinder(fileURL) }, at: 1)
-        menu.insertItem(.separator(), at: 2)
+        let items: [NSMenuItem] = [
+            BlockMenuItem("Add Note…") { manager.addNoteAtCursor() },
+            .separator(),
+            BlockMenuItem("Copy Path") { manager.copyPath(fileURL) },
+            BlockMenuItem("Reveal in Finder") { manager.revealInFinder(fileURL) },
+            .separator()
+        ]
+
+        for (offset, item) in items.enumerated() {
+            menu.insertItem(item, at: offset)
+        }
     }
 }

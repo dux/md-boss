@@ -231,6 +231,15 @@ final class MdBossManager: ObservableObject {
         if currentLine != line { currentLine = line }
     }
 
+    /// Reported by the preview when a block is right-clicked. It knows the source line from
+    /// the block's `data-line` but only holds rendered HTML, so the line's text - which
+    /// `addNoteAtCursor` takes a title from - is looked up here.
+    func reportCursor(line: Int) {
+        let lines = document?.text.components(separatedBy: "\n") ?? []
+        let text = line >= 1 && line <= lines.count ? lines[line - 1] : ""
+        reportCursor(line: line, text: text)
+    }
+
     // MARK: Clipboard
 
     func copyPath(_ url: URL) {

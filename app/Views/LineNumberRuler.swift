@@ -5,7 +5,7 @@ import AppKit
 /// An NSRulerView rather than a second text view: the ruler is already pinned to the
 /// scroll position, and asking the layout manager for line fragments is the only way to
 /// stay right when a long line soft-wraps - a wrapped continuation gets no number of its
-/// own, so the gutter keeps matching the file's line numbering that bookmarks and comments
+/// own, so the gutter keeps matching the file's line numbering that notes
 /// are anchored to.
 final class LineNumberRuler: NSRulerView {
     private enum Metric {
@@ -15,6 +15,9 @@ final class LineNumberRuler: NSRulerView {
         /// Numbers read as chrome, not content, so they sit under the body size.
         static let scale: CGFloat = 0.8
         static let minSize: CGFloat = 9
+        /// Muted is tuned for readable secondary *text*; the gutter should recede further
+        /// than that so the eye lands on the line, not on its number.
+        static let numberAlpha: CGFloat = 0.55
     }
 
     var theme: Theme {
@@ -32,14 +35,15 @@ final class LineNumberRuler: NSRulerView {
         }
     }
 
-    private var lineCount = 1
+    /// Rebuilt on every edit, and asked for the first visible number on every draw.
+    private var index = LineIndex("")
 
     private var numberFont: NSFont {
         .monospacedDigitSystemFont(ofSize: max(Metric.minSize, bodyFont.pointSize * Metric.scale), weight: .regular)
     }
 
     private var attributes: [NSAttributedString.Key: Any] {
-        [.font: numberFont, .foregroundColor: theme.nsColor(.muted)]
+        [.font: numberFont, .foregroundColor: theme.nsColor(.muted).withAlphaComponent(Metric.numberAlpha)]
     }
 
     init(scrollView: NSScrollView, textView: NSTextView, theme: Theme, bodyFont: NSFont) {
@@ -71,14 +75,23 @@ final class LineNumberRuler: NSRulerView {
         needsDisplay = true
     }
 
+    /// The text baseline inside a line fragment.
+    ///
+    /// Not `layoutManager.location(forGlyphAt:)`: on an empty line the only glyph is the
+    /// newline, and the layout manager reports it sitting on the bottom of the fragment rather
+    /// than on the line's baseline, which drops every blank line's number by the font's descent
+    /// and leaves the gutter unevenly spaced. Fragment rects are uniform, so measuring up from
+    /// the fragment keeps the column on a grid.
+    static func baseline(in fragment: NSRect, font: NSFont, layoutManager: NSLayoutManager) -> CGFloat {
+        let descent = layoutManager.defaultLineHeight(for: font) - layoutManager.defaultBaselineOffset(for: font)
+        return fragment.maxY - descent
+    }
+
     /// Recount the lines and widen the gutter if the file just gained a digit.
     @objc func refresh() {
-        let text = (clientView as? NSTextView)?.string ?? ""
-        lineCount = text.utf8.reduce(into: 1) { total, byte in
-            if byte == 0x0A { total += 1 }
-        }
+        index = LineIndex((clientView as? NSTextView)?.string ?? "")
 
-        let digits = max(2, String(lineCount).count)
+        let digits = max(2, String(index.count).count)
         let widest = String(repeating: "0", count: digits) as NSString
         let width = widest.size(withAttributes: attributes).width
         ruleThickness = max(Metric.minWidth, ceil(width) + Metric.padding * 2)
@@ -102,7 +115,7 @@ final class LineNumberRuler: NSRulerView {
         let glyphRange = layoutManager.glyphRange(forBoundingRect: visible, in: container)
         let charRange = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
 
-        var number = lineNumber(atOrBefore: charRange.location, in: text)
+        var number = index.line(at: charRange.location)
         var lastLineStart = -1
         var glyphIndex = glyphRange.location
 
@@ -118,8 +131,8 @@ final class LineNumberRuler: NSRulerView {
 
                 // Only the fragment a line actually starts on gets a number.
                 if charIndex == lineStart {
-                    let baseline = fragment.minY + inset.height + layoutManager.location(forGlyphAt: fragmentGlyphs.location).y
-                    draw(number, baseline: baseline, in: textView)
+                    let baseline = Self.baseline(in: fragment, font: bodyFont, layoutManager: layoutManager)
+                    draw(number, baseline: baseline + inset.height, in: textView)
                 }
             }
 
@@ -130,20 +143,9 @@ final class LineNumberRuler: NSRulerView {
         if layoutManager.extraLineFragmentTextContainer != nil {
             let fragment = layoutManager.extraLineFragmentRect
             if lastLineStart >= 0 { number += 1 }
-            draw(number, baseline: fragment.maxY + inset.height + bodyFont.descender, in: textView)
+            let baseline = Self.baseline(in: fragment, font: bodyFont, layoutManager: layoutManager)
+            draw(number, baseline: baseline + inset.height, in: textView)
         }
-    }
-
-    /// 1-based number of the line containing `location`.
-    private func lineNumber(atOrBefore location: Int, in text: NSString) -> Int {
-        let clamped = min(location, text.length)
-        let lineStart = text.lineRange(for: NSRange(location: clamped, length: 0)).location
-
-        var number = 1
-        text.enumerateSubstrings(in: NSRange(location: 0, length: lineStart), options: [.byLines, .substringNotRequired]) { _, _, _, _ in
-            number += 1
-        }
-        return number
     }
 
     private func draw(_ number: Int, baseline: CGFloat, in textView: NSTextView) {
