@@ -25,11 +25,14 @@ final class MarkdownDocument: ObservableObject {
 
     var isDirty: Bool { text != savedText }
 
+    /// How often the file is stat'd when kqueue has nothing to say. See `syncWithDisk`.
+    private static let pollInterval: Duration = .seconds(2)
+
     /// Windows line endings are normalised in the buffer and restored on save. Otherwise
     /// every save of a CRLF file is a whole-file diff.
     private let usesCRLF: Bool
-    /// The mtime of our own last write, used to tell our changes from someone else's.
-    private var lastKnownModDate: Date?
+    /// The version we are holding, used to tell our own writes from someone else's.
+    private var lastKnownStamp: Stamp
     private var watcher: DirectoryWatcher?
 
     init(url: URL) {
@@ -40,12 +43,15 @@ final class MarkdownDocument: ObservableObject {
         isReadOnly = loaded.isReadOnly
         text = loaded.text
         savedText = loaded.text
-        lastKnownModDate = Self.modificationDate(of: url)
+        lastKnownStamp = Self.stamp(of: url)
 
-        watcher = DirectoryWatcher { [weak self] _, event in
-            self?.handleWatchEvent(event)
+        // The event kind is deliberately ignored: `.vanished` is what an atomic rewrite
+        // looks like, so only the filesystem can say whether the file is really gone.
+        watcher = DirectoryWatcher { [weak self] _, _ in
+            self?.syncWithDisk()
         }
         watcher?.sync(to: [url])
+        startPolling()
     }
 
     // MARK: Saving
@@ -68,7 +74,7 @@ final class MarkdownDocument: ObservableObject {
 
         savedText = text
         externalChange = nil
-        lastKnownModDate = Self.modificationDate(of: url)
+        lastKnownStamp = Self.stamp(of: url)
 
         // An atomic write renames a new inode into place, so the descriptor we were
         // watching now points at a deleted file. Without this, external-change detection
@@ -90,28 +96,38 @@ final class MarkdownDocument: ObservableObject {
         savedText = loaded.text
         isReadOnly = loaded.isReadOnly
         externalChange = nil
-        lastKnownModDate = Self.modificationDate(of: url)
+        lastKnownStamp = Self.stamp(of: url)
         reloadToken = UUID()
         watcher?.rearm(url)
     }
 
     /// Keeps the buffer and dismisses the banner; the next save overwrites what is on disk.
-    /// The recorded mtime moves forward so the same change is not reported twice.
+    /// The recorded version moves forward so the same change is not reported twice.
     func keepMine() {
         externalChange = nil
-        lastKnownModDate = Self.modificationDate(of: url)
+        lastKnownStamp = Self.stamp(of: url)
     }
 
     // MARK: External changes
 
-    private func handleWatchEvent(_ event: DirectoryWatcher.Event) {
-        guard event == .changed else {
+    /// The one place that decides whether the file changed under us and what to do about it.
+    ///
+    /// kqueue calls it the moment it can. The poll calls it every two seconds because kqueue
+    /// cannot see everything: a tool that writes atomically renames a new inode over the path,
+    /// which arrives as the *old* one being deleted, and network volumes deliver nothing at all.
+    func syncWithDisk() {
+        guard FileManager.default.fileExists(atPath: url.path) else {
             externalChange = .detached
             return
         }
 
-        let current = Self.modificationDate(of: url)
-        guard current != lastKnownModDate else { return }   // that write was ours
+        // Something is there, so a `.vanished` was an atomic rewrite rather than a delete.
+        // `dispatch` drops the entry on vanish, so `sync` re-adds it; when the entry is still
+        // live this is a dictionary lookup and nothing else.
+        watcher?.sync(to: [url])
+
+        let current = Self.stamp(of: url)
+        guard current != lastKnownStamp else { return }   // that write was ours
 
         // Nothing to lose - take the new version silently. This is the common case: you
         // edited the file in another editor and came back.
@@ -121,6 +137,19 @@ final class MarkdownDocument: ObservableObject {
         }
 
         externalChange = .conflict
+    }
+
+    /// Not stored: the `guard let self` ends the loop a tick after the document is released,
+    /// which keeps `deinit` clear of isolated state. `@MainActor` on the class carries into
+    /// the task, so the body needs no hop.
+    private func startPolling() {
+        Task { [weak self] in
+            while true {
+                try? await Task.sleep(for: Self.pollInterval)
+                guard let self else { return }
+                self.syncWithDisk()
+            }
+        }
     }
 
     // MARK: Reading
@@ -149,7 +178,22 @@ final class MarkdownDocument: ObservableObject {
         return Loaded(text: "", usesCRLF: false, isReadOnly: true)
     }
 
-    private static func modificationDate(of url: URL) -> Date? {
-        try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+    /// Identifies a version of the file on disk. Size as well as mtime because volumes with
+    /// one-second timestamp resolution - SMB, some FUSE mounts - hide a rewrite that lands
+    /// inside the same second we recorded.
+    private struct Stamp: Equatable {
+        let modified: Date?
+        let size: Int?
+    }
+
+    /// `FileManager` rather than `URL.resourceValues`: a URL caches the values it has already
+    /// been asked for, so the same instance answers with the file as it was when the document
+    /// opened and every later change looks like no change at all.
+    private static func stamp(of url: URL) -> Stamp {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        return Stamp(
+            modified: attributes?[.modificationDate] as? Date,
+            size: attributes?[.size] as? Int
+        )
     }
 }

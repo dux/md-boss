@@ -122,4 +122,112 @@ struct DocumentTests {
         #expect(document.isDirty)
         #expect(document.externalChange == nil)
     }
+
+    // MARK: External changes
+    //
+    // `syncWithDisk` is called directly rather than waiting on the two-second poll or on a
+    // kqueue event - both would make these tests wall-clock bound and flaky.
+
+    @Test("an external write to a clean buffer is taken silently")
+    func adoptsExternalWriteWhenClean() throws {
+        let root = try Fixture.make(["a.md": "before\n"])
+        defer { Fixture.remove(root) }
+        let url = root.appendingPathComponent("a.md")
+
+        let document = MarkdownDocument(url: url)
+        let before = document.reloadToken
+
+        try "after\n".write(to: url, atomically: false, encoding: .utf8)
+        document.syncWithDisk()
+
+        #expect(document.text == "after\n")
+        #expect(!document.isDirty)
+        #expect(document.externalChange == nil)
+        // Without a new token the text view never takes the string.
+        #expect(document.reloadToken != before)
+    }
+
+    @Test("an external write against unsaved edits raises a conflict")
+    func reportsConflictWhenDirty() throws {
+        let root = try Fixture.make(["a.md": "before\n"])
+        defer { Fixture.remove(root) }
+        let url = root.appendingPathComponent("a.md")
+
+        let document = MarkdownDocument(url: url)
+        document.text = "mine\n"
+
+        try "theirs\n".write(to: url, atomically: false, encoding: .utf8)
+        document.syncWithDisk()
+
+        #expect(document.externalChange == .conflict)
+        #expect(document.text == "mine\n")
+    }
+
+    @Test("an atomic external write reloads rather than reading as a deletion")
+    func survivesAtomicWrite() throws {
+        let root = try Fixture.make(["a.md": "before\n"])
+        defer { Fixture.remove(root) }
+        let url = root.appendingPathComponent("a.md")
+
+        let document = MarkdownDocument(url: url)
+
+        // What every formatter and `sed -i` does: write a temp file, rename it over the path.
+        // kqueue reports that as the watched inode being deleted.
+        try "after\n".write(to: url, atomically: true, encoding: .utf8)
+        document.syncWithDisk()
+
+        #expect(document.externalChange == nil)
+        #expect(document.text == "after\n")
+
+        // And detection has to survive it - a second rewrite must land too.
+        try "again\n".write(to: url, atomically: true, encoding: .utf8)
+        document.syncWithDisk()
+
+        #expect(document.text == "again\n")
+    }
+
+    @Test("a rewrite of the same length is still noticed")
+    func noticesSameLengthRewrite() throws {
+        let root = try Fixture.make(["a.md": "aaa\n"])
+        defer { Fixture.remove(root) }
+        let url = root.appendingPathComponent("a.md")
+
+        let document = MarkdownDocument(url: url)
+
+        try "bbb\n".write(to: url, atomically: true, encoding: .utf8)
+        document.syncWithDisk()
+
+        #expect(document.text == "bbb\n")
+    }
+
+    @Test("a deleted file is reported as detached")
+    func reportsDeletion() throws {
+        let root = try Fixture.make(["a.md": "gone soon\n"])
+        defer { Fixture.remove(root) }
+        let url = root.appendingPathComponent("a.md")
+
+        let document = MarkdownDocument(url: url)
+        try FileManager.default.removeItem(at: url)
+        document.syncWithDisk()
+
+        #expect(document.externalChange == .detached)
+        // The buffer is the only copy left, so it stays.
+        #expect(document.text == "gone soon\n")
+    }
+
+    @Test("our own save is not mistaken for someone else's write")
+    func ignoresOurOwnWrite() throws {
+        let root = try Fixture.make(["a.md": "one\n"])
+        defer { Fixture.remove(root) }
+
+        let document = MarkdownDocument(url: root.appendingPathComponent("a.md"))
+        document.text = "two\n"
+        document.save()
+
+        let token = document.reloadToken
+        document.syncWithDisk()
+
+        #expect(document.externalChange == nil)
+        #expect(document.reloadToken == token)
+    }
 }
