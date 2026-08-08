@@ -313,10 +313,13 @@ final class AnnotationStore {
     /// Keyed by the `.md-boss` file's path, so a write goes back where it came from.
     private(set) var files: [String: AnnotationFile] = [:]
 
-    private var folders: RootFoldersManager { .shared }
+    private let folders: RootFoldersManager
     private var watcher: DirectoryWatcher?
 
-    private init() {
+    /// The `folders` parameter is a test hook; production always uses the shared manager.
+    init(folders: RootFoldersManager = .shared) {
+        self.folders = folders
+
         watcher = DirectoryWatcher { [weak self] _, _ in
             // A `.md-boss` is meant to be hand-editable and committed, so it has to be
             // picked up when it changes under us - after a git pull, say.
