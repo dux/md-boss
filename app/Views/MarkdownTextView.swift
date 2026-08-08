@@ -136,7 +136,7 @@ struct MarkdownTextView: NSViewRepresentable {
             reportCursor(textView)
         }
 
-        /// Bookmarks and comments anchor to the caret, so the manager needs to know where it
+        /// Notes anchor to the caret, so the manager needs to know where it
         /// is and what is on that line.
         private func reportCursor(_ textView: NSTextView) {
             let text = textView.string as NSString
@@ -187,10 +187,9 @@ struct MarkdownTextView: NSViewRepresentable {
             let lineText = text.substring(with: text.lineRange(for: NSRange(location: clamped, length: 0)))
             manager.reportCursor(line: line, text: lineText)
 
-            let hasBookmark = manager.hasBookmarkAtCursor
+            let hasNote = manager.hasNoteAtCursor
             let items: [NSMenuItem] = [
-                BlockMenuItem(hasBookmark ? "Edit Bookmark…" : "Add Bookmark…") { manager.addBookmarkAtCursor() },
-                BlockMenuItem("Add Comment…") { manager.addCommentAtCursor() },
+                BlockMenuItem(hasNote ? "Edit Note…" : "Add Note…") { manager.addNoteAtCursor() },
                 NSMenuItem.separator(),
                 BlockMenuItem("Copy Path") { manager.copyPath(url) },
                 BlockMenuItem("Copy Path with Line") {

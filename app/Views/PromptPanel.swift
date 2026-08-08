@@ -1,6 +1,6 @@
 import AppKit
 
-/// A one-field modal prompt. Used for a bookmark title and a comment body.
+/// A one-field modal prompt. Used for a note's body and for renaming one.
 ///
 /// An NSAlert rather than a SwiftUI sheet because these are invoked from context menus and
 /// menu commands, which have no view to present from.

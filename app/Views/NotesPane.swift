@@ -1,21 +1,21 @@
 import SwiftUI
 
-/// Inline comments in three reaches: the open document, the rest of the active folder, and
-/// every other recent folder.
+/// Notes in three reaches: the open document, the rest of the active folder, and every other
+/// recent folder.
 ///
 /// All three titles are always shown, so an empty scope reads as "nothing here" rather than
 /// leaving you wondering whether the pane is broken. The two wider ones fold, and start
-/// folded, so the comments on what you are actually reading stay at the top of the column.
-struct CommentsPane: View {
+/// folded, so the notes on what you are actually reading stay at the top of the column.
+struct NotesPane: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var store = AnnotationStore.shared
     @ObservedObject private var manager = MdBossManager.shared
 
     private var theme: Theme { settings.theme }
 
-    private var sections: [CommentScope: [Comment]] {
-        CommentSections.partition(
-            all: store.allComments,
+    private var sections: [NoteScope: [Note]] {
+        NoteSections.partition(
+            all: store.notes,
             file: manager.selectedFile,
             activeRoot: RootFoldersManager.shared.active,
             recentRoots: RootFoldersManager.shared.recent
@@ -26,18 +26,18 @@ struct CommentsPane: View {
         let sections = sections
 
         return VStack(alignment: .leading, spacing: 0) {
-            PaneHeader(title: "Comments", theme: theme)
+            PaneHeader(title: "Notes", theme: theme)
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(CommentScope.allCases.enumerated()), id: \.element) { index, scope in
+                    ForEach(Array(NoteScope.allCases.enumerated()), id: \.element) { index, scope in
                         if index > 0 {
                             Rectangle()
                                 .fill(theme[.border])
                                 .frame(height: 1)
                                 .padding(.top, 10)
                         }
-                        section(scope, comments: sections[scope] ?? [])
+                        section(scope, notes: sections[scope] ?? [])
                     }
                 }
                 .padding(.bottom, 12)
@@ -50,27 +50,27 @@ struct CommentsPane: View {
     // MARK: Sections
 
     @ViewBuilder
-    private func section(_ scope: CommentScope, comments: [Comment]) -> some View {
+    private func section(_ scope: NoteScope, notes: [Note]) -> some View {
         let isOpen = isExpanded(scope)
 
-        header(scope, count: comments.count, isOpen: isOpen)
+        header(scope, count: notes.count, isOpen: isOpen)
 
         if isOpen {
-            if comments.isEmpty {
+            if notes.isEmpty {
                 Text(emptyMessage(for: scope))
                     .textStyle(.small)
                     .foregroundColor(theme[.muted])
                     .padding(.horizontal, 12)
                     .padding(.bottom, 6)
             } else if scope == .thisFile {
-                rows(comments)
+                rows(notes)
             } else {
-                grouped(comments, showingProject: scope == .allProjects)
+                grouped(notes, showingProject: scope == .allProjects)
             }
         }
     }
 
-    private func header(_ scope: CommentScope, count: Int, isOpen: Bool) -> some View {
+    private func header(_ scope: NoteScope, count: Int, isOpen: Bool) -> some View {
         HStack(spacing: 4) {
             if scope.isCollapsible {
                 Image(systemName: isOpen ? "chevron.down" : "chevron.right")
@@ -95,10 +95,10 @@ struct CommentsPane: View {
         .onTapGesture { toggle(scope) }
     }
 
-    private func rows(_ comments: [Comment]) -> some View {
+    private func rows(_ notes: [Note]) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(comments) { comment in
-                row(comment)
+            ForEach(notes) { note in
+                row(note)
             }
         }
         .padding(.horizontal, 8)
@@ -107,8 +107,8 @@ struct CommentsPane: View {
 
     /// A bare basename from another folder is ambiguous, so the project name rides along
     /// in the wider scope.
-    private func grouped(_ comments: [Comment], showingProject: Bool) -> some View {
-        let groups = Dictionary(grouping: comments, by: \.path)
+    private func grouped(_ notes: [Note], showingProject: Bool) -> some View {
+        let groups = Dictionary(grouping: notes, by: \.path)
             .map { (path: $0.key, items: $0.value.sorted { $0.line < $1.line }) }
             .sorted { $0.path < $1.path }
 
@@ -134,8 +134,8 @@ struct CommentsPane: View {
                 .padding(.top, 4)
                 .help(group.path)
 
-                ForEach(group.items) { comment in
-                    row(comment)
+                ForEach(group.items) { note in
+                    row(note)
                 }
             }
         }
@@ -143,19 +143,35 @@ struct CommentsPane: View {
         .padding(.top, 2)
     }
 
-    private func row(_ comment: Comment) -> some View {
-        let isCurrent = manager.selectedFile.map(AnnotationPath.store) == comment.path
+    /// The line number leads, then the title - or the body, when there is no title to lead
+    /// with. A note carrying both shows the body underneath.
+    private func row(_ note: Note) -> some View {
+        let isCurrent = manager.selectedFile.map(AnnotationPath.store) == note.path
+        let hasBoth = !note.title.isEmpty && !note.body.isEmpty
 
         return VStack(alignment: .leading, spacing: 3) {
-            Text("line \(comment.line)")
-                .textStyle(.small, mono: true)
-                .foregroundColor(theme[.muted])
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(note.line)")
+                    .textStyle(.small, mono: true)
+                    .foregroundColor(theme[.muted])
+                    .frame(minWidth: 26, alignment: .trailing)
 
-            Text(comment.body)
-                .textStyle(.default)
-                .foregroundColor(theme[.text])
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text(note.label)
+                    .textStyle(.default)
+                    .foregroundColor(theme[.text])
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+
+            if hasBoth {
+                Text(note.body)
+                    .textStyle(.small)
+                    .foregroundColor(theme[.muted])
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 32)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -165,29 +181,32 @@ struct CommentsPane: View {
         )
         .overlay(alignment: .leading) {
             RoundedRectangle(cornerRadius: 2)
-                .fill(isCurrent && manager.currentLine == comment.line ? theme[.accent] : theme[.quoteBar])
+                .fill(isCurrent && manager.currentLine == note.line ? theme[.accent] : theme[.quoteBar])
                 .frame(width: 3)
                 .padding(.vertical, 6)
         }
         .contentShape(Rectangle())
-        .onTapGesture { manager.go(to: comment) }
+        .onTapGesture { manager.go(to: note) }
         .contextMenu {
-            Button("Edit…") { manager.editComment(comment) }
-            Button("Copy Text") { manager.copyText(comment.body) }
-            Button("Copy Path") { manager.copyText("\(comment.path):\(comment.line)", label: "Path copied") }
+            Button("Edit…") { manager.editNote(note) }
+            Button("Rename…") { manager.renameNote(note) }
+            if !note.body.isEmpty {
+                Button("Copy Text") { manager.copyText(note.body) }
+            }
+            Button("Copy Path") { manager.copyText("\(note.path):\(note.line)", label: "Path copied") }
             Divider()
-            Button("Delete") { store.removeComment(comment) }
+            Button("Delete") { store.remove(note) }
         }
     }
 
     // MARK: Details
 
-    private func emptyMessage(for scope: CommentScope) -> String {
-        guard scope == .thisFile else { return "no comments" }
+    private func emptyMessage(for scope: NoteScope) -> String {
+        guard scope == .thisFile else { return "no notes" }
         if manager.selectedFile == nil { return "no file open" }
         // With nothing anywhere, this is the only line that can say how to make one.
-        if store.allComments.isEmpty { return "no comments - right-click in the raw pane to add one" }
-        return "no comments"
+        if store.notes.isEmpty { return "no notes - right-click in the raw pane to add one" }
+        return "no notes"
     }
 
     private func projectName(for path: String) -> String? {
@@ -198,16 +217,38 @@ struct CommentsPane: View {
 
     // MARK: Folding
 
-    private func isExpanded(_ scope: CommentScope) -> Bool {
-        !scope.isCollapsible || settings.expandedCommentScopes.contains(scope.rawValue)
+    private func isExpanded(_ scope: NoteScope) -> Bool {
+        !scope.isCollapsible || settings.expandedNoteScopes.contains(scope.rawValue)
     }
 
-    private func toggle(_ scope: CommentScope) {
+    private func toggle(_ scope: NoteScope) {
         guard scope.isCollapsible else { return }
-        var open = Set(settings.expandedCommentScopes)
+        var open = Set(settings.expandedNoteScopes)
         if open.remove(scope.rawValue) == nil { open.insert(scope.rawValue) }
-        settings.expandedCommentScopes = CommentScope.allCases
+        settings.expandedNoteScopes = NoteScope.allCases
             .map(\.rawValue)
             .filter { open.contains($0) }
+    }
+}
+
+/// Shared header for the list panes.
+struct PaneHeader: View {
+    let title: String
+    let theme: Theme
+    var count: Int?
+
+    var body: some View {
+        HStack {
+            Text(title).textStyle(.title)
+            if let count, count > 0 {
+                Text("\(count)")
+                    .textStyle(.small)
+                    .foregroundColor(theme[.muted])
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
     }
 }

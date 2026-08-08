@@ -107,15 +107,15 @@ struct MdBossCommands: Commands {
         }
 
         CommandMenu("Annotate") {
-            Button(manager.hasBookmarkAtCursor ? "Edit Bookmark…" : "Add Bookmark…") {
-                manager.addBookmarkAtCursor()
+            Button(manager.hasNoteAtCursor ? "Edit Note…" : "Add Note…") {
+                manager.addNoteAtCursor()
             }
-            .keyboardShortcut("b", modifiers: [.command, .shift])
+            .keyboardShortcut("k", modifiers: [.command, .shift])
             .disabled(manager.selectedFile == nil)
 
-            Button("Add Comment…") { manager.addCommentAtCursor() }
-                .keyboardShortcut("k", modifiers: [.command, .shift])
-                .disabled(manager.selectedFile == nil)
+            Button("Delete Note") { manager.deleteNoteAtCursor() }
+                .keyboardShortcut(.delete, modifiers: [.command, .shift])
+                .disabled(!manager.hasNoteAtCursor)
         }
 
         // .sidebar lands in the system View menu. A CommandMenu("View") would create a

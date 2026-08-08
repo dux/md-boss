@@ -5,41 +5,146 @@ import SwiftUI
 // Paths are stored tilde-abbreviated (`~/dev/notes/plan.md`) so a `.md-boss` file stays
 // readable and survives a different home directory. Line numbers are 1-based.
 //
-// One bookmark and one comment per (path, line): adding over an existing one edits it.
-// That keeps identity stable without putting UUIDs in a file meant to be hand-edited.
+// One note per (path, line): adding over an existing one edits it. That keeps identity
+// stable without putting UUIDs in a file meant to be hand-edited.
 
-struct Bookmark: Codable, Equatable, Identifiable {
+/// A marked line, with or without something written about it.
+///
+/// Bookmarks and comments used to be two types with the same two keys and a third field
+/// called `title` in one and `body` in the other. They were the same record: a bookmark is
+/// a note nothing has been written on yet.
+struct Note: Codable, Equatable, Identifiable {
     var path: String
     var line: Int
-    var title: String
+    /// Taken from the source line when the note is made, so a list of them is scannable
+    /// without opening every file. Comments written before the merge have none.
+    var title = ""
+    /// What you typed. Empty is a plain jump point - what used to be a bookmark.
+    var body = ""
 
     var id: String { "\(path):\(line)" }
     var url: URL { AnnotationPath.expand(path) }
-}
 
-struct Comment: Codable, Equatable, Identifiable {
-    var path: String
-    var line: Int
-    var body: String
+    /// What a row leads with. Old comments have no title, and one cannot be invented
+    /// without re-reading the file they point at.
+    var label: String { title.isEmpty ? body : title }
 
-    var id: String { "\(path):\(line)" }
-    var url: URL { AnnotationPath.expand(path) }
+    var isEmpty: Bool {
+        title.isEmpty && body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    // Declared, not synthesized: writing both halves of Codable by hand suppresses it.
+    enum CodingKeys: String, CodingKey {
+        case path
+        case line
+        case title
+        case body
+    }
+
+    init(path: String, line: Int, title: String = "", body: String = "") {
+        self.path = path
+        self.line = line
+        self.title = title
+        self.body = body
+    }
+
+    /// Hand-written because the synthesized decoder does not fall back to a property's
+    /// default for a missing key - and that fallback is the whole migration: a `title`-only
+    /// object written as a bookmark and a `body`-only one written as a comment both land
+    /// here as a Note, with no conversion step in between.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        path = try container.decode(String.self, forKey: .path)
+        line = try container.decode(Int.self, forKey: .line)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        body = try container.decodeIfPresent(String.self, forKey: .body) ?? ""
+    }
+
+    /// Empty fields are left out rather than written as `""`, so a plain jump point stays a
+    /// three-key object in a file meant to be read by a person.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(path, forKey: .path)
+        try container.encode(line, forKey: .line)
+        if !title.isEmpty { try container.encode(title, forKey: .title) }
+        if !body.isEmpty { try container.encode(body, forKey: .body) }
+    }
 }
 
 /// The contents of one `.md-boss` file.
 struct AnnotationFile: Codable, Equatable {
-    var bookmarks: [Bookmark] = []
-    var comments: [Comment] = []
+    var notes: [Note] = []
 
-    var isEmpty: Bool { bookmarks.isEmpty && comments.isEmpty }
+    var isEmpty: Bool { notes.isEmpty }
 
     init() {}
 
-    /// Hand-written so a file with only one of the two keys still loads.
+    init(notes: [Note]) {
+        self.notes = notes
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case notes
+        // Written by builds from before the two were one record. Read, never written.
+        case bookmarks
+        case comments
+    }
+
+    /// Three shapes fold into one array. A line carrying both an old bookmark and an old
+    /// comment becomes a single note with a title and a body - which is the merge, and the
+    /// one part of it that cannot be undone once the file is written back.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        bookmarks = try container.decodeIfPresent([Bookmark].self, forKey: .bookmarks) ?? []
-        comments = try container.decodeIfPresent([Comment].self, forKey: .comments) ?? []
+        let current = try container.decodeIfPresent([Note].self, forKey: .notes) ?? []
+        let bookmarks = try container.decodeIfPresent([Note].self, forKey: .bookmarks) ?? []
+        let comments = try container.decodeIfPresent([Note].self, forKey: .comments) ?? []
+        notes = Self.fold(current + bookmarks + comments)
+    }
+
+    /// Only the current key is written, so a file converts itself the first time anything
+    /// in it is touched.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(notes, forKey: .notes)
+    }
+
+    /// One note per (path, line), first non-empty value winning per field.
+    static func fold(_ notes: [Note]) -> [Note] {
+        var merged: [String: Note] = [:]
+        var order: [String] = []
+
+        for note in notes {
+            guard var existing = merged[note.id] else {
+                merged[note.id] = note
+                order.append(note.id)
+                continue
+            }
+            if existing.title.isEmpty { existing.title = note.title }
+            if existing.body.isEmpty { existing.body = note.body }
+            merged[note.id] = existing
+        }
+
+        return order.compactMap { merged[$0] }.sorted { ($0.path, $0.line) < ($1.path, $1.line) }
+    }
+
+    /// Splits the notes on a file that has moved: what stays here, and what has to be
+    /// repointed. Nil when nothing in this file pointed at `oldPath`, so a store that is
+    /// not involved is never rewritten.
+    func repointing(from oldPath: String, to newPath: String) -> (kept: Self, moved: [Note])? {
+        guard notes.contains(where: { $0.path == oldPath }) else { return nil }
+
+        var moved: [Note] = []
+        var kept: [Note] = []
+        for note in notes {
+            guard note.path == oldPath else {
+                kept.append(note)
+                continue
+            }
+            var repointed = note
+            repointed.path = newPath
+            moved.append(repointed)
+        }
+        return (Self(notes: kept), moved)
     }
 }
 
@@ -81,8 +186,8 @@ enum AnnotationPath {
 
 // MARK: - Scopes
 
-/// The three reaches of the comments pane, nearest first.
-enum CommentScope: String, CaseIterable, Identifiable {
+/// The three reaches of the notes pane, nearest first.
+enum NoteScope: String, CaseIterable, Identifiable {
     case thisFile
     case thisProject
     case allProjects
@@ -97,40 +202,40 @@ enum CommentScope: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The open document's comments are the point of the pane, so that scope never folds.
+    /// The open document's notes are the point of the pane, so that scope never folds.
     var isCollapsible: Bool { self != .thisFile }
 }
 
-enum CommentSections {
-    /// Splits every known comment into the three scopes.
+enum NoteSections {
+    /// Splits every known note into the three scopes.
     ///
     /// Pure on purpose - the partitioning rules are the part worth testing, and none of them
     /// need a store or a view. `recentRoots` is `RootFoldersManager.recent`: folders past
-    /// the tenth are already unreachable from the sidebar's picker, so they contribute
+    /// the twentieth are already unreachable from the sidebar's picker, so they contribute
     /// nothing here either.
     static func partition(
-        all: [Comment],
+        all: [Note],
         file: URL?,
         activeRoot: URL?,
         recentRoots: [URL]
-    ) -> [CommentScope: [Comment]] {
+    ) -> [NoteScope: [Note]] {
         let currentPath = file.map(AnnotationPath.store)
         let otherRoots = recentRoots.filter { root in
             activeRoot.map { !AnnotationPath.isUnder(root, root: $0) } ?? true
         }
 
-        var result: [CommentScope: [Comment]] = [:]
-        for scope in CommentScope.allCases { result[scope] = [] }
+        var result: [NoteScope: [Note]] = [:]
+        for scope in NoteScope.allCases { result[scope] = [] }
 
-        for comment in all {
-            let url = comment.url
+        for note in all {
+            let url = note.url
 
-            if let currentPath, comment.path == currentPath {
-                result[.thisFile]?.append(comment)
+            if let currentPath, note.path == currentPath {
+                result[.thisFile]?.append(note)
             } else if let activeRoot, AnnotationPath.isUnder(url, root: activeRoot) {
-                result[.thisProject]?.append(comment)
+                result[.thisProject]?.append(note)
             } else if otherRoots.contains(where: { AnnotationPath.isUnder(url, root: $0) }) {
-                result[.allProjects]?.append(comment)
+                result[.allProjects]?.append(note)
             }
         }
 
@@ -140,8 +245,8 @@ enum CommentSections {
 
 // MARK: - Store
 
-/// Bookmarks and inline comments, kept in a `.md-boss` JSON file at the root of each
-/// sidebar folder so they can be committed alongside the documents they point at.
+/// Notes, kept in a `.md-boss` JSON file at the root of each sidebar folder so they can be
+/// committed alongside the documents they point at.
 /// Anything opened outside every root falls back to one file in the config directory.
 @MainActor
 final class AnnotationStore: ObservableObject {
@@ -178,78 +283,84 @@ final class AnnotationStore: ObservableObject {
 
     // MARK: Counts, for the pane toggle bar
 
-    var bookmarkCount: Int { files.values.reduce(0) { $0 + $1.bookmarks.count } }
-
-    func commentCount(for url: URL?) -> Int {
+    func noteCount(for url: URL?) -> Int {
         guard let url else { return 0 }
-        return comments(for: url).count
+        return notes(for: url).count
     }
 
     // MARK: Reading
 
-    /// Every bookmark across every root, ordered by file then line.
-    var bookmarks: [Bookmark] {
+    /// Every note across every loaded `.md-boss`, ordered by file then line.
+    var notes: [Note] {
         files.values
-            .flatMap(\.bookmarks)
+            .flatMap(\.notes)
             .sorted { ($0.path, $0.line) < ($1.path, $1.line) }
     }
 
-    /// Every comment across every loaded `.md-boss`, ordered by file then line.
-    var allComments: [Comment] {
-        files.values
-            .flatMap(\.comments)
-            .sorted { ($0.path, $0.line) < ($1.path, $1.line) }
-    }
-
-    func comments(for url: URL) -> [Comment] {
+    func notes(for url: URL) -> [Note] {
         let path = AnnotationPath.store(url)
         return files.values
-            .flatMap(\.comments)
+            .flatMap(\.notes)
             .filter { $0.path == path }
             .sorted { $0.line < $1.line }
     }
 
-    func bookmark(for url: URL, line: Int) -> Bookmark? {
+    func note(for url: URL, line: Int) -> Note? {
         let path = AnnotationPath.store(url)
-        return files[storeURL(for: url).path]?.bookmarks.first { $0.path == path && $0.line == line }
-    }
-
-    func comment(for url: URL, line: Int) -> Comment? {
-        let path = AnnotationPath.store(url)
-        return files[storeURL(for: url).path]?.comments.first { $0.path == path && $0.line == line }
+        return files[storeURL(for: url).path]?.notes.first { $0.path == path && $0.line == line }
     }
 
     // MARK: Writing
 
-    func addBookmark(_ url: URL, line: Int, title: String) {
+    /// A note with neither a title nor a body is removed rather than stored - there would be
+    /// nothing to show in the pane and nothing to click. Clearing a body no longer deletes
+    /// the note, which is what leaves a plain jump point reachable.
+    func setNote(_ url: URL, line: Int, title: String, body: String) {
         mutate(url) { file in
-            let entry = Bookmark(path: AnnotationPath.store(url), line: line, title: title)
-            file.bookmarks.removeAll { $0.id == entry.id }
-            file.bookmarks.append(entry)
-            file.bookmarks.sort { ($0.path, $0.line) < ($1.path, $1.line) }
-        }
-    }
-
-    func removeBookmark(_ bookmark: Bookmark) {
-        mutate(bookmark.url) { file in
-            file.bookmarks.removeAll { $0.id == bookmark.id }
-        }
-    }
-
-    func setComment(_ url: URL, line: Int, body: String) {
-        mutate(url) { file in
-            let entry = Comment(path: AnnotationPath.store(url), line: line, body: body)
-            file.comments.removeAll { $0.id == entry.id }
-            if !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                file.comments.append(entry)
+            let entry = Note(path: AnnotationPath.store(url), line: line, title: title, body: body)
+            file.notes.removeAll { $0.id == entry.id }
+            if !entry.isEmpty {
+                file.notes.append(entry)
             }
-            file.comments.sort { ($0.path, $0.line) < ($1.path, $1.line) }
+            file.notes.sort { ($0.path, $0.line) < ($1.path, $1.line) }
         }
     }
 
-    func removeComment(_ comment: Comment) {
-        mutate(comment.url) { file in
-            file.comments.removeAll { $0.id == comment.id }
+    func remove(_ note: Note) {
+        mutate(note.url) { file in
+            file.notes.removeAll { $0.id == note.id }
+        }
+    }
+
+    /// Follows a file the sidebar moved. Written as its own method rather than through
+    /// `mutate`, because the destination can be owned by a different `.md-boss` - notes
+    /// have to leave one file and land in another, and `mutate` only knows about one.
+    func repoint(from old: URL, to new: URL) {
+        let oldPath = AnnotationPath.store(old)
+        let newPath = AnnotationPath.store(new)
+        guard oldPath != newPath else { return }
+
+        let destination = storeURL(for: new)
+        var moved: [Note] = []
+        var touched: Set<String> = []
+
+        for (path, file) in files {
+            guard let split = file.repointing(from: oldPath, to: newPath) else { continue }
+            files[path] = split.kept
+            moved += split.moved
+            touched.insert(path)
+        }
+        guard !moved.isEmpty else { return }
+
+        var landing = files[destination.path] ?? AnnotationFile()
+        landing.notes = AnnotationFile.fold(landing.notes + moved)
+        files[destination.path] = landing
+        touched.insert(destination.path)
+
+        for path in touched {
+            let store = URL(fileURLWithPath: path)
+            Self.write(files[path] ?? AnnotationFile(), to: store)
+            watcher?.rearm(store)
         }
     }
 

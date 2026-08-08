@@ -29,9 +29,9 @@ struct SettingsData: Codable, Sendable, Equatable {
     var fontDefault: CGFloat = 13
     var fontButtons: CGFloat = 12
 
-    /// Which comment scopes are unfolded. Both wider ones start closed, so the open file's
-    /// comments stay at the top of the column.
-    var expandedCommentScopes: [String] = []
+    /// Which note scopes are unfolded. Both wider ones start closed, so the open file's
+    /// notes stay at the top of the column.
+    var expandedNoteScopes: [String] = []
 
     var expandedPaths: [String] = []
     /// Reopened on launch.
@@ -55,8 +55,7 @@ struct SettingsData: Codable, Sendable, Equatable {
 enum Pane: String, CaseIterable, Sendable, Identifiable {
     case raw
     case preview
-    case bookmarks
-    case comments
+    case notes
 
     var id: String { rawValue }
 
@@ -64,8 +63,7 @@ enum Pane: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .raw: return "Raw"
         case .preview: return "Preview"
-        case .bookmarks: return "Bookmarks"
-        case .comments: return "Comments"
+        case .notes: return "Notes"
         }
     }
 
@@ -73,14 +71,22 @@ enum Pane: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .raw: return "chevron.left.forwardslash.chevron.right"
         case .preview: return "doc.richtext"
-        case .bookmarks: return "bookmark"
-        case .comments: return "text.bubble"
+        case .notes: return "bookmark"
         }
     }
 
-    /// Bookmarks and comments are lists, so they get a fixed column.
+    /// Notes are a list, so they get a fixed column.
     /// Raw and preview are documents, so they share whatever is left.
-    var fixedWidth: CGFloat? { self == .bookmarks || self == .comments ? 300 : nil }
+    var fixedWidth: CGFloat? { self == .notes ? 300 : nil }
+
+    /// Written by builds from before bookmarks and comments were one pane. Without this a
+    /// config naming either one decodes to nothing and the viewer silently resets.
+    static func named(_ stored: String) -> Self? {
+        switch stored {
+        case "bookmarks", "comments": return .notes
+        default: return Self(rawValue: stored)
+        }
+    }
 }
 
 // MARK: - Adjustable text sizes
@@ -233,8 +239,8 @@ final class AppSettings: ObservableObject {
     /// Always in declaration order, and never empty - a viewer with nothing in it is a bug,
     /// not a state worth supporting.
     var panes: [Pane] {
-        let shown = Set(data.visiblePanes)
-        let ordered = Pane.allCases.filter { shown.contains($0.rawValue) }
+        let shown = Set(data.visiblePanes.compactMap(Pane.named))
+        let ordered = Pane.allCases.filter { shown.contains($0) }
         return ordered.isEmpty ? [.preview] : ordered
     }
 

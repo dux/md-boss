@@ -84,8 +84,9 @@ struct PaneToggleBar: View {
     private func count(for pane: Pane) -> Int? {
         let value: Int
         switch pane {
-        case .bookmarks: value = store.bookmarkCount
-        case .comments: value = store.commentCount(for: manager.selectedFile)
+        // The open file, matching what the pane leads with rather than a global total that
+        // says nothing about what is on screen.
+        case .notes: value = store.noteCount(for: manager.selectedFile)
         case .raw, .preview: return nil
         }
         return value > 0 ? value : nil

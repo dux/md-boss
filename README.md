@@ -3,7 +3,7 @@
 A macOS markdown viewer and editor that looks like paper.
 
 Folders and files on the left, the rendered document on the right.
-A stripe above the viewer toggles four panes - raw, preview, bookmarks, comments - which sit
+A stripe above the viewer toggles three panes - raw, preview, notes - which sit
 side by side. ⇧⌘D switches between the warm paper theme and a matching dark one.
 The `<` and `>` arrows narrow and widen the reading column.
 
@@ -40,27 +40,32 @@ Requires macOS 14, a Swift 6.2 toolchain, [hammer](https://github.com/dux/hammer
 | `hammer register` | re-register with LaunchServices so `.md` files bind to this build |
 | `hammer clean` | remove build artifacts |
 
-## Bookmarks and comments
+## Notes
 
-Right-click in the raw pane to bookmark a line or leave a comment on it.
-The suggested bookmark title is the first 40 characters of that line with the markdown
-stripped out.
+Right-click a line in either pane to leave a note on it.
+Write something or leave it blank - a note with nothing written on it is just a marked line
+you can jump back to.
 
-Both are stored in a `.md-boss` JSON file at the root of the sidebar folder the document
+Every note is titled from the line it points at, so the pane reads as a table of contents
+without opening anything: the first 40 characters of that line, markdown stripped out.
+
+They are stored in a `.md-boss` JSON file at the root of the sidebar folder the document
 lives under, so they can be committed alongside your notes:
 
 ```json
 {
-  "bookmarks" : [
-    { "path" : "~/dev/notes/plan.md", "line" : 42, "title" : "Rebuild the index first" }
-  ],
-  "comments" : [
-    { "path" : "~/dev/notes/plan.md", "line" : 88, "body" : "Needs a test." }
+  "notes" : [
+    { "line" : 42, "path" : "~/dev/notes/plan.md", "title" : "Rebuild the index first" },
+    { "body" : "Needs a test.", "line" : 88, "path" : "~/dev/notes/plan.md" }
   ]
 }
 ```
 
 The file is watched, so editing it by hand or pulling someone else's shows up right away.
+
+Files written before bookmarks and comments became one thing are read as they are and
+rewritten in this shape the next time you touch them. A line that carried both becomes one
+note with a title and a body.
 
 ## Command line
 
@@ -78,10 +83,10 @@ Dropping a folder or a file on the Dock icon does the same thing.
 | | |
 |---|---|
 | ⌘O | add a folder to the sidebar |
-| ⌘1 ⌘2 ⌘3 ⌘4 | toggle the raw, preview, bookmarks and comments panes |
+| ⌘1 ⌘2 ⌘3 | toggle the raw, preview and notes panes |
 | ⌘\ | raw and preview side by side |
-| ⇧⌘B | bookmark the current line |
-| ⇧⌘K | comment on the current line |
+| ⇧⌘K | add or edit a note on the current line |
+| ⇧⌘⌫ | delete the note on the current line |
 | ⇧⌘D | switch theme |
 | ⌘0 | show or hide the sidebar |
 | ⌘+ / ⌘- / ⌥⌘0 | text size (⌥⌘0 also resets the column width) |

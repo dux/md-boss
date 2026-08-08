@@ -31,7 +31,7 @@ struct ContentView: View {
         .background(WindowAccessor())
     }
 
-    // DocumentPane owns the empty state now - the bookmarks pane is useful with no file open.
+    // DocumentPane owns the empty state now - the notes pane is useful with no file open.
     private var contentArea: some View { DocumentPane() }
 }
 

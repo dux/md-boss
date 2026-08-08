@@ -3,7 +3,7 @@ import SwiftUI
 /// The right-hand side: a toggle stripe over whichever panes are switched on, side by side
 /// in `Pane.allCases` order.
 ///
-/// Bookmarks and comments take a fixed 300pt column each; raw and preview share whatever is
+/// Notes take a fixed 300pt column; raw and preview share whatever is
 /// left, split by a draggable divider.
 struct DocumentPane: View {
     @ObservedObject private var settings = AppSettings.shared
@@ -52,10 +52,8 @@ struct DocumentPane: View {
             } else {
                 EmptyPane(theme: theme, message: "Select a file.")
             }
-        case .bookmarks:
-            BookmarksPane()
-        case .comments:
-            CommentsPane()
+        case .notes:
+            NotesPane()
         }
     }
 

@@ -20,8 +20,8 @@ final class MdBossManager: ObservableObject {
     /// react - a nested ObservableObject does not republish through its owner.
     @Published private(set) var isDirty = false
 
-    /// Caret position in the raw pane, 1-based, plus the text of that line. Bookmarks and
-    /// comments anchor to it, and the panes use it to highlight the entry you are on.
+    /// Caret position in the raw pane, 1-based, plus the text of that line. Notes anchor to
+    /// it, and the pane uses it to highlight the entry you are on.
     @Published private(set) var currentLine = 1
     private(set) var currentLineText = ""
 
