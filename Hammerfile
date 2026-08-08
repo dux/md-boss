@@ -1,5 +1,3 @@
-require 'fileutils'
-
 # Hammerfile - build / install / run helpers for md-boss.
 # Run with: hammer <command>   (https://github.com/dux/hammer)
 
@@ -71,7 +69,6 @@ task :build do
     sh "rm -rf #{BUNDLE_DIR}"
     say.green "installed to #{INSTALL_DIR}/#{BUNDLE_DIR}"
 
-    hammer :link
     hammer :register
   end
 end
@@ -86,30 +83,6 @@ task :dev do
   proc do
     hammer :build
     hammer :run
-  end
-end
-
-task :link do
-  desc 'Install the md-boss CLI shim into ~/bin'
-  proc do
-    target = File.expand_path('~/bin/md-boss')
-    FileUtils.mkdir_p File.dirname(target)
-    # `open -a APP <path>` sends an open-document event, which reaches a running instance.
-    # `--args` would only be seen on a cold launch.
-    File.write target, <<~SH
-      #!/bin/sh
-      # Installed by `hammer link`. Opens a folder or file in md-boss.
-      # `md-boss .` adds the current directory to the sidebar.
-      APP="#{INSTALL_DIR}/#{BUNDLE_DIR}"
-      if [ -n "$1" ]; then
-        # CDPATH makes a bare `cd` echo the directory, so send that to /dev/null.
-        exec open -a "$APP" "$(cd -- "$(dirname -- "$1")" >/dev/null 2>&1 && pwd)/$(basename -- "$1")"
-      else
-        exec open -a "$APP"
-      fi
-    SH
-    FileUtils.chmod 0o755, target
-    say.green "linked #{target}"
   end
 end
 

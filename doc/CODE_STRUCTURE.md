@@ -14,6 +14,7 @@ app/
   ContentView.swift        root HStack layout, WindowAccessor (window frame persistence)
   Models/
     AppSettings.swift      SettingsData + the singleton that persists it
+    CLIShim.swift          the ~/bin/md-boss shim, rewritten on launch when it is stale
     MdBossManager.swift    central @MainActor singleton: open document, selection, messages
     MdBossManagerCommands.swift  extension holding the menu-bar entry points
     MdBossManagerFiles.swift     extension: new file, cut, move, and following the moved file

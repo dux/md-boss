@@ -45,6 +45,10 @@ struct SettingsData: Codable, Sendable, Equatable {
         "Pods", "__pycache__", ".next", "vendor", "dist", "coverage"
     ]
 
+    /// The app keeps `~/bin/md-boss` pointing at itself, checked on every launch. Set false
+    /// to manage the shim by hand; a script the app did not write is never touched anyway.
+    var installCLI = true
+
     var windowX: CGFloat?
     var windowY: CGFloat?
     var windowWidth: CGFloat?

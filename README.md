@@ -38,7 +38,6 @@ Requires macOS 14, a Swift 6.2 toolchain, [hammer](https://github.com/dux/hammer
 | `hammer lint` | `swiftlint` |
 | `hammer watch` | rebuild and reinstall on every Swift file change |
 | `hammer icon` | regenerate `AppIcon.icns` from `AppIcon.svg` |
-| `hammer link` | install the `md-boss` CLI shim into `~/bin` |
 | `hammer register` | re-register with LaunchServices so `.md` files bind to this build |
 | `hammer clean` | remove build artifacts |
 
@@ -105,7 +104,8 @@ link if it is an image.
 
 ## Command line
 
-`hammer build` installs a shim at `~/bin/md-boss`:
+On launch the app writes a shim at `~/bin/md-boss` naming its own bundle, so a copy of
+`MdBoss.app` installed by hand gets the command too, and moving the app repairs it:
 
 ```sh
 md-boss .              # add the current folder to the sidebar, at the top
@@ -113,6 +113,9 @@ md-boss notes/x.md     # open a file, adding its folder if it is not already lis
 ```
 
 Dropping a folder or a file on the Dock icon does the same thing.
+
+A script at that path the app did not write is never overwritten, and `"installCLI": false`
+in `settings.json` turns the whole thing off.
 
 ## Keyboard
 

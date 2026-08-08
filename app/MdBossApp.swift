@@ -18,6 +18,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 manager.restoreSession()
             }
+
+            // A copy of MdBoss.app dropped in by hand should still get the `md-boss`
+            // command, so the shim is the app's job rather than the build script's.
+            CLIShim.installInBackground()
         }
     }
 
