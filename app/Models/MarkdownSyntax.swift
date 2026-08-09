@@ -124,39 +124,14 @@ enum MarkdownSyntax {
         return count >= 3
     }
 
-    /// `- `, `* `, `+ `, `1. ` or `1) `, answering where the marker ends.
+    /// Painting a marker and continuing one on Return need the same answer about what a
+    /// bullet is, so both ask `MarkdownList` rather than each carrying a copy.
     private static func listMarker(_ body: Substring) -> String.Index? {
-        guard let first = body.first else { return nil }
-
-        if first == "-" || first == "*" || first == "+" {
-            let next = body.index(after: body.startIndex)
-            guard next < body.endIndex, body[next] == " " else { return nil }
-            return body.index(after: next)
-        }
-
-        let digits = body.prefix { $0.isNumber }
-        guard !digits.isEmpty, digits.count <= 9, digits.endIndex < body.endIndex,
-              body[digits.endIndex] == "." || body[digits.endIndex] == ")" else { return nil }
-
-        let after = body.index(after: digits.endIndex)
-        guard after < body.endIndex, body[after] == " " else { return nil }
-        return body.index(after: after)
+        MarkdownList.markerEnd(of: body)
     }
 
-    /// `[ ]`, `[x]` or the app's own `[*]`, followed by a space.
     private static func taskMarker(_ rest: Substring) -> String.Index? {
-        var index = rest.startIndex
-        guard index < rest.endIndex, rest[index] == "[" else { return nil }
-
-        index = rest.index(after: index)
-        guard index < rest.endIndex, " xX*".contains(rest[index]) else { return nil }
-
-        index = rest.index(after: index)
-        guard index < rest.endIndex, rest[index] == "]" else { return nil }
-
-        index = rest.index(after: index)
-        guard index < rest.endIndex, rest[index] == " " else { return nil }
-        return rest.index(after: index)
+        MarkdownList.taskEnd(of: rest)
     }
 
     // MARK: - Inline

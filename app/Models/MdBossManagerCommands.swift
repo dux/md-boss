@@ -38,6 +38,21 @@ extension MdBossManager {
         trash(url)
     }
 
+    // MARK: Format
+
+    /// Sent down the responder chain rather than to a text view this holds.
+    ///
+    /// `sendAction(to: nil)` asks AppKit for the first responder that implements the
+    /// selector, which is the one authoritative answer to "who has focus" - a reference kept
+    /// here would be a second copy of it, and would go stale the first time there are two
+    /// editors. Nothing happens when focus is in the sidebar, which is correct.
+    func toggleBold() { NSApp.sendAction(#selector(EditorTextView.markdownToggleBold(_:)), to: nil, from: nil) }
+    func toggleItalic() { NSApp.sendAction(#selector(EditorTextView.markdownToggleItalic(_:)), to: nil, from: nil) }
+    func makeLink() { NSApp.sendAction(#selector(EditorTextView.markdownMakeLink(_:)), to: nil, from: nil) }
+
+    /// The Format menu is about the raw pane, so it greys out when that pane is not up.
+    var canFormat: Bool { document != nil && AppSettings.shared.isVisible(.raw) }
+
     // MARK: View
 
     func setTheme(_ id: ThemeID) {

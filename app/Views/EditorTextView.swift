@@ -8,10 +8,35 @@ import AppKit
 ///
 /// It knows nothing about documents or markdown - `onDropFiles` is set by
 /// `MarkdownTextView.makeNSView` and everything that decides what to insert lives there.
+/// Bold, italic, link - what the Format menu asks the focused editor to do.
+enum FormatCommand: Sendable {
+    case bold
+    case italic
+    case link
+}
+
 final class EditorTextView: NSTextView {
     /// Answers true when the drop was handled, so an unhandled one can still fall through
     /// to NSTextView's own text drag-and-drop.
     var onDropFiles: (([URL], Int) -> Bool)?
+
+    /// Set by `MarkdownTextView.makeNSView`, like `onDropFiles`. The view decides nothing.
+    var onFormat: ((FormatCommand) -> Void)?
+
+    // MARK: Formatting
+    //
+    // Real `@objc` actions, reached by `NSApp.sendAction(_:to: nil, from: nil)` walking the
+    // responder chain to whichever editor has focus. The manager deliberately holds no
+    // reference to a text view: that would be a second copy of "who has focus", it goes stale,
+    // and it would have to be taught about a second pane or a second window. AppKit already
+    // keeps the one authoritative answer.
+    //
+    // A menu shortcut is matched before the responder chain, so these have to be real menu
+    // items or Cmd-B would never arrive here at all.
+
+    @objc func markdownToggleBold(_ sender: Any?) { onFormat?(.bold) }
+    @objc func markdownToggleItalic(_ sender: Any?) { onFormat?(.italic) }
+    @objc func markdownMakeLink(_ sender: Any?) { onFormat?(.link) }
 
     /// Note text for a character index. The view holds no line index of its own, so the
     /// answer comes from the coordinator that does.

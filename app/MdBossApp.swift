@@ -123,6 +123,20 @@ struct MdBossCommands: Commands {
                 .disabled(!manager.canSave)
         }
 
+        CommandMenu("Format") {
+            Button("Bold") { manager.toggleBold() }
+                .keyboardShortcut("b", modifiers: .command)
+                .disabled(!manager.canFormat)
+            Button("Italic") { manager.toggleItalic() }
+                .keyboardShortcut("i", modifiers: .command)
+                .disabled(!manager.canFormat)
+            Divider()
+            // ⌘K is free - ⇧⌘K is Add Note and stays where it is.
+            Button("Link") { manager.makeLink() }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(!manager.canFormat)
+        }
+
         CommandMenu("Annotate") {
             Button(manager.hasNoteAtCursor ? "Edit Note…" : "Add Note…") {
                 manager.addNoteAtCursor()

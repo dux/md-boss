@@ -66,6 +66,10 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.noteTooltip = { [weak coordinator = context.coordinator] charIndex in
             coordinator?.note(at: charIndex)
         }
+        textView.onFormat = { [weak textView] command in
+            guard let textView else { return }
+            context.coordinator.format(command, in: textView)
+        }
 
         textView.delegate = context.coordinator
         textView.allowsUndo = true
@@ -579,9 +583,80 @@ struct MarkdownTextView: NSViewRepresentable {
                 return true
             case #selector(NSResponder.insertBacktab(_:)):
                 return outdent(textView)
+            case #selector(NSResponder.insertNewline(_:)):
+                return continueList(textView)
             default:
                 return false
             }
+        }
+
+        /// Return on a list or a quote carries the marker down to the next line.
+        ///
+        /// Option-Return arrives as `insertNewlineIgnoringFieldEditor`, which never reaches
+        /// this switch - that is the way out when you want a plain newline.
+        private func continueList(_ textView: NSTextView) -> Bool {
+            let caret = textView.selectedRange()
+            // A Return that replaces a selection is a deletion first; let AppKit have it.
+            guard caret.length == 0 else { return false }
+
+            let number = index.line(at: caret.location)
+            guard let lineRange = index.range(ofLine: number) else { return false }
+
+            // `range(ofLine:)` carries the trailing newline; only the last line has none.
+            let contentLength = number < index.count ? lineRange.length - 1 : lineRange.length
+            let content = NSRange(location: lineRange.location, length: max(0, contentLength))
+            let line = (textView.string as NSString).substring(with: content)
+
+            switch MarkdownList.continuation(
+                for: line,
+                caretColumn: caret.location - lineRange.location,
+                insideFence: highlighter?.isInsideFence(line: number) ?? false
+            ) {
+            case .none:
+                return false
+
+            case .insert(let opener):
+                // `insertText` rather than a storage splice: it groups undo and applies the
+                // typing attributes, the same call the file drop uses.
+                textView.insertText(opener, replacementRange: caret)
+                return true
+
+            case .clear(let prefix):
+                let target = NSRange(location: lineRange.location + prefix.location, length: prefix.length)
+                guard textView.shouldChangeText(in: target, replacementString: "") else { return true }
+                textView.textStorage?.replaceCharacters(in: target, with: "")
+                textView.didChangeText()
+                return true
+            }
+        }
+
+        // MARK: Formatting
+
+        /// Cmd-B, Cmd-I and Cmd-K, arriving through the responder chain rather than from a
+        /// reference the manager holds - see `EditorTextView.markdownToggleBold`.
+        func format(_ command: FormatCommand, in textView: NSTextView) {
+            let text = textView.string as NSString
+            let selection = textView.selectedRange()
+
+            let edit: MarkdownWrap.Edit
+            switch command {
+            case .bold:
+                edit = MarkdownWrap.toggling(text, selection: selection, marker: "**")
+            case .italic:
+                edit = MarkdownWrap.toggling(text, selection: selection, marker: "_")
+            case .link:
+                // Read here and passed in, so the rule itself stays pure.
+                edit = MarkdownWrap.link(
+                    text,
+                    selection: selection,
+                    clipboard: NSPasteboard.general.string(forType: .string)
+                )
+            }
+
+            guard textView.shouldChangeText(in: edit.range, replacementString: edit.replacement) else { return }
+            textView.textStorage?.replaceCharacters(in: edit.range, with: edit.replacement)
+            textView.didChangeText()
+            textView.setSelectedRange(edit.selection)
         }
 
         private func outdent(_ textView: NSTextView) -> Bool {

@@ -432,6 +432,43 @@ Every `Kind` maps onto a token the preview already uses for the same construct, 
 the page draw one palette. The map is an exhaustive `switch`, so a new kind is a compile error
 until it is given a colour.
 
+## Typing in the raw pane
+
+Return, Cmd-B, Cmd-I and Cmd-K all live in `doCommandBy` and the responder chain rather than
+in the manager, and all of them go through `shouldChangeText` -> mutate -> `didChangeText`,
+which is the shape `outdent` already had. That is what keeps each one a single undo step, a
+single `didProcessEditing`, and therefore a single note shift and a single repaint.
+
+`MarkdownList.continuation` decides what Return does, purely. It is handed whether the line is
+inside a fence, because `- ` inside ``` is code and Return there is only a newline - the answer
+comes from `MarkdownHighlighter.fences`, which is why that vector exists. Option-Return arrives
+as `insertNewlineIgnoringFieldEditor` and never reaches the switch, so there is always a way to
+get a plain newline.
+
+Ordered lists increment rather than renumber: renumbering rewrites lines nobody touched, makes
+one undo step span the whole list, and CommonMark renders `1. 1. 1.` correctly anyway. A task
+always continues as `[ ]` - carrying `[x]` forward would tick a box nobody has done. An empty
+item sheds its marker instead of growing another, at any depth; Shift-Tab is the explicit
+outdent, so Return does not need to be two rules.
+
+`MarkdownList.markerEnd` is shared with `MarkdownSyntax`, which needs the same answer to paint
+a marker that this needs to continue one. Two ideas of what a bullet is would drift.
+
+**The Format menu reaches the editor through the responder chain.** `MdBossManager` holds no
+reference to a text view - that would be a second copy of "who has focus", it goes stale, and
+it would have to be taught about a second pane or a second window. `NSApp.sendAction(_:to: nil,
+from: nil)` asks AppKit, which already keeps the one authoritative answer. `EditorTextView`
+carries the `@objc` actions because it is the object AppKit can reach; it decides nothing, the
+same way it decides nothing about a file drop.
+
+They have to be real menu items: a menu shortcut is matched *before* the responder chain, so a
+bare Cmd-B with no menu item would never arrive at all.
+
+`MarkdownWrap` returns one replacement over one range, never several. Whitespace migrates
+outside the markers, because `**foo **` renders literally. The clipboard is read at the call
+site and passed in, so the rule itself stays pure - the same discipline `NoteSections.partition`
+follows with its roots.
+
 ## Scroll sync runs on source lines, not on percentages
 
 Every block in the preview carries a `data-line`, so the two panes agree on positions rather
@@ -516,6 +553,7 @@ Plus rename and Move to Trash in the sidebar, both routed through the pass that 
 repointed links after a move.
 
 Plus markdown syntax highlighting in the raw pane, on the same palette the preview draws.
+Plus Return continuing a list, and a Format menu for bold, italic and link.
 
 Still open, from phase 5-6 of the plan:
 a new folder in the sidebar, moving folders rather than files, rewriting the moved file's
