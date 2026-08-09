@@ -220,19 +220,22 @@ enum MarkdownLinks {
 
     /// Every inline link and image destination in `text`, in source order.
     ///
-    /// Hand-rolled rather than a regular expression, because none of the four things that
-    /// have to be right here are regular: link text nests (`[see ![x](a.png)](b.md)`), a
-    /// destination can carry balanced parentheses, a code span closes only on a backtick
-    /// run of its own length, and fences are line state. A regex gets each of those wrong,
-    /// and the failure mode - silently rewriting a link inside a fenced block - is the
-    /// worst one a file mover has.
+    /// The rules it walks by - fences, code spans, bracket matching, destination parsing -
+    /// live in `MarkdownScan`, shared with the editor's highlighter. None of the four is
+    /// regular: link text nests (`[see ![x](a.png)](b.md)`), a destination can carry balanced
+    /// parentheses, a code span closes only on a backtick run of its own length, and fences
+    /// are line state. A regex gets each of those wrong, and the failure mode - silently
+    /// rewriting a link inside a fenced block - is the worst one a file mover has.
+    ///
+    /// The traversal stays here rather than being shared: this one skips a fenced block
+    /// whole, and the highlighter has to colour it.
     ///
     /// Deliberately not handled: reference definitions (`[id]: ./x.md`) and four-space
     /// indented code. Inside a list `    [a](b.md)` is an ordinary paragraph line, and
     /// skipping real links is the worse error.
     static func destinations(in text: String) -> [Destination] {
         var found: [Destination] = []
-        var fence: (marker: Character, length: Int)?
+        var fence: MarkdownScan.Fence?
         var index = text.startIndex
         var atLineStart = true
 
@@ -243,11 +246,11 @@ enum MarkdownLinks {
                 let next = end < text.endIndex ? text.index(after: end) : text.endIndex
 
                 if let open = fence {
-                    if closesFence(line, open) { fence = nil }
+                    if MarkdownScan.closesFence(line, open) { fence = nil }
                     index = next
                     continue
                 }
-                if let opened = opensFence(line) {
+                if let opened = MarkdownScan.opensFence(line) {
                     fence = opened
                     index = next
                     continue
@@ -262,7 +265,7 @@ enum MarkdownLinks {
                 index = text.index(index, offsetBy: 2, limitedBy: text.endIndex) ?? text.endIndex
 
             case "`":
-                index = skippingCodeSpan(text, from: index)
+                index = MarkdownScan.skippingCodeSpan(text, from: index)
 
             case "[", "!":
                 let open = character == "!" ? text.index(after: index) : index
@@ -291,10 +294,10 @@ enum MarkdownLinks {
     ) -> String.Index {
         let resume = text.index(after: open)
 
-        guard let close = matchingBracket(text, from: open) else { return resume }
+        guard let close = MarkdownScan.matchingBracket(text, from: open) else { return resume }
         let afterClose = text.index(after: close)
         guard afterClose < text.endIndex, text[afterClose] == "(",
-              let parsed = parsingDestination(text, from: afterClose) else { return resume }
+              let parsed = MarkdownScan.parsingDestination(text, from: afterClose) else { return resume }
 
         found.append(Destination(range: parsed.range, raw: parsed.raw, isImage: isImage))
 
@@ -308,158 +311,5 @@ enum MarkdownLinks {
             found.append(Destination(range: lower..<upper, raw: nested.raw, isImage: nested.isImage))
         }
         return parsed.end
-    }
-
-    /// The `]` closing the `[` at `open`, honouring nesting, escapes and code spans.
-    private static func matchingBracket(_ text: String, from open: String.Index) -> String.Index? {
-        var depth = 1
-        var index = text.index(after: open)
-
-        while index < text.endIndex {
-            switch text[index] {
-            case "\\":
-                index = text.index(index, offsetBy: 2, limitedBy: text.endIndex) ?? text.endIndex
-                continue
-            case "`":
-                index = skippingCodeSpan(text, from: index)
-                continue
-            case "[":
-                depth += 1
-            case "]":
-                depth -= 1
-                if depth == 0 { return index }
-            default:
-                break
-            }
-            index = text.index(after: index)
-        }
-        return nil
-    }
-
-    /// Parses `(dest)` or `(dest "title")` starting at the opening parenthesis.
-    private static func parsingDestination(
-        _ text: String,
-        from paren: String.Index
-    ) -> (range: Range<String.Index>, raw: String, end: String.Index)? {
-        var index = skippingSpaces(text, from: text.index(after: paren))
-        guard index < text.endIndex else { return nil }
-
-        let range: Range<String.Index>
-        let raw: String
-
-        if text[index] == "<" {
-            let start = index
-            var scan = text.index(after: index)
-            while scan < text.endIndex, text[scan] != ">" {
-                if text[scan] == "\\" {
-                    scan = text.index(scan, offsetBy: 2, limitedBy: text.endIndex) ?? text.endIndex
-                    continue
-                }
-                scan = text.index(after: scan)
-            }
-            guard scan < text.endIndex else { return nil }
-            raw = String(text[text.index(after: start)..<scan])
-            index = text.index(after: scan)
-            range = start..<index
-        } else {
-            let start = index
-            var depth = 0
-            while index < text.endIndex {
-                let character = text[index]
-                if character == "\\" {
-                    index = text.index(index, offsetBy: 2, limitedBy: text.endIndex) ?? text.endIndex
-                    continue
-                }
-                if character.isWhitespace { break }
-                if character == "(" { depth += 1 }
-                if character == ")" {
-                    if depth == 0 { break }
-                    depth -= 1
-                }
-                index = text.index(after: index)
-            }
-            raw = String(text[start..<index])
-            range = start..<index
-        }
-
-        index = skippingSpaces(text, from: index)
-        index = skippingTitle(text, from: index)
-        index = skippingSpaces(text, from: index)
-
-        guard index < text.endIndex, text[index] == ")" else { return nil }
-        return (range, raw, text.index(after: index))
-    }
-
-    private static func skippingSpaces(_ text: String, from index: String.Index) -> String.Index {
-        var scan = index
-        while scan < text.endIndex, text[scan].isWhitespace { scan = text.index(after: scan) }
-        return scan
-    }
-
-    private static func skippingTitle(_ text: String, from index: String.Index) -> String.Index {
-        guard index < text.endIndex else { return index }
-        let closer: Character
-        switch text[index] {
-        case "\"": closer = "\""
-        case "'": closer = "'"
-        case "(": closer = ")"
-        default: return index
-        }
-
-        var scan = text.index(after: index)
-        while scan < text.endIndex, text[scan] != closer {
-            if text[scan] == "\\" {
-                scan = text.index(scan, offsetBy: 2, limitedBy: text.endIndex) ?? text.endIndex
-                continue
-            }
-            scan = text.index(after: scan)
-        }
-        return scan < text.endIndex ? text.index(after: scan) : index
-    }
-
-    /// A code span closes on a backtick run of exactly the opening run's length. An
-    /// unmatched run is literal text, so scanning resumes right after it.
-    private static func skippingCodeSpan(_ text: String, from index: String.Index) -> String.Index {
-        var scan = index
-        var opening = 0
-        while scan < text.endIndex, text[scan] == "`" {
-            opening += 1
-            scan = text.index(after: scan)
-        }
-
-        var search = scan
-        while search < text.endIndex {
-            guard text[search] == "`" else {
-                search = text.index(after: search)
-                continue
-            }
-            var run = 0
-            var end = search
-            while end < text.endIndex, text[end] == "`" {
-                run += 1
-                end = text.index(after: end)
-            }
-            if run == opening { return end }
-            search = end
-        }
-        return scan
-    }
-
-    // MARK: - Fences
-
-    private static func opensFence(_ line: Substring) -> (marker: Character, length: Int)? {
-        let body = line.drop { $0 == " " }
-        guard line.count - body.count <= 3, let marker = body.first, marker == "`" || marker == "~" else { return nil }
-
-        let length = body.prefix { $0 == marker }.count
-        return length >= 3 ? (marker, length) : nil
-    }
-
-    private static func closesFence(_ line: Substring, _ fence: (marker: Character, length: Int)) -> Bool {
-        let body = line.drop { $0 == " " }
-        guard line.count - body.count <= 3 else { return false }
-
-        let run = body.prefix { $0 == fence.marker }
-        return run.count >= fence.length && body.dropFirst(run.count).allSatisfy(\.isWhitespace)
     }
 }
