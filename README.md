@@ -121,8 +121,11 @@ in `settings.json` turns the whole thing off.
 
 | | |
 |---|---|
-| ⌘O | add a folder to the sidebar |
-| ⌘1 ⌘2 ⌘3 | toggle the raw, preview and notes panes |
+| ⌘N | new file in the sidebar folder |
+| ⌘O | add a folder to the sidebar (several at once) |
+| ⇧⌘O | open a single file |
+| ⇧⌘R | reveal the selection in Finder |
+| ⌥⌘R ⌥⌘V ⌥⌘N | toggle the raw, preview and notes panes |
 | ⌘\ | raw and preview side by side |
 | ⇧⌘K | add or edit a note on the current line |
 | ⇧⌘⌫ | delete the note on the current line |
