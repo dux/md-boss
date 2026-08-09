@@ -25,7 +25,7 @@ the source tree.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh?v=43a3415 | bash
 ```
 
 Downloads the latest build, unpacks it into `/Applications` and opens it.
