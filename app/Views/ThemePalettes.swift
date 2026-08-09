@@ -45,6 +45,12 @@ extension Theme {
         .tableHead:     "#EDE5D4",
         .rule:          "#E3D9C6",
 
+        .alertNote:      "#2F5D8C",
+        .alertTip:       "#4C6B3C",
+        .alertImportant: "#6D4C9F",
+        .alertWarning:   "#8A5A20",
+        .alertCaution:   "#A03E52",
+
         .hlKeyword:     "#A03E52",
         .hlString:      "#4C6B3C",
         .hlNumber:      "#8A5A20",
@@ -75,6 +81,12 @@ extension Theme {
         .tableStripe:   "#232019",
         .tableHead:     "#2B2722",
         .rule:          "#38342E",
+
+        .alertNote:      "#8FBBDE",
+        .alertTip:       "#A3C48A",
+        .alertImportant: "#C0A6E8",
+        .alertWarning:   "#E0B87A",
+        .alertCaution:   "#E88B9A",
 
         .hlKeyword:     "#E88B9A",
         .hlString:      "#A3C48A",
@@ -110,6 +122,14 @@ extension Theme {
         .tableHead:     "#EBE4D0",
         .rule:          "#E0D9C2",
 
+        // Solarized's accents are a terminal contrast: blue lands at 3.4:1 on base3 and
+        // yellow at 3.0:1. Lifted along lightness, hue and saturation held.
+        .alertNote:      "#2074AF",
+        .alertTip:       "#667500",
+        .alertImportant: "#6166C0",
+        .alertWarning:   "#8C6A00",
+        .alertCaution:   "#D72724",
+
         .hlKeyword:     "#859900",
         .hlString:      "#2AA198",
         .hlNumber:      "#D33682",
@@ -140,6 +160,13 @@ extension Theme {
         .tableStripe:   "#05303B",
         .tableHead:     "#083C48",
         .rule:          "#0E4451",
+
+        .alertNote:      "#58A6DE",
+        .alertTip:       "#859900",
+        .alertImportant: "#9A9AE0",
+        .alertWarning:   "#B58900",
+        // Solarized red on base03 is 3.3:1 - the one accent that has to come up here.
+        .alertCaution:   "#E56866",
 
         .hlKeyword:     "#859900",
         .hlString:      "#2AA198",
@@ -174,6 +201,13 @@ extension Theme {
         .tableHead:     "#EAEEF2",
         .rule:          "#D0D7DE",
 
+        // Primer ships these five for its own alerts, and they already clear the gate.
+        .alertNote:      "#0550AE",
+        .alertTip:       "#116329",
+        .alertImportant: "#8250DF",
+        .alertWarning:   "#9A6700",
+        .alertCaution:   "#CF222E",
+
         .hlKeyword:     "#CF222E",
         .hlString:      "#0A3069",
         .hlNumber:      "#0550AE",
@@ -207,6 +241,14 @@ extension Theme {
         .tableHead:     "#3F4757",
         .rule:          "#434C5E",
 
+        .alertNote:      "#81A1C1",
+        .alertTip:       "#A3BE8C",
+        // nord15 and nord11 both sit under the gate on nord0; lifted, not swapped for
+        // another hue - Aurora only has the one purple and the one red.
+        .alertImportant: "#B793B0",
+        .alertWarning:   "#EBCB8B",
+        .alertCaution:   "#D08B91",
+
         .hlKeyword:     "#81A1C1",
         .hlString:      "#A3BE8C",
         .hlNumber:      "#B48EAD",
@@ -237,6 +279,12 @@ extension Theme {
         .tableStripe:   "#2D2F3D",
         .tableHead:     "#383B4B",
         .rule:          "#44475A",
+
+        .alertNote:      "#8BE9FD",
+        .alertTip:       "#50FA7B",
+        .alertImportant: "#BD93F9",
+        .alertWarning:   "#FFB86C",
+        .alertCaution:   "#FF5858",
 
         .hlKeyword:     "#FF79C6",
         .hlString:      "#F1FA8C",
@@ -269,6 +317,12 @@ extension Theme {
         .tableStripe:   "#2E2B2A",
         .tableHead:     "#3C3836",
         .rule:          "#3C3836",
+
+        .alertNote:      "#83A598",
+        .alertTip:       "#B8BB26",
+        .alertImportant: "#D3869B",
+        .alertWarning:   "#FABD2F",
+        .alertCaution:   "#FB5946",
 
         .hlKeyword:     "#FB4934",
         .hlString:      "#B8BB26",

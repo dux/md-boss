@@ -70,6 +70,17 @@ struct ThemeTests {
         #expect(ratio >= 4.5, "\(theme.id.rawValue) muted on bg is \(ratio):1")
     }
 
+    /// An alert draws its own title in its own colour, so all five are body text and are held
+    /// to the same 4.5:1. Every ported scheme needed at least one of them lifted.
+    @Test("alert colours clear 4.5:1 against their own background", arguments: allThemes)
+    func alertsAreReadable(theme: Theme) {
+        let alerts: [ThemeToken] = [.alertNote, .alertTip, .alertImportant, .alertWarning, .alertCaution]
+        for token in alerts {
+            let ratio = Color.contrast(theme.value(token), theme.value(.bg))
+            #expect(ratio >= 4.5, "\(theme.id.rawValue) \(token.rawValue) on bg is \(ratio):1")
+        }
+    }
+
     @Test("rootCSS emits one custom property per token plus a color-scheme")
     func rootCSSIsComplete() {
         for theme in allThemes {

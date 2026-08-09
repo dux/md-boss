@@ -72,6 +72,30 @@ hr {
   margin: 2.2em 0;
 }
 
+/* Front matter - shown, but as a label above the document rather than as part of it. Sans and
+   small, so it reads as metadata against the serif body the way the chrome does. */
+
+dl.md-front {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15em 1em;
+  margin: 0 0 2em;
+  padding-bottom: 1em;
+  border-bottom: 1px solid var(--rule);
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 0.8em;
+  font-variant-numeric: normal;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+dl.md-front dt { font-weight: 600; }
+dl.md-front dd { margin: 0; overflow-wrap: anywhere; }
+
+/* The block owns the gap below its rule. Without this the first heading adds its own 1.7em
+   on top and the document opens on a hole - the same reason #content > :first-child exists. */
+dl.md-front + * { margin-top: 0; }
+
 /* Lists */
 
 ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
@@ -161,6 +185,35 @@ blockquote {
 }
 
 blockquote > :last-child { margin-bottom: 0; }
+
+/* GFM alerts - a blockquote whose first line was `[!NOTE]`, re-tagged by the script. Upright
+   and in body ink rather than quote ink: an alert is the document raising its voice, not
+   something being quoted. One --alert indirection so the bar and the title cannot drift. */
+
+blockquote.md-alert {
+  --alert: var(--alert-note);
+  border-left-color: var(--alert);
+  color: var(--text);
+  font-style: normal;
+}
+
+blockquote.md-alert-tip       { --alert: var(--alert-tip); }
+blockquote.md-alert-important { --alert: var(--alert-important); }
+blockquote.md-alert-warning   { --alert: var(--alert-warning); }
+blockquote.md-alert-caution   { --alert: var(--alert-caution); }
+
+/* Sans and small caps, the same move the front matter block makes: this is a label on the
+   document, not a line of it. */
+.md-alert-title {
+  margin: 0 0 0.35em;
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-variant-numeric: normal;
+  color: var(--alert);
+}
 
 /* Code - mono runs larger at the same nominal size than the serif, hence 0.88em. */
 

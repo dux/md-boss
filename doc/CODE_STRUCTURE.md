@@ -311,6 +311,38 @@ was.
 Marked knows nothing about it, so it reaches the DOM as literal text at the head of the item
 and a post-render pass swaps it for the spinner `preview.css` draws.
 
+## Front matter is split off, not stripped
+
+A leading `---` block never reaches the lexer - marked reads its closing `---` as a setext
+underline and renders the whole thing as one enormous heading.
+`splitFront` takes it off the front and `toHTML` starts its line counter past it, so every
+anchor below still names its own source line.
+Blanking the lines instead would hand `blankBreaks` a run of them and open every document with
+stray `<br>`s.
+
+It is drawn rather than hidden, as a dimmed sans key/value block.
+`blockFor` gives a source line the last anchor at or before it, so with nothing above the first
+heading a note on line 2 would have no block to hang on.
+The block carries `data-line="1"` and is excluded from `tagListItems`, which matches rendered
+elements against tokens by position and would otherwise be one out of step.
+
+Parsing is one `key: value` per line, with a list under a key joined on commas. Anything deeper
+is shown as text - this is a label on the document, not a YAML implementation.
+
+## Alerts are re-tagged in the DOM
+
+`> [!NOTE]` and its four siblings, done as a post-render pass for the same reason task lists
+are: the tokens keep their raw text, so nothing below moves.
+`breaks: false`, so the marker and the body arrive as one text node split by a newline - the
+marker is a prefix to strip rather than a node to remove.
+Two spaces after the marker make it a hard break, and that `<br>` goes with it.
+
+Five hues rather than one accent, because the colour is the whole point of an alert.
+Each draws its own title, so all five are body text and `ThemeTests` holds them to 4.5:1 like
+`muted`. Every ported scheme needed at least one lifted - Solarized's blue is 3.4:1 on its own
+background and its yellow 3.0:1. Lifted along lightness with hue and saturation held, the same
+operation `doc/THEMES.md` describes for body text.
+
 ## Scroll sync runs on source lines, not on percentages
 
 Every block in the preview carries a `data-line`, so the two panes agree on positions rather
@@ -388,7 +420,10 @@ the raw pane and highlights the block in the preview, and an edit above a note t
 with it. The preview draws no marker of its own - it stays a reading surface, and opening the
 note from the pane is what points at it.
 
+Plus front matter drawn as a property block instead of lexed as a giant heading, and GFM
+alerts in five contrast-gated colours.
+
 Still open, from phase 5-6 of the plan:
 rename/delete in the sidebar, moving folders rather than files, rewriting the moved file's
-own outbound links, dropping a folder on the window, print/export, word count,
+own outbound links, dropping a folder on the window, print/export, word count, footnotes,
 clickable task lists, and `hammer gh_pub`.

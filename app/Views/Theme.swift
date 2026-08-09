@@ -28,6 +28,15 @@ enum ThemeToken: String, CaseIterable, Sendable {
     case tableHead = "table-head"
     case rule
 
+    // GFM alerts. Five hues rather than one accent, because the colour is the whole point of
+    // an alert - a caution and a tip that look alike say nothing at a glance. Each carries the
+    // title text as well as the bar, so all five are gated at 4.5:1 like `muted`.
+    case alertNote = "alert-note"
+    case alertTip = "alert-tip"
+    case alertImportant = "alert-important"
+    case alertWarning = "alert-warning"
+    case alertCaution = "alert-caution"
+
     case hlKeyword = "hl-keyword"
     case hlString = "hl-string"
     case hlNumber = "hl-number"

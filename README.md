@@ -9,9 +9,12 @@ tall fenced block or an image does not pull the two out of step.
 ⇧⌘D switches between light and dark, out of eight themes.
 The `<` and `>` arrows narrow and widen the reading column.
 
-Rendering is GitHub-flavored markdown - tables, task lists, code highlighting - done entirely
-offline by a bundled `marked.js` in an embedded web view.
+Rendering is GitHub-flavored markdown - tables, task lists, code highlighting, and `> [!NOTE]`
+alerts in five colours - done entirely offline by a bundled `marked.js` in an embedded web view.
 No network, no telemetry, no account.
+
+A leading `---` block is read as front matter and drawn as a dimmed key/value block above the
+document, rather than as the horizontal rule and giant heading markdown would make of it.
 
 The sidebar lists `.md`, `.markdown` and `.txt` files, and hides folders that have no
 documents anywhere below them, so pointing it at a source repo shows you the docs rather than

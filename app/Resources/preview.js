@@ -152,6 +152,113 @@
     });
   }
 
+  // MARK: alerts
+
+  // `> [!NOTE]` and its four siblings. A DOM pass after render rather than a lexer extension,
+  // for the same reason task lists are one: the tokens keep their raw text, so every data-line
+  // below stays exactly where it was.
+  //
+  // `breaks: false`, so the marker and the body arrive as one text node split by a newline -
+  // the marker is a prefix to strip, not a node to remove.
+  var ALERT = /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(\n|$)/;
+
+  var ALERT_TITLES = {
+    NOTE: 'Note', TIP: 'Tip', IMPORTANT: 'Important', WARNING: 'Warning', CAUTION: 'Caution'
+  };
+
+  function markAlerts() {
+    content.querySelectorAll('blockquote').forEach(function (quote) {
+      var head = quote.firstElementChild;
+      if (!head || head.tagName !== 'P') { return; }
+
+      var lead = head.firstChild;
+      if (!lead || lead.nodeType !== 3) { return; }
+
+      var match = ALERT.exec(lead.nodeValue);
+      if (!match) { return; }
+
+      // Only the marker goes. An alert whose body starts on the same paragraph keeps it; one
+      // with nothing after the marker loses the now-empty paragraph rather than an empty line.
+      lead.nodeValue = lead.nodeValue.slice(match[0].length);
+      // Two spaces after the marker make it a hard break, and the alert would open on a blank
+      // line. The marker owns that break the same way it owns its newline.
+      if (!lead.nodeValue && lead.nextSibling && lead.nextSibling.nodeName === 'BR') {
+        lead.nextSibling.remove();
+      }
+      if (!lead.nodeValue && !lead.nextSibling) { head.remove(); }
+
+      quote.classList.add('md-alert', 'md-alert-' + match[1].toLowerCase());
+
+      var title = document.createElement('p');
+      title.className = 'md-alert-title';
+      title.textContent = ALERT_TITLES[match[1]];
+      quote.insertBefore(title, quote.firstChild);
+    });
+  }
+
+  // MARK: front matter
+
+  // `key: value` in a leading `---` block. Deliberately shallow - a nested map or a block
+  // scalar is shown as text rather than parsed. This is a reading affordance, not YAML.
+  var FRONT_PAIR = /^([^:\s][^:]*):(?:[ \t]+(.*))?$/;
+
+  function escapeHTML(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // A `---` block at the very top of the file. Null for anything else, a `---` with no closer
+  // included - that is a thematic break and has always rendered as one.
+  //
+  // Split off rather than stripped, with `toHTML` starting its line counter past it. Blanking
+  // the lines instead would hand `blankBreaks` a run of them and open every document with
+  // stray <br>s.
+  function splitFront(source) {
+    var lines = source.split('\n');
+    if (lines[0].trim() !== '---') { return null; }
+
+    for (var i = 1; i < lines.length; i += 1) {
+      var edge = lines[i].trim();
+      if (edge !== '---' && edge !== '...') { continue; }
+      return {
+        pairs: frontPairs(lines.slice(1, i)),
+        lines: i + 1,
+        body: lines.slice(i + 1).join('\n')
+      };
+    }
+    return null;
+  }
+
+  // A line that is not `key: value` continues the value above it, which is what a list or a
+  // wrapped string looks like from here. One with nothing above it is dropped.
+  function frontPairs(lines) {
+    var pairs = [];
+    lines.forEach(function (line) {
+      var pair = FRONT_PAIR.exec(line);
+      if (pair) {
+        pairs.push({ key: pair[1].trim(), value: (pair[2] || '').trim() });
+      } else if (pairs.length && line.trim()) {
+        // A list under a key reads as a list; anything else is a scalar that wrapped, so it
+        // joins back on a space. The dash belongs to the syntax, not to the value.
+        var item = /^-[ \t]+(.*)$/.exec(line.trim());
+        var last = pairs[pairs.length - 1];
+        var text = item ? item[1] : line.trim();
+        last.value = last.value ? last.value + (item ? ', ' : ' ') + text : text;
+      }
+    });
+    return pairs;
+  }
+
+  // Drawn rather than hidden: `blockFor` gives a source line the last anchor at or before it,
+  // so with nothing above the first heading a note on line 2 would have no block to hang on.
+  function frontHTML(front) {
+    if (!front.pairs.length) { return ''; }
+
+    var rows = front.pairs.map(function (pair) {
+      return '<dt>' + escapeHTML(pair.key) + '</dt><dd>' + escapeHTML(pair.value) + '</dd>';
+    });
+    return '<dl class="md-front" data-line="1">' + rows.join('') + '</dl>';
+  }
+
   // MARK: source lines
 
   function newlines(text) {
@@ -183,21 +290,24 @@
   }
 
   function toHTML(source) {
-    source = expandTasks(source);
+    // Front matter is not markdown and never reaches the lexer; the counter starts past it so
+    // every anchor below still names its own source line.
+    var front = splitFront(source);
+    var body = expandTasks(front ? front.body : source);
 
-    var tokens = marked.lexer(source);
+    var tokens = marked.lexer(body);
     var stamped = [];
-    var html = '';
+    var html = front ? frontHTML(front) : '';
     var cursor = 0;
-    var line = 1;
+    var line = front ? 1 + front.lines : 1;
 
     tokens.forEach(function (token) {
       // Found back in the source rather than measured by adding up token.raw: link
       // reference definitions are lifted out of the stream entirely, and a running total
       // would swallow their lines and shift every block below them.
-      var at = source.indexOf(token.raw, cursor);
+      var at = body.indexOf(token.raw, cursor);
       if (at < 0) { at = cursor; }
-      line += newlines(source.slice(cursor, at));
+      line += newlines(body.slice(cursor, at));
       cursor = at + token.raw.length;
 
       var start = line;
@@ -229,7 +339,9 @@
   // order against the tokens that actually produced an anchor, which stays correct even
   // when a raw-HTML token emits several top-level elements.
   function tagListItems(stamped) {
-    var elements = content.querySelectorAll(':scope > [data-line]');
+    // The front matter block carries an anchor but came from no token, so it would put every
+    // element one position out of step with `stamped`.
+    var elements = content.querySelectorAll(':scope > [data-line]:not(.md-front)');
 
     stamped.forEach(function (entry, position) {
       var node = elements[position];
@@ -394,6 +506,8 @@
     marked.setOptions({ gfm: true, breaks: false, pedantic: false });
     toHTML(source);
 
+    // After toHTML, so the anchors are already stamped and nothing here can move them.
+    markAlerts();
     assignSlugs();
     rewriteLocalImages();
     highlight();
