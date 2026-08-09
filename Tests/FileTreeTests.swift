@@ -278,3 +278,78 @@ enum Fixture {
         try? FileManager.default.removeItem(at: url)
     }
 }
+
+@Suite("Walking a whole project")
+struct FileTreeDocumentsTests {
+    private func names(_ root: URL, skip: Set<String> = ["node_modules"]) -> [String] {
+        FileTree.documents(under: root, skipFolders: skip).map(\.lastPathComponent)
+    }
+
+    @Test("documents at the root and in every subtree are all found")
+    func findsEverywhere() throws {
+        let root = try Fixture.make([
+            "top.md": "a",
+            "one/a.md": "a",
+            "one/deep/b.md": "b",
+            "two/c.markdown": "c",
+            "two/notes.txt": "d"
+        ])
+        defer { Fixture.remove(root) }
+
+        #expect(Set(names(root)) == ["top.md", "a.md", "b.md", "c.markdown", "notes.txt"])
+    }
+
+    /// The split at the top level must not change which folders are skipped, at either depth.
+    @Test("skipped folders are skipped at the top and further down")
+    func honoursSkipFolders() throws {
+        let root = try Fixture.make([
+            "node_modules/vendored.md": "no",
+            "one/node_modules/also.md": "no",
+            "one/yes.md": "yes"
+        ])
+        defer { Fixture.remove(root) }
+
+        #expect(names(root) == ["yes.md"])
+    }
+
+    @Test("files the sidebar would not list are left out")
+    func onlyDocuments() throws {
+        let root = try Fixture.make(["one/a.md": "a", "one/b.swift": "b", "c.png": "c"])
+        defer { Fixture.remove(root) }
+
+        #expect(names(root) == ["a.md"])
+    }
+
+    /// The walk runs one subtree per core, and results that shuffled between runs would make
+    /// search results jump around between keystrokes.
+    @Test("the same tree answers in the same order every time")
+    func deterministic() throws {
+        let root = try Fixture.make(Dictionary(
+            uniqueKeysWithValues: (0..<12).flatMap { dir in
+                (0..<4).map { file in ("d\(dir)/sub/f\(file).md", "x") }
+            }
+        ))
+        defer { Fixture.remove(root) }
+
+        let first = FileTree.documents(under: root, skipFolders: []).map(\.path)
+        #expect(first.count == 48)
+        for _ in 0..<5 {
+            #expect(FileTree.documents(under: root, skipFolders: []).map(\.path) == first)
+        }
+    }
+
+    @Test("a folder with nothing in it is not an error")
+    func empty() throws {
+        let root = try Fixture.make([:])
+        defer { Fixture.remove(root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        #expect(FileTree.documents(under: root, skipFolders: []).isEmpty)
+    }
+
+    @Test("a folder that is not there answers empty rather than trapping")
+    func missing() {
+        let gone = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("md-boss-gone-\(UUID())")
+        #expect(FileTree.documents(under: gone, skipFolders: []).isEmpty)
+    }
+}

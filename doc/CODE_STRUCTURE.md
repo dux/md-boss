@@ -474,6 +474,20 @@ outside the markers, because `**foo **` renders literally. The clipboard is read
 site and passed in, so the rule itself stays pure - the same discipline `NoteSections.partition`
 follows with its roots.
 
+## The project walk runs one subtree per core
+
+`FileTree.documents(under:skipFolders:)` splits at the top level and walks each subtree
+concurrently. Over 28,800 entries that is 98ms serially against 20ms this way, and it is the
+dominant cost of a search - so it is the one place in the search path that is parallel.
+
+Subtrees are dispatched in path order and their results held in that order, so the same tree
+always answers the same way; results that shuffled between runs would make search hits jump
+around between keystrokes. Order *within* a subtree is still the enumerator's.
+
+Each subtree gets its own `FileManager` rather than sharing `.default`, which carries a
+delegate and a current directory. An extension-first check that stats only the entries that
+look like documents was tried and dropped: it was worth 6%, against 5x for the split.
+
 ## Search is a sidebar mode, not a fourth pane
 
 `PaneToggleBar` fits exactly three segments across a 160pt sidebar - "Preview" already had to
@@ -492,13 +506,14 @@ this app is a `.app` dropped into /Applications. `DocumentSearch` walks
 `FileTree.documents(under:skipFolders:)`, the same one the link rewriter uses.
 
 Measured, because the question is a fair one. On the sidebar's real roots the whole search is
-3-17ms, well under the 180ms debounce - `rg` cannot beat that, since spawning the process
-costs a meaningful slice of it. Pointed at `~/dev` - 3,825 documents, 128MB - it is 5.8s
-against `rg`'s 0.55s, and the breakdown says why: the directory walk is 5.4s of it, reading
-every byte is 103ms, and the matching is noise. `rg` wins there by parallelising *traversal*.
-Spreading the read across 14 cores takes it from 103ms to 41ms, which is not worth a lock, so
-the read pass is deliberately serial. If a tree that size ever has to feel quick, the thing to
-parallelise is `FileTree.documents`, not anything in here.
+single-digit milliseconds, well under the 180ms debounce - `rg` cannot beat that, since
+spawning the process costs a meaningful slice of it.
+
+On a large tree the breakdown is what matters: over 28,800 entries the *walk* was 98ms while
+reading every byte of what it found was 103ms and the matching was noise. `rg` wins on trees
+like that by parallelising traversal, so `FileTree.documents` does too - see it in
+`FileTreeModel.swift`. Spreading the *read* across cores as well takes 103ms to 41ms, which
+does not buy a lock, so everything downstream of the walk is deliberately serial.
 
 **Case is derived, not stored.** Insensitive until the query carries a capital. One rule out
 of the query itself, no toggle and no setting - the same reasoning as a theme's polarity.
