@@ -24,6 +24,10 @@ Return continues a list, a quote or a task - unchecked, whatever the line above 
 empty item sheds its marker rather than growing another. Inside a fenced block Return is just
 a newline. ⌥Return always is.
 
+⇧⌘F searches every document in the folder, ⌘P jumps to one by name. Both take the sidebar
+over rather than opening a pane, and Esc gives it back.
+Search is case-insensitive until you type a capital.
+
 The sidebar lists `.md`, `.markdown` and `.txt` files, and hides folders that have no
 documents anywhere below them, so pointing it at a source repo shows you the docs rather than
 the source tree.
@@ -172,6 +176,8 @@ in `settings.json` turns the whole thing off.
 | ⌘⌫ | move the selected file to the Trash |
 | ⌥⌘R ⌥⌘V ⌥⌘N | toggle the raw, preview and notes panes |
 | ⌘\ | raw and preview side by side |
+| ⇧⌘F | find in every document under the sidebar folder |
+| ⌘P | go to a file by name |
 | ⌘B / ⌘I | bold or italic the selection, or the word under the caret |
 | ⌘K | make a link - a URL on the clipboard becomes the destination |
 | ⇧⌘K | add or edit a note on the current line |
@@ -181,7 +187,7 @@ in `settings.json` turns the whole thing off.
 | ⎋ | cancel a pending Cut in the sidebar |
 | ⌘+ / ⌘- / ⌥⌘0 | text size (⌥⌘0 also resets the column width) |
 | ⌘S | save |
-| ⌘F | find |
+| ⌘F | find in the open document |
 | ↑ ↓ ← → | move through the sidebar; type a name to jump to it |
 
 ## Configuration

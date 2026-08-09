@@ -123,6 +123,20 @@ struct MdBossCommands: Commands {
                 .disabled(!manager.canSave)
         }
 
+        // SwiftUI supplies a Print item here by default, and it would take ⌘P off Go to File.
+        // Print and export are still on the list, so nothing is lost by clearing it.
+        CommandGroup(replacing: .printItem) {}
+
+        CommandMenu("Find") {
+            // ⌘F stays the raw pane's own find bar - one document, incremental, AppKit's.
+            Button("Find in Project…") { manager.findInProject() }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+                .disabled(!manager.canSearch)
+            Button("Go to File…") { manager.goToFile() }
+                .keyboardShortcut("p", modifiers: .command)
+                .disabled(!manager.canSearch)
+        }
+
         CommandMenu("Format") {
             Button("Bold") { manager.toggleBold() }
                 .keyboardShortcut("b", modifiers: .command)

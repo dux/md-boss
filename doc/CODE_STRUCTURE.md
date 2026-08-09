@@ -22,6 +22,10 @@ app/
     MarkdownScan.swift     the rules both scanners share: fences, code spans, links
     MarkdownSyntax.swift   one line of source -> the spans the raw pane paints
     FileMove.swift         move and rename validation, and the rewrite plan
+    DocumentSearch.swift   full-text search across a root, pure and cancellable
+    FuzzyMatch.swift       the Go to File scorer
+    SidebarSearch.swift    the sidebar's two search modes and their state
+    MdBossManagerSearch.swift    extension: opening what a search found
     RootFoldersManager.swift     the sidebar's root folders, stored in roots.txt, MRU-ordered
     ScrollSync.swift       raw <-> preview scroll sync, last-driver-wins
     FileTreeModel.swift    FileNode/FlatRow, lazy listing, expansion, flattening
@@ -44,6 +48,7 @@ app/
     NotesPane.swift        notes in three scopes: file, project, all projects
     StatusBarView.swift    footer: the Save button, the path, right-click to copy
     SidebarView.swift      pane toggles, root select box, tree, keyboard navigation
+    SearchPane.swift       the search field and the two result lists
     SidebarRow.swift       one flattened row
     RootPicker.swift       the root folder select box and its dropdown
     DocumentPane.swift     preview / editor / split, gated on width
@@ -469,6 +474,51 @@ outside the markers, because `**foo **` renders literally. The clipboard is read
 site and passed in, so the rule itself stays pure - the same discipline `NoteSections.partition`
 follows with its roots.
 
+## Search is a sidebar mode, not a fourth pane
+
+`PaneToggleBar` fits exactly three segments across a 160pt sidebar - "Preview" already had to
+become "View" to make three fit - and a `Pane` is *persisted* through `visiblePanes`, which a
+query must never be. So Find in Project and Go to File take the tree area over the way
+`RootPickerBox` already takes it over, and nothing about `SettingsData` changes.
+
+⌘F stays AppKit's own find bar in the raw pane: one document, incremental. ⇧⌘F is the project.
+⌘P is Go to File, which needs `CommandGroup(replacing: .printItem) {}` - SwiftUI supplies a
+Print item by default and it would otherwise own that key.
+
+**No shell-out to ripgrep.** It is not on a stock macOS, and this app is a `.app` dropped into
+/Applications - a feature that silently does not exist on a clean machine is worse than one
+that always works. More than that, `rg` obeys `.gitignore` while the sidebar obeys
+`skipFolders` and `documentExtensions`: two different answers to "which files does this app
+show you" is exactly the duplicated fact the rest of this document is about. `DocumentSearch`
+walks `FileTree.documents(under:skipFolders:)`, the same one the link rewriter uses.
+
+**Case is derived, not stored.** Insensitive until the query carries a capital. One rule out
+of the query itself, no toggle and no setting - the same reasoning as a theme's polarity.
+
+**Cancellation has one trap in it.** `Task.detached` does *not* inherit cancellation, so the
+handle kept in `SidebarSearch` has to be the detached task itself; cancelling an enclosing one
+would leave the walk running while the next keystroke started a second beside it. The debounce
+sleeps *inside* that task, so a superseded query never reaches the disk, and `isCancelled` is
+polled between files so one that got going dies within a single file's work. A late result is
+dropped by comparing its query against the live one - a task can finish between the
+cancellation check and the hop back to the main actor.
+
+`DocumentSearch.matches` cuts lines by scanning UTF-16 for `\n`, the way `LineIndex` does, and
+deliberately not with `split(separator: "\n")`. `\r\n` is a single `Character` in Swift, so
+splitting on the Character `\n` does not divide a CRLF file at all and every hit in one would
+report line 1. Files here are read straight off disk, so CRLF is a real input - unlike
+everywhere else in the app, where `MarkdownDocument` has already normalised it.
+
+**`FuzzyMatch` is a full alignment, not a greedy walk.** Greedy takes the first place each
+character fits, and that gets the ordering wrong in the case the feature exists for: `mtv`
+against `app/Models/MarkdownDocumentValue.swift` seizes the `M` of `Models`, scores a lucky
+consecutive `tV`, and beats the `MarkdownTextView` anyone typing `mtv` meant. The weights are
+fzy's, and the order between them is the design - consecutive has to outrank a word boundary
+or `n-o-t-e.md` wins over `notes.md`.
+
+A hit opens through `go(toLine:)`, the same path a note takes, so it forces the raw pane open
+when neither document pane is up and lands with the same band. Nothing new on that path.
+
 ## Scroll sync runs on source lines, not on percentages
 
 Every block in the preview carries a `data-line`, so the two panes agree on positions rather
@@ -554,6 +604,7 @@ repointed links after a move.
 
 Plus markdown syntax highlighting in the raw pane, on the same palette the preview draws.
 Plus Return continuing a list, and a Format menu for bold, italic and link.
+Plus Find in Project and Go to File, as modes of the sidebar.
 
 Still open, from phase 5-6 of the plan:
 a new folder in the sidebar, moving folders rather than files, rewriting the moved file's

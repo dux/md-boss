@@ -7,7 +7,10 @@ struct SidebarView: View {
     private let folders = RootFoldersManager.shared
     private let manager = MdBossManager.shared
 
+    private let search = SidebarSearch.shared
+
     @FocusState private var isFocused: Bool
+    @FocusState private var isSearchFocused: Bool
     @State private var typeAhead = ""
     @State private var typeAheadReset: Task<Void, Never>?
     @State private var pickerIsOpen = false
@@ -27,20 +30,39 @@ struct SidebarView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 6)
 
-            RootPickerBox(isOpen: $pickerIsOpen)
-                .padding(.horizontal, 8)
-                .padding(.bottom, 6)
+            Group {
+                if search.isActive {
+                    SearchField(isFocused: $isSearchFocused)
+                } else {
+                    RootPickerBox(isOpen: $pickerIsOpen)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 6)
 
             Group {
-                if tree.rows.isEmpty {
-                    EmptyPane(theme: theme, message: emptyMessage)
-                        .contentShape(Rectangle())
-                        .contextMenu { blankMenu }
-                } else {
-                    list
+                switch search.mode {
+                case .text:
+                    SearchResultsList()
+                case .files:
+                    FileResultsList()
+                case .tree:
+                    if tree.rows.isEmpty {
+                        EmptyPane(theme: theme, message: emptyMessage)
+                            .contentShape(Rectangle())
+                            .contextMenu { blankMenu }
+                    } else {
+                        list
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        // The field owns the keyboard while it is up, so the tree's bare-key handling has to
+        // stand down rather than fire alongside it.
+        .onChange(of: search.isActive) { _, isActive in
+            isSearchFocused = isActive
+            if !isActive { isFocused = true }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme[.sidebarBg])
@@ -225,6 +247,8 @@ struct SidebarView: View {
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
         guard press.modifiers.isEmpty else { return .ignored }
+        // The search field has the keyboard while it is up.
+        if search.isActive { return .ignored }
         if pickerIsOpen { return handlePickerKey(press) }
 
         switch press.key {
