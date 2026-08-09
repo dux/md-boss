@@ -19,7 +19,9 @@ app/
     MdBossManagerCommands.swift  extension holding the menu-bar entry points
     MdBossManagerFiles.swift     extension: new file, cut, move, and following the moved file
     MarkdownLinks.swift    relative paths, inline link scanning, link rewriting
-    FileMove.swift         move validation and the rewrite plan
+    MarkdownScan.swift     the rules both scanners share: fences, code spans, links
+    MarkdownSyntax.swift   one line of source -> the spans the raw pane paints
+    FileMove.swift         move and rename validation, and the rewrite plan
     RootFoldersManager.swift     the sidebar's root folders, stored in roots.txt, MRU-ordered
     ScrollSync.swift       raw <-> preview scroll sync, last-driver-wins
     FileTreeModel.swift    FileNode/FlatRow, lazy listing, expansion, flattening
@@ -47,6 +49,7 @@ app/
     DocumentPane.swift     preview / editor / split, gated on width
     EditorPane.swift       editor plus the external-change banner
     MarkdownTextView.swift NSTextView bridge
+    MarkdownHighlighter.swift  paints MarkdownSyntax spans onto the text storage
     EditorTextView.swift   the NSTextView subclass - the raw pane's file drop target
     LineIndex.swift        line starts, bisected - the one line-number answer
     Preview/
@@ -386,6 +389,49 @@ Each draws its own title, so all five are body text and `ThemeTests` holds them 
 background and its yellow 3.0:1. Lifted along lightness with hue and saturation held, the same
 operation `doc/THEMES.md` describes for body text.
 
+## The raw pane is highlighted a line at a time
+
+`MarkdownSyntax.scan` takes one line and the fence open at its start, and answers spans plus
+the fence state after it. Line-shaped on purpose: it makes an edit's repaint cheap, and it
+keeps the UTF-16 arithmetic local, which `NSTextStorage` needs and `String.Index` is not.
+The cost is that a construct split over a line break is not coloured - a link whose `]` is on
+the next line. Legal markdown, rare in writing, and the alternative is re-reading the document
+from the top on every keystroke.
+
+Spans may overlap and later ones win: a heading emits `headingText` across its line and the
+inline pass then paints the `**bold**` inside it.
+
+The rules it reads by live in `MarkdownScan`, shared with `MarkdownLinks`. The *traversals*
+are not shared, deliberately - the rewriter skips a fenced block whole and this has to colour
+one - but neither may have its own idea of what a fence is.
+
+**The fence pass and the paint pass are separated on purpose.** On every edit the fence state
+is recomputed for the whole document, which is one predicate per line and costs nothing.
+What is *not* redone everywhere is the attribute write: that invalidates layout, and doing it
+document-wide per keystroke is what would stutter. So the paint covers the edited lines, one
+further back because an edit can join two - and everything below only when the fence state
+actually moved, which is exactly when typing ``` really did change how the rest of the file
+reads. Past `lineCeiling` the pane goes back to plain text, failing open like
+`DocumentScanner.budget`.
+
+Two things the highlighter may never do. It must not change a character: a mutation from
+`didProcessEditing` re-enters `processEditing` and traps. And it must not go through
+`shouldChangeText`, so nothing it paints reaches the undo stack - attribute-only edits post
+`.editedAttributes` and register no undo.
+
+`didProcessEditing` rebuilds the `LineIndex` unconditionally now. It used to sit behind the
+`hasNotes` guard, which would have left an unannotated document with no index to highlight
+against; the guard now wraps only the note shift.
+
+`Coordinator.appliedFont` exists because `NSTextView.font` answers nil once the storage holds
+mixed faces, which it does from the first paint - the theme guard keyed on it would never hold
+again. And `load(_:into:)` repaints explicitly, because it runs under `isSwapping` and the
+storage delegate is suppressed there.
+
+Every `Kind` maps onto a token the preview already uses for the same construct, so the pane and
+the page draw one palette. The map is an exhaustive `switch`, so a new kind is a compile error
+until it is given a colour.
+
 ## Scroll sync runs on source lines, not on percentages
 
 Every block in the preview carries a `data-line`, so the two panes agree on positions rather
@@ -468,6 +514,8 @@ alerts in five contrast-gated colours.
 
 Plus rename and Move to Trash in the sidebar, both routed through the pass that already
 repointed links after a move.
+
+Plus markdown syntax highlighting in the raw pane, on the same palette the preview draws.
 
 Still open, from phase 5-6 of the plan:
 a new folder in the sidebar, moving folders rather than files, rewriting the moved file's

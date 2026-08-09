@@ -16,6 +16,10 @@ No network, no telemetry, no account.
 A leading `---` block is read as front matter and drawn as a dimmed key/value block above the
 document, rather than as the horizontal rule and giant heading markdown would make of it.
 
+The raw pane is highlighted too, on the same palette the preview draws: markers dimmed,
+headings in the accent, code in one ink, link text apart from its destination.
+A fenced block is code all the way through, so a `#` inside one stays a `#`.
+
 The sidebar lists `.md`, `.markdown` and `.txt` files, and hides folders that have no
 documents anywhere below them, so pointing it at a source repo shows you the docs rather than
 the source tree.

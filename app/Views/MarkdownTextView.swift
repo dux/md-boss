@@ -148,8 +148,12 @@ struct MarkdownTextView: NSViewRepresentable {
     /// still differ in caret and selection, and comparing one token would leave those stale.
     private func apply(theme textView: NSTextView, _ coordinator: Coordinator) {
         let font = editorFont
-        guard textView.font != font || coordinator.appliedTheme != theme else { return }
+        // Against the coordinator's own record, not `textView.font`: that one answers nil the
+        // moment the storage holds more than one face, which it always does once the
+        // highlighter has run, and the guard would never hold again.
+        guard coordinator.appliedFont != font || coordinator.appliedTheme != theme else { return }
         coordinator.appliedTheme = theme
+        coordinator.appliedFont = font
 
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineHeightMultiple = 1.35
@@ -169,12 +173,10 @@ struct MarkdownTextView: NSViewRepresentable {
             .foregroundColor: theme.nsColor(.text),
             .paragraphStyle: paragraph
         ]
-        // Re-apply to text that is already there, not just to what gets typed next.
-        let whole = NSRange(location: 0, length: textView.string.utf16.count)
-        textView.textStorage?.addAttributes(
-            [.font: font, .foregroundColor: theme.nsColor(.text), .paragraphStyle: paragraph],
-            range: whole
-        )
+        // Re-paint what is already there, not just what gets typed next. A blanket
+        // `addAttributes` here would wipe every syntax colour on a theme or size change, so
+        // the highlighter owns this pass and lays the base down itself.
+        coordinator.repaint(textView, theme: theme, font: font, paragraph: paragraph)
     }
 
     // MARK: - Coordinator
@@ -191,6 +193,10 @@ struct MarkdownTextView: NSViewRepresentable {
         /// a switch to another one.
         var loadedURL: URL?
         var appliedTheme: Theme?
+        /// The font last applied. `NSTextView.font` cannot stand in for it - it answers nil
+        /// over mixed faces, which is every document once the highlighter has run.
+        var appliedFont: NSFont?
+        private var highlighter: MarkdownHighlighter?
         /// Line -> hover text, mirrored from the pane so the tooltip can be answered without
         /// reaching into the store on every mouse move.
         var notes: [Int: String] = [:]
@@ -270,6 +276,10 @@ struct MarkdownTextView: NSViewRepresentable {
 
             textView.undoManager?.removeAllActions()
             reindex(textView)
+            // The swap ran under `isSwapping`, which suppresses the storage delegate, so the
+            // new text has had no pass over it - a file opened into the pane would arrive
+            // uncoloured without this.
+            if let storage = textView.textStorage { highlighter?.rebuild(storage, index: index) }
             if let restore { apply(restore, to: textView) }
             // A file arriving in the pane is not the reader moving off the line a note just
             // pointed at, so this must not dismiss the landing band.
@@ -289,18 +299,45 @@ struct MarkdownTextView: NSViewRepresentable {
             changeInLength delta: Int
         ) {
             guard mask.contains(.editedCharacters), !isSwapping else { return }
-            // Asked first: a document nobody has annotated must not pay for a second index.
-            guard AnnotationStore.shared.hasNotes(for: document.url) else { return }
 
-            // `range` is in the new text; the span that was replaced is the same start with
-            // the delta undone.
-            let edit = NoteShift.Edit(
-                range: NSRange(location: range.location, length: range.length - delta),
-                length: range.length
-            )
+            // Rebuilt unconditionally now: highlighting needs it on every edit, and it used
+            // to sit behind the annotation guard below.
             let old = index
             index = LineIndex(storage.string)
-            AnnotationStore.shared.shift(document.url, from: old, to: index, after: edit)
+
+            // Still asked before the note work: a document nobody has annotated must not pay
+            // for the shift pass.
+            if AnnotationStore.shared.hasNotes(for: document.url) {
+                // `range` is in the new text; the span that was replaced is the same start
+                // with the delta undone.
+                let edit = NoteShift.Edit(
+                    range: NSRange(location: range.location, length: range.length - delta),
+                    length: range.length
+                )
+                AnnotationStore.shared.shift(document.url, from: old, to: index, after: edit)
+            }
+
+            // Attributes only, inside the same edit transaction. Nothing here touches a
+            // character, so none of it reaches the undo stack.
+            highlighter?.update(storage, edited: range, index: index)
+        }
+
+        // MARK: Highlighting
+
+        /// Lays the base attributes down and re-paints, on a theme change or a font change.
+        /// The highlighter is made here rather than in `makeNSView`, because it needs a theme
+        /// and this is the one place that has one.
+        func repaint(_ textView: NSTextView, theme: Theme, font: NSFont, paragraph: NSParagraphStyle) {
+            guard let storage = textView.textStorage else { return }
+
+            if let highlighter {
+                highlighter.theme = theme
+                highlighter.baseFont = font
+                highlighter.paragraph = paragraph
+            } else {
+                highlighter = MarkdownHighlighter(theme: theme, baseFont: font, paragraph: paragraph)
+            }
+            highlighter?.rebuild(storage, index: index)
         }
 
         /// The note on the line a character index falls on, for the hover tooltip.
