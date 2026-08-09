@@ -76,6 +76,7 @@ struct MarkdownLinkTargetTests {
 }
 
 @Suite("Local file scheme")
+@MainActor
 struct LocalFileSchemeHandlerTests {
     @Test("paths round-trip through the base64url encoding")
     func roundTripsPaths() {
@@ -102,6 +103,7 @@ struct LocalFileSchemeHandlerTests {
 }
 
 @Suite("Preview page")
+@MainActor
 struct MarkdownPageBuilderTests {
     @Test("bundled resources are present in the module bundle")
     func bundlesResources() {
