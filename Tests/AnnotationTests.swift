@@ -434,6 +434,35 @@ struct NoteRepointTests {
     }
 }
 
+@Suite("Dropping notes on a trashed file")
+struct NoteRemovalTests {
+    private let file = AnnotationFile(notes: [
+        Note(path: "~/work/a.md", line: 3, title: "Third"),
+        Note(path: "~/work/a.md", line: 9, body: "Ninth"),
+        Note(path: "~/work/b.md", line: 1, title: "Other")
+    ])
+
+    @Test("every note on the file goes, and nothing else does")
+    func removesMatches() throws {
+        let kept = try #require(file.removing(path: "~/work/a.md"))
+
+        #expect(kept.notes.map(\.path) == ["~/work/b.md"])
+        #expect(kept.notes.map(\.line) == [1])
+    }
+
+    /// Left behind, these would sit in the pane forever, one click from nothing.
+    @Test("removing the only annotated file empties the store")
+    func emptiesWhenLast() throws {
+        let single = AnnotationFile(notes: [Note(path: "~/work/a.md", line: 1)])
+        #expect(try #require(single.removing(path: "~/work/a.md")).isEmpty)
+    }
+
+    @Test("a file with nothing on that path is not rewritten at all")
+    func nilWhenUnaffected() {
+        #expect(file.removing(path: "~/work/gone.md") == nil)
+    }
+}
+
 @Suite("One note per line across stores")
 struct NoteStoreDedupTests {
     /// The shape the bug left behind: annotated while the file was outside every root, so a

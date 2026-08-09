@@ -99,8 +99,19 @@ link text nests, destinations carry balanced parentheses, a code span closes onl
 backtick run of its own length, and fences are line state.
 A link inside a fenced block is left alone.
 
-Moving is not undoable - ⌘Z belongs to the editor and undoes text, not the filesystem.
+Renaming does the same thing - a rename is a move that stays in its folder, so it runs the
+same pass and every link to the file follows the new name.
+A name that would move the file, hide it, or land on one that already exists stops the rename
+rather than overwriting anything, and a file with no extension the sidebar lists becomes `.md`.
+
+Moving and renaming are not undoable - ⌘Z belongs to the editor and undoes text, not the
+filesystem.
 A name collision stops the move rather than overwriting anything.
+
+"Move to Trash" asks first, takes the file's notes with it, and says how many went.
+Links pointing at it are left alone: following one says "Not found", and rewriting other
+people's documents because one file went is a worse surprise than a dead link.
+Getting it back is Finder's job.
 
 Dragging a file into the raw pane inserts a relative markdown link to it instead, an image
 link if it is an image.
@@ -128,6 +139,7 @@ in `settings.json` turns the whole thing off.
 | ⌘O | add a folder to the sidebar (several at once) |
 | ⇧⌘O | open a single file |
 | ⇧⌘R | reveal the selection in Finder |
+| ⌘⌫ | move the selected file to the Trash |
 | ⌥⌘R ⌥⌘V ⌥⌘N | toggle the raw, preview and notes panes |
 | ⌘\ | raw and preview side by side |
 | ⇧⌘K | add or edit a note on the current line |

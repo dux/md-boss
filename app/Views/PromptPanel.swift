@@ -52,6 +52,28 @@ enum PromptPanel {
         let trimmed = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
+
+    /// A yes/no for something the app cannot take back. `.warning` rather than `.critical`:
+    /// critical is for losing data, and the Trash is the opposite of that.
+    ///
+    /// Return cancels. The destructive button is never one keystroke away, which is the
+    /// convention everywhere else on the system.
+    @MainActor
+    static func confirm(title: String, message: String, confirm: String) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
+
+        let action = alert.addButton(withTitle: confirm)
+        action.hasDestructiveAction = true
+        action.keyEquivalent = ""
+
+        let cancel = alert.addButton(withTitle: "Cancel")
+        cancel.keyEquivalent = "\r"
+
+        return alert.runModal() == .alertFirstButtonReturn
+    }
 }
 
 /// NSMenuItem carrying its own action, so context menus can be assembled inline instead of

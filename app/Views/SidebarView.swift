@@ -188,6 +188,7 @@ struct SidebarView: View {
                 Divider()
             }
         } else {
+            Button("Rename…") { manager.rename(row.node.url) }
             Button("Cut") { manager.cutFile = row.node.url }
             Divider()
         }
@@ -195,6 +196,10 @@ struct SidebarView: View {
         Button("Copy Name") { manager.copyText(row.node.name) }
         Divider()
         Button("Reveal in Finder") { manager.revealInFinder(row.node.url) }
+        if !row.node.isDirectory {
+            Divider()
+            Button("Move to Trash") { manager.trash(row.node.url) }
+        }
     }
 
     /// The blank space below the tree stands for the folder the tree is showing.

@@ -267,8 +267,33 @@ The plan is built *after* `moveItem` and off the main actor. Resolution is path 
 and never asks the disk whether the file is there, so the result is the same either side of
 the rename - which leaves latency as the tiebreaker, and a full-root read before the rename
 would freeze the drag. What must precede the move is validation, and `FileMove.check` is
-cheap. A name collision aborts rather than prompts: there is no confirm helper here, and
-silently clobbering a file mid-drag is unrecoverable.
+cheap. A name collision aborts rather than prompts - a modal in the middle of a drag is the
+wrong place for a question, and silently clobbering a file is unrecoverable either way.
+
+**Renaming is that same pass.** A rename is a move that stays in its folder, so `rename` and
+`move` share everything past validation through `relocate`: the open document follows, the
+notes follow, the tree resettles, and one `MarkdownLinks.Move` drives the same rewrite.
+`FileMove.checkRename` is the only new part, and it is a name validator - a separator would
+make it a move, `.` and `..` name the folder the file is already in, and a leading dot would
+hide it from a tree that skips hidden files. `FileTree.documentName` applies on the way in for
+the reason it applies to `newFile`: renaming a file into thin air is the outcome worth ruling
+out. A folder is refused, for the same reason moving one is.
+
+The collision check has to compare *identity*, not paths. On a case-insensitive volume
+`plan.md` -> `Plan.md` finds a file already at the target - itself - and standardizing does
+not fold case, so path comparison would refuse a legal rename.
+
+**Move to Trash asks, and takes the notes with it.** `PromptPanel.confirm` exists for this
+one caller: ⌘Z is the editor's, so the Trash is what makes it recoverable and only Finder can
+put it back. Return cancels. Notes on the file go through `AnnotationFile.removing(path:)` -
+pure and nil-when-unaffected, the shape `repointing` already has - because notes on one
+document can be spread across several `.md-boss` files. Left behind they would sit in the
+pane forever, one click from nothing.
+
+Inbound links are deliberately *not* rewritten. `followLink` already says "Not found", and
+rewriting other people's documents because one file went is a worse surprise than a dead link.
+The open document is told by its own watcher, which already has the wording for a file that
+went out from under it - there is no second mechanism.
 
 `MarkdownDocument.url` stopped being a `let` for this. `relocate(to:)` keeps the buffer, the
 undo stack and the dirty flag and only changes where the next save lands; reopening would put
@@ -423,7 +448,10 @@ note from the pane is what points at it.
 Plus front matter drawn as a property block instead of lexed as a giant heading, and GFM
 alerts in five contrast-gated colours.
 
+Plus rename and Move to Trash in the sidebar, both routed through the pass that already
+repointed links after a move.
+
 Still open, from phase 5-6 of the plan:
-rename/delete in the sidebar, moving folders rather than files, rewriting the moved file's
+a new folder in the sidebar, moving folders rather than files, rewriting the moved file's
 own outbound links, dropping a folder on the window, print/export, word count, footnotes,
 clickable task lists, and `hammer gh_pub`.

@@ -103,13 +103,104 @@ extension MdBossManager {
             return
         }
 
+        relocate(source, to: target, announcing: "Moved \(target.lastPathComponent) to \(destination.lastPathComponent)")
+    }
+
+    // MARK: Renaming
+
+    /// Renames a file where it stands, repointing every link to it - a rename is a move that
+    /// stays in its folder, so it runs the same rewrite pass rather than a second one.
+    ///
+    /// Renaming a *folder* is a different change: one rewrite pair per document inside it.
+    /// `checkRename` refuses one.
+    func rename(_ source: URL) {
+        guard let typed = PromptPanel.text(
+            title: "Rename",
+            message: "In \(source.deletingLastPathComponent().lastPathComponent)",
+            value: source.lastPathComponent,
+            confirm: "Rename"
+        ) else { return }
+
+        // The same defaulting `newFile` applies, for the same reason: a file the tree then
+        // hides is the one outcome worth ruling out.
+        let name = FileTree.documentName(typed)
+        if let refusal = FileMove.checkRename(source, to: name) {
+            if let message = refusal.message(forRenaming: source, to: name) { showError(message) }
+            return
+        }
+
+        let target = source.deletingLastPathComponent().appendingPathComponent(name)
+        do {
+            try FileManager.default.moveItem(at: source, to: target)
+        } catch {
+            // Nothing has been written yet, so a failure here leaves the project untouched.
+            showError("Could not rename \(source.lastPathComponent): \(error.localizedDescription)")
+            return
+        }
+
+        relocate(source, to: target, announcing: "Renamed to \(target.lastPathComponent)")
+    }
+
+    // MARK: Deleting
+
+    /// Moves a file to the Trash.
+    ///
+    /// It asks first, because ⌘Z is the editor's and undoes text, not the filesystem - the
+    /// Trash is what makes this recoverable, and only Finder can put it back.
+    ///
+    /// Links to the file are deliberately left alone. `followLink` already says "Not found",
+    /// and rewriting other people's documents because one file went is a worse surprise than
+    /// a dead link.
+    func trash(_ source: URL) {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: source.path, isDirectory: &isDirectory) else {
+            showError("\(source.lastPathComponent) is no longer there")
+            return
+        }
+        guard !isDirectory.boolValue else {
+            showError("Only files can be moved to the Trash")
+            return
+        }
+
+        let notes = AnnotationStore.shared.notes(for: source).count
+        let carried = notes == 0 ? "" : " Its \(notes == 1 ? "note goes" : "\(notes) notes go") with it."
+        guard PromptPanel.confirm(
+            title: "Move \(source.lastPathComponent) to the Trash?",
+            message: "Links to it in other documents are left as they are.\(carried)",
+            confirm: "Move to Trash"
+        ) else { return }
+
+        do {
+            try FileManager.default.trashItem(at: source, resultingItemURL: nil)
+        } catch {
+            showError("Could not trash \(source.lastPathComponent): \(error.localizedDescription)")
+            return
+        }
+
+        let removed = AnnotationStore.shared.removeAll(for: source)
+        // The open document finds out from its own watcher, which already has the wording
+        // for a file that went out from under it - there is no second mechanism here.
+        resettle(source.deletingLastPathComponent())
+
+        if cutFile == source { cutFile = nil }
+        if draggedFile == source { draggedFile = nil }
+        flash(removed == 0
+              ? "Moved \(source.lastPathComponent) to the Trash"
+              : "Moved \(source.lastPathComponent) to the Trash - \(removed) \(removed == 1 ? "note" : "notes") removed")
+    }
+
+    // MARK: The move itself
+
+    /// What a move and a rename share once the file is on its new path. Written once rather
+    /// than twice, the same reasoning `acceptDrop` gives for being shared.
+    private func relocate(_ source: URL, to target: URL, announcing message: String) {
         followMovedDocument(from: source, to: target)
         AnnotationStore.shared.repoint(from: source, to: target)
         resettleTree(from: source, to: target)
 
         cutFile = nil
         draggedFile = nil
-        flash("Moved \(target.lastPathComponent) to \(destination.lastPathComponent)")
+        flash(message)
 
         rewriteReferences(from: source, to: target)
     }
@@ -129,13 +220,19 @@ extension MdBossManager {
         let origin = source.deletingLastPathComponent()
         let destination = target.deletingLastPathComponent()
 
-        DocumentScanner.shared.invalidate(origin)
-        DocumentScanner.shared.invalidate(destination)
-        tree.refresh(origin)
-        tree.refresh(destination)
-        // Both refreshes are explicit rather than left to the watcher: a collapsed
-        // destination folder is not being watched, so its event would never arrive.
+        resettle(origin)
+        // A rename never leaves its folder, so there is only the one to resettle.
+        if destination.standardizedFileURL.path != origin.standardizedFileURL.path {
+            resettle(destination)
+        }
         tree.reveal(target)
+    }
+
+    /// A folder whose contents changed. Explicit rather than left to the watcher: a collapsed
+    /// folder is not being watched, so its event would never arrive.
+    private func resettle(_ folder: URL) {
+        DocumentScanner.shared.invalidate(folder)
+        tree.refresh(folder)
     }
 
     // MARK: The rewrite pass

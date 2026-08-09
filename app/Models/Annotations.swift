@@ -150,6 +150,13 @@ struct AnnotationFile: Codable, Equatable {
         }
         return (Self(notes: kept), moved)
     }
+
+    /// This file without the notes on a document that has gone. Nil when it had none, so a
+    /// store that is not involved is never rewritten - the same rule `repointing` follows.
+    func removing(path: String) -> Self? {
+        guard notes.contains(where: { $0.path == path }) else { return nil }
+        return Self(notes: notes.filter { $0.path != path })
+    }
 }
 
 enum AnnotationPath {
@@ -478,6 +485,28 @@ final class AnnotationStore {
             Self.write(files[path] ?? AnnotationFile(), to: store)
             watcher?.rearm(store)
         }
+    }
+
+    /// Drops every note on a file that has gone, and says how many went.
+    ///
+    /// Its own method rather than `mutate`, for the same reason `repoint` is one: notes on a
+    /// single document can be spread across several `.md-boss` files, and `mutate` knows
+    /// about one. Left behind they would sit in the pane forever, one click from nothing.
+    @discardableResult
+    func removeAll(for url: URL) -> Int {
+        let path = AnnotationPath.store(url)
+        var removed = 0
+
+        for (storePath, file) in files {
+            guard let kept = file.removing(path: path) else { continue }
+            removed += file.notes.count - kept.notes.count
+            files[storePath] = kept
+
+            let store = URL(fileURLWithPath: storePath)
+            Self.write(kept, to: store)
+            watcher?.rearm(store)
+        }
+        return removed
     }
 
     // MARK: Files

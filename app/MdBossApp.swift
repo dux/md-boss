@@ -103,6 +103,14 @@ struct MdBossCommands: Commands {
             Button("Open File…") { manager.openFilePanel() }
                 .keyboardShortcut("o", modifiers: [.command, .shift])
             Divider()
+            // No shortcut on Rename: Return already opens in the sidebar, and every free
+            // Command combination in this app already means something else.
+            Button("Rename…") { manager.renameSelection() }
+                .disabled(manager.actionTarget == nil)
+            Button("Move to Trash") { manager.trashSelection() }
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(manager.actionTarget == nil)
+            Divider()
             Button("Reveal in Finder") { manager.revealSelectionInFinder() }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
         }

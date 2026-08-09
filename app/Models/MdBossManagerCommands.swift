@@ -19,9 +19,23 @@ extension MdBossManager {
 
     var canSave: Bool { isDirty }
 
+    /// What a File-menu action acts on: the open document, or the row the sidebar cursor is
+    /// on when nothing is open. Named once rather than spelled out at each menu item.
+    var actionTarget: URL? { selectedFile ?? tree.cursorRow?.node.url }
+
     func revealSelectionInFinder() {
-        guard let url = selectedFile ?? tree.cursorRow?.node.url else { return }
+        guard let url = actionTarget else { return }
         revealInFinder(url)
+    }
+
+    func renameSelection() {
+        guard let url = actionTarget else { return }
+        rename(url)
+    }
+
+    func trashSelection() {
+        guard let url = actionTarget else { return }
+        trash(url)
     }
 
     // MARK: View
