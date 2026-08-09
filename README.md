@@ -31,11 +31,13 @@ curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh | bash
 Downloads the latest build, unpacks it into `/Applications` and opens it.
 macOS 14 or newer, and nothing else to install.
 
-![Paper](web-demo/assets/paper.png)
+| Paper | Raw and preview |
+|---|---|
+| [![Paper](web-demo/assets/paper.png)](web-demo/assets/paper.png) | [![Raw and preview](web-demo/assets/split.png)](web-demo/assets/split.png) |
+| **Notes** | **Dark** |
+| [![Notes](web-demo/assets/notes.png)](web-demo/assets/notes.png) | [![Dark](web-demo/assets/dark.png)](web-demo/assets/dark.png) |
 
-![Raw and preview side by side](web-demo/assets/split.png)
-
-![Notes](web-demo/assets/notes.png)
+Click any of them for the full-size image.
 
 ### From source
 
