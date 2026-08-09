@@ -5,7 +5,10 @@ import Foundation
 /// Pure and off-actor: a root of any size is a few hundred files to read, and the sidebar has
 /// to stay live while it happens. The walk is `FileTree.documents(under:skipFolders:)`, the
 /// same one the link rewriter uses - searching a different set of files from the one the
-/// sidebar lists would be two answers to "which files does this app show you".
+/// sidebar lists would be two answers to "which files does this app show you". That is also
+/// why this does not shell out to `rg`, which obeys `.gitignore` instead and is not on a
+/// stock macOS besides. On a real docs folder the whole search is single-digit milliseconds,
+/// well under the keystroke debounce.
 ///
 /// Deliberately not handled: regular expressions, whole-word matching, and multi-line
 /// patterns. A regex on untrusted input can backtrack catastrophically and hang a walk that
@@ -60,56 +63,72 @@ enum DocumentSearch {
 
     /// Every match in one string. Pure over text, so most of the suite needs no disk at all.
     ///
-    /// Lines are cut by scanning UTF-16 for `\n`, the way `LineIndex` does, and *not* with
-    /// `split(separator: "\n")`: `\r\n` is a single `Character` in Swift, so splitting on the
-    /// Character `\n` does not divide a CRLF file at all and every hit in one would report
-    /// line 1. Files here come straight off disk, so CRLF is a real input.
+    /// Matches are found over the whole string first, and only the lines that actually
+    /// matched are then located. Cutting a file into lines *before* searching means touching
+    /// every character, and doing that through `NSString.character(at:)` is an Objective-C
+    /// message send each time. A query never spans a line break, so searching across them
+    /// cannot invent a match.
+    ///
+    /// Line numbers come from `LineIndex`, which counts UTF-16 units - deliberately not from
+    /// `split(separator: "\n")`, because `\r\n` is a single `Character` in Swift and
+    /// splitting on the Character `\n` does not divide a CRLF file at all. Files here are read
+    /// straight off disk, so CRLF is a real input; everywhere else in the app
+    /// `MarkdownDocument` has already normalised it.
     static func matches(in text: String, query: String, limit: Int = .max) -> [Match] {
-        guard !query.isEmpty else { return [] }
+        guard !query.isEmpty, !text.isEmpty else { return [] }
         let options: String.CompareOptions = isCaseSensitive(query) ? [.literal] : [.caseInsensitive, .literal]
         let whole = text as NSString
-        let needleLength = (query as NSString).length
+
+        var ranges: [NSRange] = []
+        var from = 0
+        while from < whole.length, ranges.count < limit {
+            let range = whole.range(
+                of: query,
+                options: options,
+                range: NSRange(location: from, length: whole.length - from)
+            )
+            guard range.location != NSNotFound else { break }
+            ranges.append(range)
+            // At least one unit, so a zero-length match cannot spin.
+            from = range.location + max(1, range.length)
+        }
+        guard !ranges.isEmpty else { return [] }
+
+        // Built once, and only for a file that matched. It counts UTF-16 units in a Swift
+        // loop, which is the same arithmetic the notes are anchored to.
+        let index = LineIndex(text)
 
         var found: [Match] = []
-        var lineStart = 0
-        var number = 1
+        var cached: (number: Int, text: String, start: Int)?
 
-        while lineStart <= whole.length {
-            var lineEnd = lineStart
-            while lineEnd < whole.length, whole.character(at: lineEnd) != 0x0A { lineEnd += 1 }
+        for range in ranges {
+            let number = index.line(at: range.location)
 
-            // The carriage return belongs to the line ending, not to the text.
-            var contentEnd = lineEnd
-            if contentEnd > lineStart, whole.character(at: contentEnd - 1) == 0x0D { contentEnd -= 1 }
+            let line: (number: Int, text: String, start: Int)
+            if let cached, cached.number == number {
+                line = cached
+            } else {
+                guard let lineRange = index.range(ofLine: number) else { continue }
+                // The range carries its trailing newline, and a file off disk may still be
+                // CRLF; neither belongs to the text.
+                var length = lineRange.length
+                if length > 0, whole.character(at: lineRange.location + length - 1) == 0x0A { length -= 1 }
+                if length > 0, whole.character(at: lineRange.location + length - 1) == 0x0D { length -= 1 }
 
-            let content = NSRange(location: lineStart, length: contentEnd - lineStart)
-            var display: String?
-
-            var start = content.location
-            while start + needleLength <= NSMaxRange(content), found.count < limit {
-                let range = whole.range(
-                    of: query,
-                    options: options,
-                    range: NSRange(location: start, length: NSMaxRange(content) - start)
+                line = (
+                    number,
+                    whole.substring(with: NSRange(location: lineRange.location, length: length)),
+                    lineRange.location
                 )
-                guard range.location != NSNotFound else { break }
-
-                // Built once per line, and only for a line that actually matched.
-                let line = display ?? whole.substring(with: content)
-                display = line
-                found.append(Match(
-                    line: number,
-                    column: range.location - content.location,
-                    length: range.length,
-                    text: line
-                ))
-                // At least one unit, so a zero-length match cannot spin.
-                start = range.location + max(1, range.length)
+                cached = line
             }
 
-            if found.count >= limit { break }
-            lineStart = lineEnd + 1
-            number += 1
+            found.append(Match(
+                line: number,
+                column: range.location - line.start,
+                length: range.length,
+                text: line.text
+            ))
         }
         return found
     }
@@ -126,48 +145,61 @@ enum DocumentSearch {
         query: String,
         buffers: [String: String] = [:],
         limits: Limits = Limits(),
-        isCancelled: () -> Bool = { false }
+        isCancelled: @Sendable () -> Bool = { false }
     ) -> Result {
         guard !query.isEmpty else { return .empty }
 
-        var hits: [Hit] = []
-        var truncated = false
-        var searched = 0
-        // Roots can nest, and the same file reached through two of them is one file.
+        // The directory walk, which is where nearly all of the time goes on a large tree -
+        // 5.4s of a 5.8s search over 3,825 documents under ~/dev. Everything after it is
+        // noise by comparison, which is what decided the read pass below against being
+        // spread across cores.
+        var targets: [(url: URL, path: String)] = []
         var seen: Set<String> = []
+        var overflowedFiles = false
 
-        for root in roots {
+        walk: for root in roots {
             for url in FileTree.documents(under: root, skipFolders: skipFolders) {
-                if isCancelled() { return Result(hits: hits, truncated: true, filesSearched: searched) }
-
+                if isCancelled() { return Result(hits: [], truncated: true, filesSearched: 0) }
+                // Roots can nest, and the same file reached through two of them is one file.
                 let path = MarkdownLinks.canonical(url).path
                 guard seen.insert(path).inserted else { continue }
-                guard searched < limits.files else {
-                    return Result(hits: hits, truncated: true, filesSearched: searched)
-                }
-                searched += 1
-
-                // A file we cannot decode is shown but never read, the same rule
-                // MarkdownDocument and FileMove.plan apply.
-                guard let text = buffers[path] ?? (try? String(contentsOf: url, encoding: .utf8)) else { continue }
-
-                let room = min(limits.perFile, limits.total - hits.count)
-                guard room > 0 else { return Result(hits: hits, truncated: true, filesSearched: searched) }
-
-                let found = matches(in: text, query: query, limit: room + 1)
-                if found.count > room { truncated = true }
-
-                for match in found.prefix(room) {
-                    hits.append(Hit(
-                        url: url,
-                        line: match.line,
-                        column: match.column,
-                        length: match.length,
-                        text: match.text
-                    ))
-                }
+                guard targets.count < limits.files else { overflowedFiles = true; break walk }
+                targets.append((url, path))
             }
         }
-        return Result(hits: hits, truncated: truncated, filesSearched: searched)
+
+        // Read serially, on purpose. Measured over 3,825 documents and 128MB under `~/dev`:
+        // the directory walk above is 5.4s of it, reading every byte is 103ms, and spreading
+        // that read across 14 cores takes it to 41ms. Sixty milliseconds in six seconds does
+        // not buy a lock and a shared collector. If a tree that size ever has to feel quick,
+        // the thing to parallelise is the traversal, which is where `rg` gets its win.
+        var hits: [Hit] = []
+        var truncated = overflowedFiles
+
+        for (url, path) in targets {
+            if isCancelled() { return Result(hits: hits, truncated: true, filesSearched: targets.count) }
+
+            // A file we cannot decode is listed but never read, the same rule
+            // MarkdownDocument and FileMove.plan apply.
+            guard let text = buffers[path] ?? (try? String(contentsOf: url, encoding: .utf8)) else { continue }
+
+            let room = min(limits.perFile, limits.total - hits.count)
+            guard room > 0 else { return Result(hits: hits, truncated: true, filesSearched: targets.count) }
+
+            // One past the cap, so "exactly full" can be told from "there was more".
+            let found = matches(in: text, query: query, limit: room + 1)
+            if found.count > room { truncated = true }
+
+            for match in found.prefix(room) {
+                hits.append(Hit(
+                    url: url,
+                    line: match.line,
+                    column: match.column,
+                    length: match.length,
+                    text: match.text
+                ))
+            }
+        }
+        return Result(hits: hits, truncated: truncated, filesSearched: targets.count)
     }
 }

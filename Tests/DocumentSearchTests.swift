@@ -74,7 +74,7 @@ struct DocumentSearchRunTests {
         _ query: String,
         buffers: [String: String] = [:],
         limits: DocumentSearch.Limits = DocumentSearch.Limits(),
-        isCancelled: () -> Bool = { false }
+        isCancelled: @Sendable () -> Bool = { false }
     ) -> DocumentSearch.Result {
         DocumentSearch.run(
             roots: [root],

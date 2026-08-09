@@ -485,12 +485,20 @@ query must never be. So Find in Project and Go to File take the tree area over t
 ⌘P is Go to File, which needs `CommandGroup(replacing: .printItem) {}` - SwiftUI supplies a
 Print item by default and it would otherwise own that key.
 
-**No shell-out to ripgrep.** It is not on a stock macOS, and this app is a `.app` dropped into
-/Applications - a feature that silently does not exist on a clean machine is worse than one
-that always works. More than that, `rg` obeys `.gitignore` while the sidebar obeys
-`skipFolders` and `documentExtensions`: two different answers to "which files does this app
-show you" is exactly the duplicated fact the rest of this document is about. `DocumentSearch`
-walks `FileTree.documents(under:skipFolders:)`, the same one the link rewriter uses.
+**No shell-out to ripgrep.** `rg` obeys `.gitignore` while the sidebar obeys `skipFolders` and
+`documentExtensions`: two different answers to "which files does this app show you" is exactly
+the duplicated fact the rest of this document is about. It is also not on a stock macOS, and
+this app is a `.app` dropped into /Applications. `DocumentSearch` walks
+`FileTree.documents(under:skipFolders:)`, the same one the link rewriter uses.
+
+Measured, because the question is a fair one. On the sidebar's real roots the whole search is
+3-17ms, well under the 180ms debounce - `rg` cannot beat that, since spawning the process
+costs a meaningful slice of it. Pointed at `~/dev` - 3,825 documents, 128MB - it is 5.8s
+against `rg`'s 0.55s, and the breakdown says why: the directory walk is 5.4s of it, reading
+every byte is 103ms, and the matching is noise. `rg` wins there by parallelising *traversal*.
+Spreading the read across 14 cores takes it from 103ms to 41ms, which is not worth a lock, so
+the read pass is deliberately serial. If a tree that size ever has to feel quick, the thing to
+parallelise is `FileTree.documents`, not anything in here.
 
 **Case is derived, not stored.** Insensitive until the query carries a capital. One rule out
 of the query itself, no toggle and no setting - the same reasoning as a theme's polarity.
