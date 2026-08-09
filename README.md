@@ -20,7 +20,24 @@ The sidebar lists `.md`, `.markdown` and `.txt` files, and hides folders that ha
 documents anywhere below them, so pointing it at a source repo shows you the docs rather than
 the source tree.
 
+[Demo page](https://dux.github.io/md-boss/web-demo/)
+
 ## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh | bash
+```
+
+Downloads the latest build, unpacks it into `/Applications` and opens it.
+macOS 14 or newer, and nothing else to install.
+
+![Paper](web-demo/assets/paper.png)
+
+![Raw and preview side by side](web-demo/assets/split.png)
+
+![Notes](web-demo/assets/notes.png)
+
+### From source
 
 ```sh
 git clone https://github.com/dux/md-boss
@@ -36,12 +53,15 @@ Requires macOS 14, a Swift 6.2 toolchain, [hammer](https://github.com/dux/hammer
 | command | what it does |
 |---|---|
 | `hammer dev` | lint, test, build, install to /Applications, launch - the inner loop |
-| `hammer build` | same, without launching |
+| `hammer build` | same, without launching - `--release` for an optimised build |
 | `hammer test` | `swift test` |
 | `hammer lint` | `swiftlint` |
 | `hammer watch` | rebuild and reinstall on every Swift file change |
 | `hammer icon` | regenerate `AppIcon.icns` from `AppIcon.svg` |
 | `hammer register` | re-register with LaunchServices so `.md` files bind to this build |
+| `hammer gh_pub` | release build, then publish it to GitHub as the one latest release |
+| `hammer demo` | serve the repo and open the demo page |
+| `hammer shots` | recapture `web-demo/assets` by driving the installed app |
 | `hammer clean` | remove build artifacts |
 
 ## Notes
@@ -162,3 +182,4 @@ Both are plain text and meant to be edited by hand.
 
 * [doc/CODE_STRUCTURE.md](doc/CODE_STRUCTURE.md) - architecture
 * [doc/THEMES.md](doc/THEMES.md) - the palettes and the rules around them
+* [web-demo/](web-demo/) - the demo page, its sample documents and `hammer demo`

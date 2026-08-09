@@ -1,0 +1,123 @@
+<script>
+  class {
+    FAST = true
+
+    init() {
+      this.state.active = 0
+      this.state.images = [
+        { src: 'assets/paper.png', title: 'Paper', desc: 'Folders on the left, the rendered document on the right, front matter drawn as a dimmed key/value block above the title' },
+        { src: 'assets/split.png', title: 'Raw and preview', desc: 'Both panes side by side, scrolling together on source lines rather than on percentages' },
+        { src: 'assets/notes.png', title: 'Notes', desc: 'Right-click a line in either pane to mark it - notes live in a .md-boss file you can commit next to the documents' },
+        { src: 'assets/tasks.png', title: 'Task lists', desc: 'Three states rather than two: done, open, and the one you are in the middle of' },
+        { src: 'assets/dark.png', title: 'Dark', desc: 'The same hue family rotated dark - warm charcoal, not black, and never a blue-black' },
+        { src: 'assets/nord.png', title: 'Ported schemes', desc: 'Nord, Dracula, Gruvbox, GitHub and both Solarizeds, each lifted to a reading contrast' }
+      ]
+    }
+
+    select(index) {
+      this.state.active = parseInt(index)
+    }
+
+    open() {
+      window.open(this.state.images[this.state.active].src)
+    }
+  }
+</script>
+
+<style>
+  :fez {
+    display: block;
+
+    .main-image {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid #E3D9C6;
+      box-shadow: 0 24px 60px rgba(43, 39, 35, 0.16);
+      cursor: pointer;
+
+      img {
+        width: 100%;
+        display: block;
+        transition: transform 0.3s ease;
+      }
+
+      &:hover img {
+        transform: scale(1.01);
+      }
+
+      .caption {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 22px 24px;
+        background: linear-gradient(transparent, rgba(30, 28, 26, 0.82));
+        color: #FBF7EF;
+
+        h3 {
+          margin: 0 0 4px;
+          font-size: 18px;
+          font-weight: 600;
+        }
+
+        p {
+          margin: 0;
+          font-size: 14px;
+          opacity: 0.85;
+        }
+      }
+    }
+
+    .thumbnails {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .thumb {
+      width: 116px;
+      height: 70px;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: all 0.2s ease;
+      border: 2px solid transparent;
+      flex-shrink: 0;
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top left;
+      }
+
+      &:hover {
+        opacity: 0.85;
+      }
+
+      &.active {
+        opacity: 1;
+        border-color: #9A5B34;
+      }
+    }
+  }
+</style>
+
+<div class="thumbnails">
+  {#each state.images as img}
+    <div class={state.active === i ? 'thumb active' : 'thumb'} onclick="fez.select('{i}')">
+      <img src={img.src} alt={img.title} />
+    </div>
+  {/each}
+</div>
+<div class="main-image">
+  <img src={state.images[state.active].src} alt={state.images[state.active].title} onclick="fez.open()" />
+  <div class="caption">
+    <h3>{state.images[state.active].title}</h3>
+    <p>{state.images[state.active].desc}</p>
+  </div>
+</div>

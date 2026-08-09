@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>md-boss - Markdown that reads like paper</title>
+  <meta name="description" content="A macOS markdown viewer and editor with a warm paper theme, offline GitHub-flavored rendering, line-anchored scroll sync and notes you can commit.">
+  <link rel="icon" href="../app/Resources/AppIcon.svg">
+  <script type="module">
+    import PostWind from 'https://dux.github.io/postwind/dist/postwind.js'
+    PostWind.init({ tailwind: true })
+  </script>
+  <script src="https://dux.github.io/fez/dist/fez.js"></script>
+  <script fez="fez/screenshot-gallery.fez"></script>
+  <script fez="fez/feature-card.fez"></script>
+  <script fez="fez/theme-strip.fez"></script>
+  <script fez="fez/shortcut-table.fez"></script>
+  <style>
+    /* The page is painted out of the app's own Paper palette - the same hex values that
+       live in app/Views/ThemePalettes.swift. Tailwind is used for layout only, so a
+       colour never arrives from two places at once. */
+    :root {
+      --paper: #FBF7EF;
+      --surface: #F3EDE1;
+      --ink: #2B2723;
+      --muted: #756C61;
+      --rule: #E3D9C6;
+      --accent: #9A5B34;
+      --link: #1F5C8B;
+      --night: #1E1C1A;
+      --night-surface: #26231F;
+      --night-ink: #E6E0D6;
+      --night-muted: #9A9287;
+      --night-accent: #E0996A;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    .u-serif { font-family: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Georgia, serif; }
+    .u-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .u-paper { background: var(--paper); }
+    .u-surface { background: var(--surface); }
+    .u-night { background: var(--night); color: var(--night-ink); }
+    .u-night-surface { background: var(--night-surface); }
+
+    .u-ink { color: var(--ink); }
+    .u-muted { color: var(--muted); }
+    .u-accent { color: var(--accent); }
+    .u-night-muted { color: var(--night-muted); }
+    .u-night-accent { color: var(--night-accent); }
+
+    .u-rule { border-color: var(--rule); }
+    .u-rule-night { border-color: #38342E; }
+
+    .u-btn {
+      display: inline-block;
+      border-radius: 12px;
+      font-weight: 600;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .u-btn-primary { background: var(--accent); color: #FDFBF6; }
+    .u-btn-primary:hover { background: #86492A; }
+
+    .u-btn-quiet { background: var(--surface); color: var(--ink); border: 1px solid var(--rule); }
+    .u-btn-quiet:hover { background: #EADFC9; }
+
+    .u-nav-link { color: var(--muted); }
+    .u-nav-link:hover { color: var(--ink); }
+
+    .u-code {
+      background: var(--night-surface);
+      border-radius: 12px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <header class="u-surface border-b u-rule">
+    <nav class="max-w-5xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
+      <a href="#top" class="flex items-center gap-3">
+        <img src="../app/Resources/AppIcon.svg" alt="" width="34" height="34">
+        <span class="u-serif font-semibold text-lg u-ink">md-boss</span>
+      </a>
+      <div class="flex items-center gap-6 text-sm">
+        <a href="#screenshots" class="u-nav-link transition-colors hidden md:inline">Screenshots</a>
+        <a href="#features" class="u-nav-link transition-colors hidden md:inline">Features</a>
+        <a href="#themes" class="u-nav-link transition-colors hidden md:inline">Themes</a>
+        <a href="#keys" class="u-nav-link transition-colors hidden md:inline">Keys</a>
+        <a href="https://github.com/dux/md-boss" class="u-btn u-btn-primary px-4 py-2 text-sm">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Hero -->
+  <section id="top" class="max-w-3xl mx-auto px-4 md:px-6 py-12 md:py-20 text-center">
+    <h1 class="u-serif text-3xl md:text-5xl font-bold tracking-tight mb-5">
+      Markdown that reads<br>like paper
+    </h1>
+    <p class="u-serif text-lg md:text-xl u-muted mb-8">
+      A macOS viewer and editor for the documents you keep. Warm cream stock, a serif at a
+      fixed reading measure, and GitHub-flavored rendering done entirely offline.
+      No network, no telemetry, no account.
+    </p>
+    <div class="flex flex-col md:flex-row gap-3 justify-center items-center mb-4">
+      <a href="#install" class="u-btn u-btn-primary px-6 py-3">Install</a>
+      <a href="#screenshots" class="u-btn u-btn-quiet px-6 py-3">See it</a>
+    </div>
+    <p class="text-sm u-muted">Requires macOS 14</p>
+  </section>
+
+  <!-- Screenshots -->
+  <section id="screenshots" class="max-w-[1100px] mx-auto px-4 md:px-6 pb-12 md:pb-20">
+    <screenshot-gallery></screenshot-gallery>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="u-surface border-y u-rule py-12 md:py-20">
+    <div class="max-w-5xl mx-auto px-4 md:px-6">
+      <h2 class="u-serif text-2xl md:text-3xl font-bold text-center mb-4">Built for reading, not for demoing</h2>
+      <p class="u-muted text-center mb-8 md:mb-12 max-w-xl mx-auto">
+        Every part of it answers a question a markdown reader actually runs into.
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <feature-card icon="&#x1F4C4;" title="Paper theme" desc="A serif body at a 48em measure on warm cream stock, with a burnt-sienna accent. The sidebar, the editor and the web page are all the same colour."></feature-card>
+        <feature-card icon="&#x1F3A8;" title="Eight themes" desc="Paper and Dark, plus Solarized light and dark, GitHub, Nord, Dracula and Gruvbox. Shift-Cmd-D stays a light/dark switch rather than a cycle."></feature-card>
+        <feature-card icon="&#x2708;&#xFE0F;" title="Entirely offline" desc="marked.js and highlight.js are bundled into the app, not fetched. A document opens the same on a plane as it does at a desk."></feature-card>
+        <feature-card icon="&#x1F517;" title="Scroll sync on source lines" desc="Every rendered block carries its source line, so a tall fenced block or an image never pulls the two panes out of step. Percentages cannot do this."></feature-card>
+        <feature-card icon="&#x1F4CC;" title="Notes you can commit" desc="Right-click any line in either pane to mark it. Notes live in a pretty-printed .md-boss file at the root of the folder, and an edit above one takes it along."></feature-card>
+        <feature-card icon="&#x1F4D0;" title="Three panes, not three modes" desc="Raw, preview and notes are toggles that sit side by side. A draggable divider splits raw and preview; the width is remembered."></feature-card>
+        <feature-card icon="&#x1F4CB;" title="Front matter, drawn" desc="A leading --- block is split off before the lexer and drawn as a dimmed key/value card, instead of rendering as a rule and one enormous heading."></feature-card>
+        <feature-card icon="&#x2705;" title="Task lists in three states" desc="Done, open, and the one you are in the middle of. Bare [x] lines count too, and the bullet is dropped so a checklist reads as a checklist."></feature-card>
+        <feature-card icon="&#x1F6A8;" title="Alerts in five hues" desc="NOTE, TIP, IMPORTANT, WARNING and CAUTION each draw their own title in their own colour, held to 4.5:1 in every one of the eight palettes."></feature-card>
+        <feature-card icon="&#x1F4C1;" title="A sidebar of documents" desc="It lists .md, .markdown and .txt, and hides folders with no documents anywhere below them - so pointing it at a source repo shows the docs, not the tree."></feature-card>
+        <feature-card icon="&#x1F69A;" title="Moving a file fixes its links" desc="Drop a file on a folder and every [text](path) under the active folder that pointed at it is repointed. A link inside a fenced block is left alone."></feature-card>
+        <feature-card icon="&#x2328;&#xFE0F;" title="Command line and keyboard" desc="md-boss . adds the current folder to the sidebar. Arrow keys walk the tree, typing a name jumps to it, and every pane has a shortcut."></feature-card>
+      </div>
+    </div>
+  </section>
+
+  <!-- Themes -->
+  <section id="themes" class="py-12 md:py-20">
+    <div class="max-w-5xl mx-auto px-4 md:px-6">
+      <h2 class="u-serif text-2xl md:text-3xl font-bold text-center mb-4">Eight palettes, one list</h2>
+      <p class="u-muted text-center mb-8 md:mb-12 max-w-2xl mx-auto">
+        Every colour in the app is a token, and the token's name is the CSS custom property
+        the preview page reads - so the window chrome and the document are never two
+        palettes pretending to be one. Body text is held to 7:1 contrast against its own
+        background by the test suite, which is why the ported schemes are lifted rather
+        than copied.
+      </p>
+      <theme-strip></theme-strip>
+    </div>
+  </section>
+
+  <!-- Keyboard -->
+  <section id="keys" class="u-surface border-y u-rule py-12 md:py-20">
+    <div class="max-w-3xl mx-auto px-4 md:px-6">
+      <h2 class="u-serif text-2xl md:text-3xl font-bold text-center mb-4">Keyboard</h2>
+      <p class="u-muted text-center mb-8 md:mb-12">
+        The pane toggles are Option-Command, because a menu shortcut is matched before the
+        responder chain and plain Cmd-V would have taken Paste out of the editor.
+      </p>
+      <div class="u-paper rounded-xl border u-rule overflow-hidden">
+        <shortcut-table></shortcut-table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Install -->
+  <section id="install" class="u-night py-12 md:py-20">
+    <div class="max-w-3xl mx-auto px-4 md:px-6 text-center">
+      <h2 class="u-serif text-2xl md:text-3xl font-bold mb-4">Install in one command</h2>
+      <p class="u-night-muted mb-8">Downloads the latest build and installs it to /Applications.</p>
+      <div class="u-code u-mono p-5 text-left text-sm mb-6">
+        <span class="u-night-muted">$</span>
+        <span class="u-night-accent"> curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh | bash</span>
+      </div>
+      <p class="u-night-muted text-sm">
+        On first launch the app writes a <span class="u-mono">md-boss</span> command into
+        <span class="u-mono">~/bin</span>, so <span class="u-mono">md-boss .</span> opens the
+        current folder in the sidebar.
+      </p>
+    </div>
+  </section>
+
+  <!-- Build -->
+  <section class="py-12 md:py-20">
+    <div class="max-w-3xl mx-auto px-4 md:px-6 text-center">
+      <h2 class="u-serif text-2xl md:text-3xl font-bold mb-4">Or build it yourself</h2>
+      <p class="u-muted mb-8">
+        SwiftPM and a <a href="https://github.com/dux/hammer" class="u-accent underline">hammer</a>
+        file, no Xcode project. Needs macOS 14, a Swift 6.2 toolchain and swiftlint.
+      </p>
+      <div class="u-code u-mono p-5 text-left text-sm space-y-2">
+        <div><span class="u-night-muted">$</span><span class="u-night-accent"> git clone https://github.com/dux/md-boss &amp;&amp; cd md-boss</span></div>
+        <div><span class="u-night-muted">$</span><span class="u-night-accent"> hammer dev</span><span class="u-night-muted">      # lint, test, build, install, launch</span></div>
+        <div><span class="u-night-muted">$</span><span class="u-night-accent"> hammer watch</span><span class="u-night-muted">    # rebuild on every Swift file change</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t u-rule py-8">
+    <div class="max-w-5xl mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-sm u-muted">
+      <div>md-boss by <a href="https://github.com/dux" class="u-accent">@dux</a></div>
+      <div class="flex gap-6">
+        <a href="https://github.com/dux/md-boss" class="u-nav-link transition-colors">GitHub</a>
+        <a href="https://github.com/dux/md-boss/issues" class="u-nav-link transition-colors">Issues</a>
+        <a href="https://github.com/dux/md-boss/blob/main/doc/THEMES.md" class="u-nav-link transition-colors">Themes doc</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

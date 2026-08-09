@@ -64,6 +64,8 @@ app/
     build-commit.txt       gitignored, written by the Hammerfile before every SwiftPM run
 Tests/
 doc/
+web-demo/                  the demo page: index.html, fez components, screenshots,
+                           and the sample documents the screenshots are taken of
 ```
 
 ## Conventions worth knowing
@@ -315,6 +317,22 @@ The whole point of this app is that sidebar, editor and web page are the same pa
 * Ad-hoc codesigning gives the app a new identity on every build, which leaves LaunchServices
   holding stale `.md` bindings. `hammer register` runs `lsregister -f` to fix that.
 
+## Shipping it
+
+`hammer gh_pub` builds `-c release`, stamps the install line in the README with the current
+commit as a cache buster, pushes, deletes every existing release and uploads a fresh
+`latest`. There is only ever one release and it is always the newest build, which is what
+`install.sh` downloads - the tarball is the installed `/Applications/MdBoss.app`, so what
+ships is exactly what was just run.
+
+`hammer shots` recaptures `web-demo/assets`. Every screenshot is a `settings.json` and a
+relaunch rather than a window driven by hand: theme, panes, open file and window frame are
+all persisted state, so nothing has to be clicked and a shot is reproducible. It backs the
+live config up before the run and restores it in an `ensure`, and the demo `.md-boss` is
+written and removed around the run rather than committed, since note paths carry the home
+directory of whoever took them. Line numbers for those notes are looked up by their text,
+so editing a sample document cannot quietly move a note off the line it talks about.
+
 ## Two-phase preview rendering
 
 `baseURL` can only be set when a page loads, so opening a file loads the whole page once
@@ -454,4 +472,4 @@ repointed links after a move.
 Still open, from phase 5-6 of the plan:
 a new folder in the sidebar, moving folders rather than files, rewriting the moved file's
 own outbound links, dropping a folder on the window, print/export, word count, footnotes,
-clickable task lists, and `hammer gh_pub`.
+and clickable task lists.

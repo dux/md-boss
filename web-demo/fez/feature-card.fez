@@ -1,0 +1,92 @@
+<script>
+  class {
+    FAST = true
+
+    init(props) {
+      // Warm tile gradients + glow rgb, picked from the title so a card is stable and
+      // distinct without anyone having to assign colours by hand.
+      const PALETTE = [
+        ['#F3E3D2', '#E8CDB2', '154,91,52'],
+        ['#E4E9DC', '#CFDAC2', '76,107,60'],
+        ['#E1E8EF', '#C7D7E5', '47,93,140'],
+        ['#EDE3F0', '#DCCBE4', '109,76,159'],
+        ['#F5E5DD', '#E9C9BC', '160,62,82'],
+        ['#F2ECD9', '#E4D8B7', '138,90,32'],
+        ['#E6E3DC', '#D3CDC0', '117,108,97']
+      ]
+      const t = props.title || ''
+      let h = 0
+      for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0
+      const c = PALETTE[h % PALETTE.length]
+      this.state.cardStyle = `--glow: ${c[2]}`
+      this.state.tileStyle = `background: linear-gradient(135deg, ${c[0]}, ${c[1]})`
+    }
+  }
+</script>
+
+<style>
+  :fez {
+    display: block;
+    height: 100%;
+
+    .card {
+      height: 100%;
+      box-sizing: border-box;
+      padding: 24px;
+      border-radius: 14px;
+      background: #FBF7EF;
+      border: 1px solid #E3D9C6;
+      box-shadow: 0 1px 2px rgba(43, 39, 35, 0.05);
+      transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+
+      &:hover {
+        transform: translateY(-4px);
+        border-color: rgba(var(--glow), 0.4);
+        box-shadow: 0 16px 34px rgba(var(--glow), 0.18);
+      }
+
+      &:hover .icon-tile {
+        transform: scale(1.06) rotate(-3deg);
+      }
+    }
+
+    .icon-tile {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      box-shadow: 0 6px 16px rgba(var(--glow), 0.24), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+      transition: transform 0.25s ease;
+    }
+
+    .icon {
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    h3 {
+      margin: 0 0 7px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #2B2723;
+    }
+
+    p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #756C61;
+    }
+  }
+</style>
+
+<div class="card" style={state.cardStyle}>
+  <div class="icon-tile" style={state.tileStyle}>
+    <span class="icon">{props.icon}</span>
+  </div>
+  <h3>{props.title}</h3>
+  <p>{props.desc}</p>
+</div>

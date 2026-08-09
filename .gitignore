@@ -14,3 +14,6 @@ xcuserdata/
 # loose dev screenshots
 /shot*.png
 /side*.png
+
+# written and removed around a `hammer shots` run - never committed
+/web-demo/sample/.md-boss

@@ -1,0 +1,100 @@
+<script>
+  class {
+    FAST = true
+
+    init() {
+      this.state.groups = [
+        { name: 'Panes and layout', rows: [
+          { keys: '⌥⌘R  ⌥⌘V  ⌥⌘N', what: 'toggle the raw, preview and notes panes' },
+          { keys: '⌘\\', what: 'raw and preview side by side' },
+          { keys: '⌘0', what: 'show or hide the sidebar' },
+          { keys: '⇧⌘D', what: 'switch between light and dark' },
+          { keys: '⌘+  ⌘-  ⌥⌘0', what: 'text size, and reset the column width' }
+        ]},
+        { name: 'Files', rows: [
+          { keys: '⌘N', what: 'new file in the sidebar folder' },
+          { keys: '⌘O', what: 'add folders to the sidebar' },
+          { keys: '⇧⌘O', what: 'open a single file' },
+          { keys: '⇧⌘R', what: 'reveal the selection in Finder' },
+          { keys: '⌘S', what: 'save' },
+          { keys: '⎋', what: 'cancel a pending Cut in the sidebar' }
+        ]},
+        { name: 'Notes and navigation', rows: [
+          { keys: '⇧⌘K', what: 'add or edit a note on the current line' },
+          { keys: '⇧⌘⌫', what: 'delete the note on the current line' },
+          { keys: '⌘F', what: 'find' },
+          { keys: '↑ ↓ ← →', what: 'move through the sidebar - or type a name to jump to it' }
+        ]}
+      ]
+    }
+  }
+</script>
+
+<style>
+  :fez {
+    display: block;
+    overflow-x: auto;
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    tr.group td {
+      padding: 20px 18px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #948A7C;
+    }
+
+    tr.row {
+      border-bottom: 1px solid #EFE7D6;
+    }
+
+    tr.row:hover td {
+      background: #F6F0E4;
+    }
+
+    td.keys {
+      width: 190px;
+      padding: 11px 18px;
+      white-space: nowrap;
+    }
+
+    td.what {
+      padding: 11px 18px;
+      color: #4A443D;
+    }
+
+    kbd {
+      display: inline-block;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #2B2723;
+      background: #F3EDE1;
+      border: 1px solid #E3D9C6;
+      border-bottom-width: 2px;
+      border-radius: 5px;
+      padding: 2px 7px;
+    }
+  }
+</style>
+
+<table>
+  <tbody>
+    {#each state.groups as g}
+      <tr class="group">
+        <td colspan="2">{g.name}</td>
+      </tr>
+      {#each g.rows as row}
+        <tr class="row">
+          <td class="keys"><kbd>{row.keys}</kbd></td>
+          <td class="what">{row.what}</td>
+        </tr>
+      {/each}
+    {/each}
+  </tbody>
+</table>
