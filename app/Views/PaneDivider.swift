@@ -1,10 +1,8 @@
 import SwiftUI
 import AppKit
 
-/// Draggable vertical divider between two panes.
-///
-/// Two flavours because the two uses want different units: the sidebar is a fixed point
-/// width, the editor/preview split is a fraction of whatever the content area happens to be.
+/// Draggable vertical divider between two panes. Only the sidebar has one: the preview is
+/// sized to its own reading measure, so there is nothing left to drag between the documents.
 struct PaneDivider: View {
     let theme: Theme
     /// Called with the drag translation in points, measured from where the drag started.
@@ -55,21 +53,6 @@ extension PaneDivider {
         }
     }
 
-    /// Divider driving a 0...1 split fraction over a known total width.
-    static func fraction(
-        _ binding: Binding<CGFloat>,
-        theme: Theme,
-        totalWidth: CGFloat,
-        min lower: CGFloat = 0.2,
-        max upper: CGFloat = 0.8
-    ) -> some View {
-        DividerHost(theme: theme) { start, delta in
-            guard totalWidth > 0 else { return }
-            binding.wrappedValue = Swift.min(upper, Swift.max(lower, start + delta / totalWidth))
-        } currentValue: {
-            binding.wrappedValue
-        }
-    }
 }
 
 /// Holds the value the drag started from, so the pane tracks the cursor exactly instead

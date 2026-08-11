@@ -18,7 +18,6 @@ struct SettingsData: Codable, Sendable, Equatable {
     var visiblePanes = [Pane.preview.rawValue]
 
     var sidebarWidth: CGFloat = 260
-    var editorSplit: CGFloat = 0.5
     var showSidebar = true
 
     var previewFontSize: CGFloat = 17
@@ -57,8 +56,8 @@ struct SettingsData: Codable, Sendable, Equatable {
 
 /// The viewer's panes. The declaration order is the on-screen order.
 enum Pane: String, CaseIterable, Sendable, Identifiable {
-    case raw
     case preview
+    case raw
     case notes
 
     var id: String { rawValue }

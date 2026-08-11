@@ -44,10 +44,10 @@ app/
     ThemePalettes.swift    the eight palettes and Theme.all - the only hex literals in the app
     ThemeCSS.swift         Theme -> CSS custom properties, JS string literals
     TextStyles.swift       .textStyle() modifiers, row highlight
-    PaneDivider.swift      draggable divider (point width and split fraction flavours)
+    PaneDivider.swift      the draggable sidebar divider
     Toast.swift            global transient messages + the overlay view
     PromptPanel.swift      NSAlert text prompt, plus BlockMenuItem
-    PaneToggleBar.swift    the raw/view/notes segments at the top of the sidebar
+    PaneToggleBar.swift    the view/raw/notes segments at the top of the sidebar
     NotesPane.swift        notes in three scopes: file, project, all projects
     StatusBarView.swift    footer: the Save button, the path, right-click to copy
     SidebarView.swift      pane toggles, search field, root select box, tree, keyboard nav
@@ -163,8 +163,16 @@ in declaration order and never returns an empty set. The toggles are a segmented
 the top of the *sidebar* rather than a stripe over the viewer, so the document panes start at
 the window's top edge and the chrome is all in one column. Their shortcuts are ⌥⌘R/V/N: a
 menu shortcut is matched before the responder chain, so plain ⌘V would have taken Paste out
-of the editor, and ⌘N belongs to New File. Notes take a fixed 350pt column; raw and preview
-share what is left, split by the draggable divider that drives `editorSplit`.
+of the editor, and ⌘N belongs to New File. Notes take a fixed 350pt column.
+
+Preview and raw share what is left, and the split is *derived* rather than dragged: the
+preview takes the reading column its own measure names - `previewMeasure` em of
+`previewFontSize`, plus a 40pt gutter either side - and raw takes the remainder. The measure
+arrows already are that control, so a divider next to them was a second way to set one width,
+and the two disagreed the moment the text size changed. It is capped at four fifths of the
+document area, the ceiling the drag used to hold, so a narrow window still leaves raw a
+usable strip. The em is rounded to a whole point the same way `MarkdownPageBuilder` writes
+`--body-size`, or the frame lands a point or two off the column inside it.
 `Pane.named` maps the retired `bookmarks` and `comments` values onto `notes`, so a config
 written before they were one pane still opens with the panes it asked for.
 

@@ -76,7 +76,7 @@ extension MdBossManager {
         AppSettings.shared.toggle(pane)
     }
 
-    /// Cmd-\ puts raw and preview side by side, or drops back to preview alone.
+    /// Cmd-\ puts preview and raw side by side, or drops back to preview alone.
     func toggleSideBySide() {
         let settings = AppSettings.shared
         if settings.isVisible(.raw) && settings.isVisible(.preview) {

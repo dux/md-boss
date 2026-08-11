@@ -6,7 +6,7 @@
       this.state.groups = [
         { name: 'Panes and layout', rows: [
           { keys: '⌥⌘R  ⌥⌘V  ⌥⌘N', what: 'toggle the raw, preview and notes panes' },
-          { keys: '⌘\\', what: 'raw and preview side by side' },
+          { keys: '⌘\\', what: 'preview and raw side by side' },
           { keys: '⌘0', what: 'show or hide the sidebar' },
           { keys: '⇧⌘D', what: 'switch between light and dark' },
           { keys: '⌘+  ⌘-  ⌥⌘0', what: 'text size, and reset the column width' }

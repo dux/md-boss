@@ -3,14 +3,18 @@ import SwiftUI
 /// The right-hand side: whichever panes are switched on, side by side in `Pane.allCases`
 /// order. The toggles that switch them live at the top of the sidebar.
 ///
-/// Notes take the fixed column `Pane.fixedWidth` names; raw and preview share whatever is
-/// left, split by a draggable divider.
+/// Notes take the fixed column `Pane.fixedWidth` names. Side by side with raw, the preview
+/// is sized to its own reading measure plus a gutter, and raw takes what is left - the
+/// column the measure asks for is the width worth showing, and it is the one the arrows
+/// already control.
 struct DocumentPane: View {
-    /// Bindable for the raw/preview divider, which writes the split straight back.
-    @Bindable private var settings = AppSettings.shared
+    private let settings = AppSettings.shared
     private let manager = MdBossManager.shared
 
     private static let dividerWidth: CGFloat = 5
+
+    /// Free space either side of the preview's reading column.
+    private static let previewGutter: CGFloat = 40
 
     private var theme: Theme { settings.theme }
 
@@ -21,7 +25,7 @@ struct DocumentPane: View {
 
             HStack(spacing: 0) {
                 ForEach(Array(panes.enumerated()), id: \.element) { index, pane in
-                    if index > 0 { separator(before: pane, after: panes[index - 1], total: widths.available) }
+                    if index > 0 { separator() }
                     content(for: pane)
                         .frame(width: pane.fixedWidth ?? widthFor(pane, widths: widths))
                 }
@@ -53,26 +57,30 @@ struct DocumentPane: View {
         }
     }
 
-    /// The divider between raw and preview is draggable; the others are plain rules.
-    @ViewBuilder
-    private func separator(before pane: Pane, after previous: Pane, total: CGFloat) -> some View {
-        if previous == .raw && pane == .preview {
-            PaneDivider.fraction($settings.data.editorSplit, theme: theme, totalWidth: total)
-        } else {
-            Rectangle()
-                .fill(theme[.border])
-                .frame(width: 1)
-                .padding(.horizontal, 2)
-        }
+    private func separator() -> some View {
+        Rectangle()
+            .fill(theme[.border])
+            .frame(width: 1)
+            .padding(.horizontal, 2)
     }
 
     // MARK: Widths
 
     private struct Widths {
-        /// Space left for raw and preview once the fixed columns and dividers are taken.
+        /// Space left for preview and raw once the fixed columns and dividers are taken.
         let available: CGFloat
-        let raw: CGFloat
         let preview: CGFloat
+        let raw: CGFloat
+    }
+
+    /// What the preview asks for when it is not the only document pane: the reading column
+    /// the measure names, plus a gutter either side.
+    ///
+    /// `--measure` is em of `--body-size`, and the page builder writes that size as a whole
+    /// number of pixels, so the em is rounded the same way here - a fractional font size
+    /// would otherwise leave the frame a point or two off the column inside it.
+    private var preferredPreviewWidth: CGFloat {
+        settings.previewMeasure * CGFloat(Int(settings.previewFontSize)) + 2 * Self.previewGutter
     }
 
     private func documentWidths(in total: CGFloat, panes: [Pane]) -> Widths {
@@ -83,20 +91,22 @@ struct DocumentPane: View {
         let hasRaw = panes.contains(.raw)
         let hasPreview = panes.contains(.preview)
 
-        switch (hasRaw, hasPreview) {
+        switch (hasPreview, hasRaw) {
         case (true, true):
-            let raw = available * settings.editorSplit
-            return Widths(available: available, raw: raw, preview: available - raw)
+            // Capped at four fifths, the ceiling the drag used to hold: a window too narrow
+            // for the whole measure should still leave raw a usable strip, not a sliver.
+            let preview = min(preferredPreviewWidth, available * 0.8)
+            return Widths(available: available, preview: preview, raw: available - preview)
         case (true, false):
-            return Widths(available: available, raw: available, preview: 0)
+            return Widths(available: available, preview: available, raw: 0)
         case (false, true):
-            return Widths(available: available, raw: 0, preview: available)
+            return Widths(available: available, preview: 0, raw: available)
         case (false, false):
-            return Widths(available: available, raw: 0, preview: 0)
+            return Widths(available: available, preview: 0, raw: 0)
         }
     }
 
     private func widthFor(_ pane: Pane, widths: Widths) -> CGFloat {
-        pane == .raw ? widths.raw : widths.preview
+        pane == .preview ? widths.preview : widths.raw
     }
 }

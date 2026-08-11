@@ -173,7 +173,7 @@ struct MdBossCommands: Commands {
                 .keyboardShortcut(pane.shortcut, modifiers: [.command, .option])
             }
 
-            Button("Raw & Preview") { manager.toggleSideBySide() }
+            Button("Preview & Raw") { manager.toggleSideBySide() }
                 .keyboardShortcut("\\", modifiers: .command)
 
             Divider()

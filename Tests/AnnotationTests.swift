@@ -355,7 +355,7 @@ struct PaneTests {
         defer { settings.visiblePanes = original }
 
         settings.visiblePanes = [Pane.notes.rawValue, Pane.raw.rawValue, Pane.preview.rawValue]
-        #expect(settings.panes == [.raw, .preview, .notes])
+        #expect(settings.panes == [.preview, .raw, .notes])
     }
 
     @Test("a config naming the old bookmarks or comments pane opens the notes pane")
