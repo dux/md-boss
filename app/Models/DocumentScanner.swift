@@ -54,27 +54,15 @@ final class DocumentScanner: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// `skipPackages` is what `.skipsPackageDescendants` bought here before `DirectoryWalk`
+    /// took the enumerator's place - a `Foo.app` with a stray .txt inside it is not a folder
+    /// worth showing. The search walk never asked for it and still does not.
     private func scan(_ directory: URL, skipFolders: Set<String>) -> Bool {
-        guard let enumerator = FileManager.default.enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) else {
-            return false
-        }
-
-        var examined = 0
-        for case let url as URL in enumerator {
-            examined += 1
-            guard examined <= Self.budget else { return true }
-
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDirectory {
-                if skipFolders.contains(url.lastPathComponent) { enumerator.skipDescendants() }
-                continue
-            }
-            if FileTree.isDocument(url) { return true }
-        }
-        return false
+        DirectoryWalk.containsDocument(
+            under: directory.path,
+            skipFolders: skipFolders,
+            budget: Self.budget,
+            skipPackages: true
+        )
     }
 }

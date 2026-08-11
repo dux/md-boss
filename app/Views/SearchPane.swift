@@ -1,8 +1,12 @@
 import SwiftUI
 
-/// The field that replaces the folder box while a search mode is up.
+/// The search field, which sits above the folder box and is always on screen. What is typed
+/// into it is what decides whether the sidebar shows the tree or a result list.
 struct SearchField: View {
     @FocusState.Binding var isFocused: Bool
+    /// Clearing the query and moving the keyboard back to the tree is the sidebar's to do -
+    /// it owns both focus states, and the field only owns one of them.
+    let onEscape: () -> Void
 
     private let search = SidebarSearch.shared
     private let settings = AppSettings.shared
@@ -25,7 +29,7 @@ struct SearchField: View {
                 .onKeyPress(.upArrow) { search.moveCursor(by: -1); return .handled }
                 .onKeyPress(.downArrow) { search.moveCursor(by: 1); return .handled }
                 .onKeyPress(.return) { open(); return .handled }
-                .onKeyPress(.escape) { search.close(); return .handled }
+                .onKeyPress(.escape) { onEscape(); return .handled }
 
             if search.isRunning {
                 ProgressView()
@@ -60,18 +64,14 @@ struct SearchResultsList: View {
 
     private var theme: Theme { settings.theme }
 
+    /// An empty query shows the tree, not this - so there is no "type to search" state left
+    /// to draw.
     var body: some View {
-        if search.query.isEmpty {
-            EmptyPane(theme: theme, message: "Type to search\n\(scopeName).")
-        } else if search.hits.isEmpty && !search.isRunning {
+        if search.hits.isEmpty && !search.isRunning {
             EmptyPane(theme: theme, message: "Nothing found.")
         } else {
             list
         }
-    }
-
-    private var scopeName: String {
-        RootFoldersManager.shared.active?.lastPathComponent ?? "the active folder"
     }
 
     private var list: some View {
@@ -175,9 +175,7 @@ struct FileResultsList: View {
     private var theme: Theme { settings.theme }
 
     var body: some View {
-        if search.query.isEmpty {
-            EmptyPane(theme: theme, message: "Type part of a file name.")
-        } else if search.files.isEmpty {
+        if search.files.isEmpty {
             EmptyPane(theme: theme, message: "No file matches.")
         } else {
             list

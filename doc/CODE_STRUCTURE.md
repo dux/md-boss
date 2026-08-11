@@ -23,6 +23,9 @@ app/
     MarkdownSyntax.swift   one line of source -> the spans the raw pane paints
     FileMove.swift         move and rename validation, and the rewrite plan
     DocumentSearch.swift   full-text search across a root, pure and cancellable
+    ByteScan.swift         "could this file possibly match?", answered without decoding it
+    DirectoryWalk.swift    the readdir(3) subtree walk under everything that walks
+    ProjectIndex.swift     the document list per root, cached and FSEvents-invalidated
     FuzzyMatch.swift       the Go to File scorer
     SidebarSearch.swift    the sidebar's two search modes and their state
     MdBossManagerSearch.swift    extension: opening what a search found
@@ -47,7 +50,7 @@ app/
     PaneToggleBar.swift    the raw/view/notes segments at the top of the sidebar
     NotesPane.swift        notes in three scopes: file, project, all projects
     StatusBarView.swift    footer: the Save button, the path, right-click to copy
-    SidebarView.swift      pane toggles, root select box, tree, keyboard navigation
+    SidebarView.swift      pane toggles, search field, root select box, tree, keyboard nav
     SearchPane.swift       the search field and the two result lists
     SidebarRow.swift       one flattened row
     RootPicker.swift       the root folder select box and its dropdown
@@ -477,23 +480,47 @@ follows with its roots.
 ## The project walk runs one subtree per core
 
 `FileTree.documents(under:skipFolders:)` splits at the top level and walks each subtree
-concurrently. Over 28,800 entries that is 98ms serially against 20ms this way, and it is the
-dominant cost of a search - so it is the one place in the search path that is parallel.
+concurrently. Over 28,800 entries that was 98ms serially against 20ms this way, and the walk
+is the dominant cost of a search - so it is the one place in the search path that is parallel.
+The per-entry work moved to `DirectoryWalk` afterwards and got several times cheaper, but the
+split is measured against itself and still holds; `hammer bench` times both.
 
 Subtrees are dispatched in path order and their results held in that order, so the same tree
 always answers the same way; results that shuffled between runs would make search hits jump
-around between keystrokes. Order *within* a subtree is still the enumerator's.
+around between keystrokes. Order *within* a subtree is documents before subdirectories, each
+group sorted - `readdir` order is stable for an unchanged directory but is not defined to be
+anything, and a sort per directory is cheap next to being sure.
 
-Each subtree gets its own `FileManager` rather than sharing `.default`, which carries a
-delegate and a current directory. An extension-first check that stats only the entries that
-look like documents was tried and dropped: it was worth 6%, against 5x for the split.
+An extension-first check that stats only the entries that look like documents was tried
+against the old enumerator and dropped: it was worth 6%, against 5x for the split. `readdir`
+gets that idea for free, since `d_type` arrives without a stat to skip in the first place.
 
-## Search is a sidebar mode, not a fourth pane
+## The search field is always there, and the query decides what you see
 
-`PaneToggleBar` fits exactly three segments across a 160pt sidebar - "Preview" already had to
-become "View" to make three fit - and a `Pane` is *persisted* through `visiblePanes`, which a
-query must never be. So Find in Project and Go to File take the tree area over the way
-`RootPickerBox` already takes it over, and nothing about `SettingsData` changes.
+The sidebar stacks pane toggles, the search field, the folder box, and then the list. All four
+are always on screen; what changes is the list, and the *query* is what changes it. An empty
+field is the file tree, and anything typed into it is a search.
+
+That is the whole state machine - `SidebarSearch.isActive` is literally `!query.isEmpty`.
+There is no "search is open" flag, so there is nothing that can get out of step with what the
+field visibly says. Hiding the field until a shortcut is pressed was the previous design, and
+it hid the feature: nothing on screen said the app could search at all.
+
+`SidebarSearch.mode` survives clearing, because which of the two searches the field is doing
+is a preference about the field rather than part of the query. ⇧⌘F sets it to Find in Project
+and ⌘P to Go to File, both keeping whatever is already typed - swapping modes mid-query is the
+point of putting two searches behind one field. Both also ask for the caret through
+`focusRequest`, a counter rather than a flag, because only the view can hold a `@FocusState`
+and pressing the same shortcut twice has to read as two requests.
+
+Escape empties the field and hands the keyboard back to the tree; with nothing typed it is
+just a way out of the field. When results are up but the caret is not in the field - you
+clicked a row, then reached for the arrows - `handleResultKey` drives the result cursor, so
+the keys never fall through to a tree nobody can see.
+
+Still not a fourth pane. `PaneToggleBar` fits exactly three segments across a 160pt sidebar -
+"Preview" already had to become "View" to make three fit - and a `Pane` is *persisted* through
+`visiblePanes`, which a query must never be. Nothing about `SettingsData` changes.
 
 ⌘F stays AppKit's own find bar in the raw pane: one document, incremental. ⇧⌘F is the project.
 ⌘P is Go to File, which needs `CommandGroup(replacing: .printItem) {}` - SwiftUI supplies a
@@ -502,18 +529,52 @@ Print item by default and it would otherwise own that key.
 **No shell-out to ripgrep.** `rg` obeys `.gitignore` while the sidebar obeys `skipFolders` and
 `documentExtensions`: two different answers to "which files does this app show you" is exactly
 the duplicated fact the rest of this document is about. It is also not on a stock macOS, and
-this app is a `.app` dropped into /Applications. `DocumentSearch` walks
-`FileTree.documents(under:skipFolders:)`, the same one the link rewriter uses.
+this app is a `.app` dropped into /Applications, which does not inherit a shell's PATH.
+`DocumentSearch` reads `ProjectIndex`, which caches
+`FileTree.documents(under:skipFolders:)` - the same walk the link rewriter uses.
 
-Measured, because the question is a fair one. On the sidebar's real roots the whole search is
-single-digit milliseconds, well under the 180ms debounce - `rg` cannot beat that, since
-spawning the process costs a meaningful slice of it.
+Everything that made `rg` tempting is a thing macOS already hands you. Run `hammer bench` to
+re-measure any of it; the numbers below are `~/dev`, 3,829 documents, 128MB.
 
-On a large tree the breakdown is what matters: over 28,800 entries the *walk* was 98ms while
-reading every byte of what it found was 103ms and the matching was noise. `rg` wins on trees
-like that by parallelising traversal, so `FileTree.documents` does too - see it in
-`FileTreeModel.swift`. Spreading the *read* across cores as well takes 103ms to 41ms, which
-does not buy a lock, so everything downstream of the walk is deliberately serial.
+**The walk is `readdir(3)`, not `FileManager.enumerator`.** The enumerator asks
+`resourceValues(forKeys: [.isDirectoryKey])` for every entry it yields, which is an `lstat`
+plus a `URL` and a dictionary each time. `readdir` carries the type in `d_type`, so a
+`.swift` file costs a name compare and no allocation at all. 0.7-1.2s down to a steady 330ms,
+both walks split one subtree per core as they always were - and the spread matters as much as
+the median, because the enumerator's cost moves with how warm the metadata cache is while a
+walk that never stats has nothing to be cold about. `DirectoryWalk` pays a `stat` only for
+`DT_UNKNOWN`,
+which real network and FUSE mounts do return, and never follows a symlinked directory - the
+same as the enumerator, and what makes a cycle impossible without tracking inodes.
+
+One thing is deliberately lost: a file carrying `UF_HIDDEN` without a dot in its name used to
+be hidden and now is not. Keeping it costs an `lstat` per entry, which is the whole saving.
+
+**The list is cached and FSEvents drops it.** Find in Project, Go to File and the link rewrite
+after a move each walked the tree for themselves; opening two of them walked `~/dev` twice for
+the same answer. `ProjectIndex` keys on the root *and* the skip set, because settings.json is
+hand-editable while the app runs. A search over that tree is around 1.2s cold and 280ms warm,
+and the warm one is the one you type while refining a query.
+
+FSEvents here and kqueue in `DirectoryWatcher`, on purpose. kqueue needs a descriptor per
+directory and is capped at 128 of them, so it cannot cover a project; the 1-3s coalescing
+latency that rules FSEvents out for the tree pane costs an index nothing but one stale result.
+The app also invalidates its own edits directly, next to the existing
+`DocumentScanner.invalidate` calls, rather than waiting to be told about them.
+
+**Files are prescanned as bytes before they are decoded.** Reading a file into a `String` and
+asking `NSString.range(of:options:)` for a case-insensitive match costs the same whether or
+not the file is relevant, and on a real query almost none of them are. `ByteScan` answers
+"possibly" over the mapped bytes - `memmem` when the query carries a capital, Boyer-Moore-
+Horspool over ASCII-folded bytes when it does not - and only survivors are decoded. 1.0s to
+250ms. `DocumentSearch.matches` is still the only thing that decides what a match *is*: the
+prescan may say yes about a file with nothing in it and must never say no about one with
+something, so a query with any non-ASCII character in it opts out entirely, and a file
+carrying `U+212A`, `U+017F` or `U+00DF` - the only three scalars Foundation folds onto ASCII -
+is decoded rather than skipped.
+
+Reading is still serial. `isCancelled` between files is what lets a superseded query die
+within one file's work, and that is worth more than a lock and a shared collector.
 
 **Case is derived, not stored.** Insensitive until the query carries a capital. One rule out
 of the query itself, no toggle and no setting - the same reasoning as a theme's polarity.

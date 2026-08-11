@@ -2,19 +2,21 @@ import SwiftUI
 
 /// The sidebar's two search modes and the state behind them.
 ///
-/// A mode of the sidebar rather than a fourth pane. `PaneToggleBar` fits exactly three
-/// segments across a 160pt sidebar - "Preview" already had to become "View" to make three fit
-/// - and a pane is *persisted* through `visiblePanes`, which a query must never be. The
-/// sidebar already has the shape this needs: `RootPickerBox` takes the tree area over the
-/// same way.
+/// The field is permanent chrome, above the folder box and below the pane toggles, and the
+/// *query* is what decides whether the tree or a result list is showing. So there is no
+/// "search is open" state to get out of step with what you can see: an empty field is the
+/// tree, and anything typed into it is a search. `mode` only says which of the two searches
+/// that is, and ⇧⌘F / ⌘P set it.
+///
+/// Not a fourth pane, for the same reason it never was: `PaneToggleBar` fits exactly three
+/// segments across a 160pt sidebar, and a pane is *persisted* through `visiblePanes`, which
+/// a query must never be.
 @MainActor
 @Observable
 final class SidebarSearch {
     static let shared = SidebarSearch()
 
     enum Mode: Equatable, Sendable {
-        /// The file tree, which is what the sidebar normally is.
-        case tree
         /// Find in project - text across every document under the active root.
         case text
         /// Go to file - names, matched loosely.
@@ -22,14 +24,18 @@ final class SidebarSearch {
 
         var placeholder: String {
             switch self {
-            case .tree: return ""
             case .text: return "Find in project"
             case .files: return "Go to file"
             }
         }
     }
 
-    private(set) var mode: Mode = .tree
+    private(set) var mode: Mode = .text
+
+    /// Bumped by `focus`, and watched by the view so ⇧⌘F puts the caret in the field. A
+    /// counter rather than a flag: pressing ⇧⌘F twice has to focus twice, and a flag that is
+    /// already true is not a change anything can observe.
+    private(set) var focusRequest = 0
 
     var query = "" {
         didSet {
@@ -52,31 +58,38 @@ final class SidebarSearch {
     /// next keystroke started a second walk beside it.
     private var task: Task<Void, Never>?
 
-    /// Walked once when Go to File opens; every keystroke after that filters in memory,
-    /// which is microseconds against a few thousand short strings.
+    /// Walked once when Go to File is first asked for; every keystroke after that filters in
+    /// memory, which is microseconds against a few thousand short strings.
     private var candidates: [URL] = []
 
-    var isActive: Bool { mode != .tree }
+    /// Whether a result list is showing instead of the tree. The query *is* the answer -
+    /// there is no second flag that could disagree with what the field says.
+    var isActive: Bool { !query.isEmpty }
     var rowCount: Int { mode == .files ? files.count : hits.count }
 
-    // MARK: Opening and closing
+    // MARK: Choosing a search
 
-    func open(_ mode: Mode) {
-        guard mode != .tree else { return close() }
-        self.mode = mode
-        cursor = 0
-        if mode == .files { loadCandidates() }
+    /// ⇧⌘F and ⌘P. Switches which search the field is doing and puts the caret in it,
+    /// deliberately keeping whatever is already typed - swapping modes mid-query is the whole
+    /// point of having two of them on one field.
+    func focus(_ mode: Mode) {
+        if self.mode != mode {
+            self.mode = mode
+            cursor = 0
+        }
+        focusRequest += 1
+        if mode == .files, candidates.isEmpty { loadCandidates() }
         schedule()
     }
 
-    func close() {
+    /// Back to the tree. The mode survives, because it is a preference about the field rather
+    /// than part of the query.
+    func clear() {
         task?.cancel()
         task = nil
-        mode = .tree
         query = ""
         hits = []
         files = []
-        candidates = []
         isRunning = false
         truncated = false
         cursor = 0
@@ -100,8 +113,6 @@ final class SidebarSearch {
         }
 
         switch mode {
-        case .tree:
-            return
         case .files:
             rankFiles()
         case .text:
@@ -159,7 +170,7 @@ final class SidebarSearch {
         let skip = Set(AppSettings.shared.skipFolders)
 
         Task.detached(priority: .userInitiated) {
-            let found = FileTree.documents(under: root, skipFolders: skip)
+            let found = ProjectIndex.shared.documents(under: root, skipFolders: skip)
             await MainActor.run { Self.shared.acceptCandidates(found) }
         }
     }

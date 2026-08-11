@@ -3,12 +3,11 @@ import Foundation
 /// Finding a string across every document under a folder.
 ///
 /// Pure and off-actor: a root of any size is a few hundred files to read, and the sidebar has
-/// to stay live while it happens. The walk is `FileTree.documents(under:skipFolders:)`, the
-/// same one the link rewriter uses - searching a different set of files from the one the
-/// sidebar lists would be two answers to "which files does this app show you". That is also
-/// why this does not shell out to `rg`, which obeys `.gitignore` instead and is not on a
-/// stock macOS besides. On a real docs folder the whole search is single-digit milliseconds,
-/// well under the keystroke debounce.
+/// to stay live while it happens. The file list is `ProjectIndex`, which caches
+/// `FileTree.documents(under:skipFolders:)` - the same walk the link rewriter uses, because
+/// searching a different set of files from the one the sidebar lists would be two answers to
+/// "which files does this app show you". That is also why this does not shell out to `rg`,
+/// which obeys `.gitignore` instead and is not on a stock macOS besides.
 ///
 /// Deliberately not handled: regular expressions, whole-word matching, and multi-line
 /// patterns. A regex on untrusted input can backtrack catastrophically and hang a walk that
@@ -149,16 +148,15 @@ enum DocumentSearch {
     ) -> Result {
         guard !query.isEmpty else { return .empty }
 
-        // The directory walk, which is where nearly all of the time goes on a large tree -
-        // 5.4s of a 5.8s search over 3,825 documents under ~/dev. Everything after it is
-        // noise by comparison, which is what decided the read pass below against being
-        // spread across cores.
+        // The file list. Cold this is the directory walk - 330ms over 3,829 documents under
+        // ~/dev, over half the search. Warm it is a dictionary lookup, which is what makes
+        // the second keystroke of a query cost nothing but the read below.
         var targets: [(url: URL, path: String)] = []
         var seen: Set<String> = []
         var overflowedFiles = false
 
         walk: for root in roots {
-            for url in FileTree.documents(under: root, skipFolders: skipFolders) {
+            for url in ProjectIndex.shared.documents(under: root, skipFolders: skipFolders) {
                 if isCancelled() { return Result(hits: [], truncated: true, filesSearched: 0) }
                 // Roots can nest, and the same file reached through two of them is one file.
                 let path = MarkdownLinks.canonical(url).path
@@ -168,11 +166,17 @@ enum DocumentSearch {
             }
         }
 
-        // Read serially, on purpose. Measured over 3,825 documents and 128MB under `~/dev`:
-        // the directory walk above is 5.4s of it, reading every byte is 103ms, and spreading
-        // that read across 14 cores takes it to 41ms. Sixty milliseconds in six seconds does
-        // not buy a lock and a shared collector. If a tree that size ever has to feel quick,
-        // the thing to parallelise is the traversal, which is where `rg` gets its win.
+        // Read serially, on purpose - `isCancelled` between files is what lets a superseded
+        // query die within one file's work, and a parallel read would have to give that up
+        // for a lock and a shared collector.
+        //
+        // The prescan is what pays for that. Decoding a file and asking Foundation for a
+        // case-insensitive `range(of:)` over all of it costs the same whether or not the file
+        // has anything to do with the query; `ByteScan.Needle` answers "possibly" on the
+        // mapped bytes and only those files go any further. 1.0s to 250ms over 3,829
+        // documents and 128MB under `~/dev`.
+        let needle = ByteScan.Needle(query, caseSensitive: isCaseSensitive(query))
+
         var hits: [Hit] = []
         var truncated = overflowedFiles
 
@@ -181,7 +185,16 @@ enum DocumentSearch {
 
             // A file we cannot decode is listed but never read, the same rule
             // MarkdownDocument and FileMove.plan apply.
-            guard let text = buffers[path] ?? (try? String(contentsOf: url, encoding: .utf8)) else { continue }
+            let text: String
+            if let unsaved = buffers[path] {
+                // Already a String, and the disk copy is stale by definition.
+                text = unsaved
+            } else {
+                guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else { continue }
+                if let needle, !data.withUnsafeBytes({ needle.mayContain($0) }) { continue }
+                guard let decoded = String(data: data, encoding: .utf8) else { continue }
+                text = decoded
+            }
 
             let room = min(limits.perFile, limits.total - hits.count)
             guard room > 0 else { return Result(hits: hits, truncated: true, filesSearched: targets.count) }

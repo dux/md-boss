@@ -93,82 +93,58 @@ enum FileTree {
     /// links after a move, and searching.
     ///
     /// Split at the top level and walked one subtree per core, because the walk *is* the cost
-    /// of a search: over 28,800 entries it is 98ms serially and 20ms this way. Reading and
-    /// searching the documents it finds is noise beside it, which is why nothing downstream
-    /// of here is parallel.
+    /// of a search. Reading and searching the documents it finds is noise beside it, which is
+    /// why nothing downstream of here is parallel.
     ///
-    /// Subtrees are dispatched in path order and their results kept in that order, so the
+    /// The per-entry work is `DirectoryWalk`, which is `readdir(3)` rather than
+    /// `FileManager.enumerator` - see there for why. Everything below stays as it was: the
+    /// split at the top level, one subtree per core, and results kept in slot order so the
     /// same tree always answers the same way and search results do not shuffle between
-    /// keystrokes. Order *within* a subtree is the enumerator's, as it always was.
+    /// keystrokes.
     nonisolated static func documents(under directory: URL, skipFolders: Set<String>) -> [URL] {
-        guard let children = try? FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
+        let root = directory.path
+        var subtrees: [String] = []
+        var found: [String] = []
 
-        var subtrees: [URL] = []
-        var found: [URL] = []
-        for child in children.sorted(by: { $0.path < $1.path }) {
-            let isDirectory = (try? child.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDirectory {
-                if !skipFolders.contains(child.lastPathComponent) { subtrees.append(child) }
-            } else if isDocument(child) {
-                found.append(child)
-            }
+        // Only the top level is listed here; the split needs to know the subtrees before it
+        // can hand one to each core.
+        DirectoryWalk.children(of: root, skipFolders: skipFolders) { name, isDirectory in
+            if isDirectory { subtrees.append(name) } else { found.append(root + "/" + name) }
         }
-        guard !subtrees.isEmpty else { return found }
+        found.sort()
+        subtrees.sort()
+
+        guard !subtrees.isEmpty else { return found.map { URL(fileURLWithPath: $0) } }
 
         // Bound before dispatch: the closure must capture a value, not a var it could race on.
-        let pending = subtrees
+        let pending = subtrees.map { root + "/" + $0 }
         let collected = Subtrees(count: pending.count)
         DispatchQueue.concurrentPerform(iterations: pending.count) { index in
-            collected.store(walk(pending[index], skipFolders: skipFolders), at: index)
+            collected.store(
+                DirectoryWalk.documents(under: pending[index], skipFolders: skipFolders),
+                at: index
+            )
         }
-        return found + collected.flattened
-    }
-
-    /// One subtree, walked serially.
-    ///
-    /// A fresh `FileManager` rather than `.default`: the shared one carries a delegate and a
-    /// current directory, and several concurrent enumerators on it is not a doubt worth
-    /// keeping for the cost of an allocation.
-    nonisolated private static func walk(_ directory: URL, skipFolders: Set<String>) -> [URL] {
-        guard let walker = FileManager().enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return [] }
-
-        var found: [URL] = []
-        for case let url as URL in walker {
-            let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
-            if isDirectory {
-                if skipFolders.contains(url.lastPathComponent) { walker.skipDescendants() }
-            } else if isDocument(url) {
-                found.append(url)
-            }
-        }
-        return found
+        return (found + collected.flattened).map { URL(fileURLWithPath: $0) }
     }
 
     /// Each subtree owns its own slot, so the lock only orders the writes rather than
     /// serialising the walks.
     private final class Subtrees: @unchecked Sendable {
         private let lock = NSLock()
-        private var results: [[URL]]
+        private var results: [[String]]
 
         init(count: Int) {
             results = Array(repeating: [], count: count)
         }
 
-        func store(_ urls: [URL], at index: Int) {
+        func store(_ paths: [String], at index: Int) {
             lock.lock()
             defer { lock.unlock() }
-            results[index] = urls
+            results[index] = paths
         }
 
-        var flattened: [URL] { results.flatMap { $0 } }
+        var flattened: [String] { results.flatMap { $0 } }
     }
 
     /// Folders first, then Finder's natural order - `9.md` before `10.md`.
@@ -432,8 +408,10 @@ final class FileTreeModel {
         switch event {
         case .changed:
             // A new document deep in a subtree can make ancestors worth showing, so the
-            // "contains documents" answer has to be dropped for this path and its line.
+            // "contains documents" answer has to be dropped for this path and its line -
+            // and the search index, which has just gained or lost a file.
             DocumentScanner.shared.invalidate(url)
+            ProjectIndex.shared.invalidate(url)
             refresh(url)
         case .vanished:
             // A root is dimmed rather than dropped - the drive may just be unmounted.

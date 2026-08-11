@@ -56,6 +56,19 @@ task :test do
   end
 end
 
+task :bench do
+  desc 'Measure the search path over a real tree (walk, decode, cold vs warm)'
+  opt :root, type: :string, desc: 'Folder to search (default ~/dev)'
+  opt :query, type: :string, desc: 'What to search for (default kqueue)'
+  proc do |opts|
+    sh STAMP_CMD
+    # Release, because the walk and the byte scan are both loops the optimiser matters to,
+    # and a debug number would understate every one of them.
+    env = "BENCH_ROOT=#{opts[:root] || '~/dev'} BENCH_QUERY=#{opts[:query] || 'kqueue'}"
+    sh "#{env} swift test -c release --filter SearchBenchTests"
+  end
+end
+
 task :build do
   desc 'Lint, test, build, assemble .app bundle and install to /Applications'
   opt :release, type: :boolean, desc: 'Build optimised, the way gh_pub ships it'

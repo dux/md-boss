@@ -101,6 +101,34 @@ struct DocumentSearchRunTests {
         #expect(!result.truncated)
     }
 
+    /// `ByteScan` sits between the file list and the decode and is allowed to skip a file
+    /// outright, so the cases it opts out of or fails open on have to survive the whole
+    /// pass, not just the scanner's own tests.
+    @Test("the byte prescan never costs a hit")
+    func prescanFindsWhatTheMatcherWould() throws {
+        let root = try Fixture.make([
+            // A non-ASCII query, which has no prescan at all.
+            "accents.md": "a caf\u{00E9} on the corner",
+            // CRLF off disk, which nothing has normalised yet.
+            "crlf.md": "first\r\nthe needle is here\r\nthird",
+            // The scalars Foundation folds onto ASCII, which the prescan cannot see.
+            "kelvin.md": "100 \u{212A}elvin",
+            "longs.md": "\u{017F}omething",
+            "sharp.md": "Stra\u{00DF}e"
+        ])
+        defer { Fixture.remove(root) }
+
+        #expect(run(root, "caf\u{00E9}").hits.map { $0.url.lastPathComponent } == ["accents.md"])
+
+        let crlf = run(root, "needle").hits
+        #expect(crlf.map(\.line) == [2])
+        #expect(crlf.map(\.text) == ["the needle is here"])
+
+        #expect(run(root, "kelvin").hits.map { $0.url.lastPathComponent } == ["kelvin.md"])
+        #expect(run(root, "something").hits.map { $0.url.lastPathComponent } == ["longs.md"])
+        #expect(run(root, "strasse").hits.map { $0.url.lastPathComponent } == ["sharp.md"])
+    }
+
     /// The sidebar hides these, so searching them would be a second answer to which files
     /// this app shows you.
     @Test("skipped folders are never read")
@@ -264,51 +292,76 @@ struct SidebarSearchTests {
     /// The singleton is the app's, so every test hands it back the way it found it.
     private func withSearch(_ body: (SidebarSearch) -> Void) {
         let search = SidebarSearch.shared
-        defer { search.close() }
+        defer { search.clear(); search.focus(.text) }
         body(search)
     }
 
-    @Test("opening a mode makes the sidebar hand over the keyboard")
-    func opens() {
+    /// The field is always on screen, so there is no "open" to be in - what is typed is the
+    /// only thing that says whether the tree or a result list is showing.
+    @Test("the query alone decides whether results are showing")
+    func queryDrivesTheList() {
         withSearch { search in
             #expect(!search.isActive)
-            search.open(.text)
-            #expect(search.mode == .text)
+            search.query = "needle"
             #expect(search.isActive)
-        }
-    }
-
-    @Test("opening tree is closing")
-    func openingTreeCloses() {
-        withSearch { search in
-            search.open(.text)
-            search.open(.tree)
+            search.query = ""
             #expect(!search.isActive)
         }
     }
 
-    /// A query must never outlive the panel - it is not a setting, and coming back to a stale
-    /// one with the tree hidden behind it would read as a broken sidebar.
-    @Test("closing clears the query and the results")
-    func closeResets() {
+    /// Swapping modes mid-query is the point of having two searches behind one field, so it
+    /// must not throw away what is already typed.
+    @Test("switching mode keeps the query and asks for the caret")
+    func focusKeepsTheQuery() {
         withSearch { search in
-            search.open(.text)
+            search.query = "needle"
+            let before = search.focusRequest
+
+            search.focus(.files)
+            #expect(search.mode == .files)
+            #expect(search.query == "needle")
+            #expect(search.isActive)
+            #expect(search.focusRequest > before)
+        }
+    }
+
+    /// A flag that is already true is not a change the view can observe, so the same shortcut
+    /// pressed twice has to read as two requests.
+    @Test("asking for the caret twice is two requests")
+    func focusRequestsAccumulate() {
+        withSearch { search in
+            search.focus(.text)
+            let once = search.focusRequest
+            search.focus(.text)
+            #expect(search.focusRequest > once)
+        }
+    }
+
+    /// A query must never outlive its use - coming back to a stale one with the tree hidden
+    /// behind it would read as a broken sidebar.
+    @Test("clearing empties the query and the results but keeps the mode")
+    func clearResets() {
+        withSearch { search in
+            search.focus(.files)
             search.query = "needle"
             search.cursor = 3
-            search.close()
+            search.clear()
 
             #expect(search.query.isEmpty)
             #expect(search.hits.isEmpty)
             #expect(search.files.isEmpty)
             #expect(search.cursor == 0)
             #expect(!search.isActive)
+            // Which search the field is doing is a preference about the field, not part of
+            // the query it was cleared of.
+            #expect(search.mode == .files)
         }
     }
 
     @Test("the cursor cannot leave the list")
     func cursorClamps() {
         withSearch { search in
-            search.open(.text)
+            search.focus(.text)
             // No results yet, so there is nowhere to move to.
             search.moveCursor(by: 1)
             #expect(search.cursor == 0)
@@ -320,7 +373,7 @@ struct SidebarSearchTests {
     @Test("typing puts the cursor back at the top")
     func typingResetsCursor() {
         withSearch { search in
-            search.open(.text)
+            search.focus(.text)
             search.cursor = 4
             search.query = "a"
             #expect(search.cursor == 0)

@@ -232,6 +232,10 @@ extension MdBossManager {
     /// folder is not being watched, so its event would never arrive.
     private func resettle(_ folder: URL) {
         DocumentScanner.shared.invalidate(folder)
+        // FSEvents would get here on its own, a second or so later. Search that has just been
+        // told a file moved and still lists it at the old path is the kind of lag the user
+        // reads as a bug, so the app tells the index about its own edits.
+        ProjectIndex.shared.invalidate(folder)
         tree.refresh(folder)
     }
 

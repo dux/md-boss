@@ -5,14 +5,16 @@ import SwiftUI
 extension MdBossManager {
     // MARK: Opening the panel
 
+    /// The field is always on screen, so these are "put the caret here, in this mode" rather
+    /// than "open a panel" - but the sidebar still has to be showing for there to be a field.
     func findInProject() {
         AppSettings.shared.showSidebar = true
-        SidebarSearch.shared.open(.text)
+        SidebarSearch.shared.focus(.text)
     }
 
     func goToFile() {
         AppSettings.shared.showSidebar = true
-        SidebarSearch.shared.open(.files)
+        SidebarSearch.shared.focus(.files)
     }
 
     var canSearch: Bool { RootFoldersManager.shared.active != nil }
@@ -28,16 +30,14 @@ extension MdBossManager {
 
     func go(toFile url: URL) {
         open(url, reveal: true)
-        // The panel has done its job; leaving it up would hide the tree behind a stale query.
-        SidebarSearch.shared.close()
+        // The query has done its job; leaving it there would hide the tree behind a stale one.
+        SidebarSearch.shared.clear()
     }
 
     /// Return in the search field: open whatever the cursor is on.
     func openSearchCursor() {
         let search = SidebarSearch.shared
         switch search.mode {
-        case .tree:
-            return
         case .files:
             guard search.files.indices.contains(search.cursor) else { return }
             go(toFile: search.files[search.cursor].url)

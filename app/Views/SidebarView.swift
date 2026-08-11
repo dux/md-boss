@@ -20,8 +20,9 @@ struct SidebarView: View {
 
     private var theme: Theme { settings.theme }
 
-    /// Toggle bar, folder box and the padding around both - what the dropdown has to clear.
-    private var pickerInset: CGFloat { RootPickerBox.height * 2 + 22 }
+    /// Toggle bar, search field, folder box and the padding around all three - what the
+    /// dropdown has to clear to hang below the box it belongs to.
+    private var pickerInset: CGFloat { RootPickerBox.height * 3 + 28 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -30,23 +31,19 @@ struct SidebarView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 6)
 
-            Group {
-                if search.isActive {
-                    SearchField(isFocused: $isSearchFocused)
-                } else {
-                    RootPickerBox(isOpen: $pickerIsOpen)
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.bottom, 6)
+            // Always on screen. The field is how you search, so hiding it until a shortcut
+            // is pressed is hiding the feature.
+            SearchField(isFocused: $isSearchFocused, onEscape: escapeSearch)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 6)
+
+            RootPickerBox(isOpen: $pickerIsOpen)
+                .padding(.horizontal, 8)
+                .padding(.bottom, 6)
 
             Group {
-                switch search.mode {
-                case .text:
-                    SearchResultsList()
-                case .files:
-                    FileResultsList()
-                case .tree:
+                // The query decides, not a mode: an empty field is the tree.
+                if !search.isActive {
                     if tree.rows.isEmpty {
                         EmptyPane(theme: theme, message: emptyMessage)
                             .contentShape(Rectangle())
@@ -54,16 +51,17 @@ struct SidebarView: View {
                     } else {
                         list
                     }
+                } else if search.mode == .files {
+                    FileResultsList()
+                } else {
+                    SearchResultsList()
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        // The field owns the keyboard while it is up, so the tree's bare-key handling has to
-        // stand down rather than fire alongside it.
-        .onChange(of: search.isActive) { _, isActive in
-            isSearchFocused = isActive
-            if !isActive { isFocused = true }
-        }
+        // ⇧⌘F and ⌘P reach the field through here rather than by owning the focus state
+        // themselves - the view is the only thing that can hold a @FocusState.
+        .onChange(of: search.focusRequest) { _, _ in isSearchFocused = true }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme[.sidebarBg])
         .overlay(alignment: .top) { picker }
@@ -247,9 +245,12 @@ struct SidebarView: View {
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
         guard press.modifiers.isEmpty else { return .ignored }
-        // The search field has the keyboard while it is up.
-        if search.isActive { return .ignored }
+        // The field has the keyboard while the caret is in it.
+        if isSearchFocused { return .ignored }
         if pickerIsOpen { return handlePickerKey(press) }
+        // Results are showing, so the arrows belong to that list and not to a tree nobody
+        // can see. Reached by clicking a result and then using the keyboard.
+        if search.isActive { return handleResultKey(press) }
 
         switch press.key {
         case .downArrow:  return moveCursor(by: 1)
@@ -271,6 +272,25 @@ struct SidebarView: View {
         default:
             return typeToSelect(press.characters)
         }
+    }
+
+    private func handleResultKey(_ press: KeyPress) -> KeyPress.Result {
+        switch press.key {
+        case .downArrow: search.moveCursor(by: 1)
+        case .upArrow:   search.moveCursor(by: -1)
+        case .return:    manager.openSearchCursor()
+        case .escape:    escapeSearch()
+        default:         return .ignored
+        }
+        return .handled
+    }
+
+    /// Escape empties the field and gives the keyboard back to the tree. With nothing typed
+    /// there is nothing to clear, so it is just a way out of the field.
+    private func escapeSearch() {
+        search.clear()
+        isSearchFocused = false
+        isFocused = true
     }
 
     /// The open dropdown owns the keyboard - it is a modal choice, not a second list.
