@@ -21,59 +21,57 @@
 </script>
 
 <style>
-  :fez {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 
-    @media (min-width: 768px) {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+  @media (min-width: 768px) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .swatch {
+    border-radius: 12px;
+    padding: 16px;
+    border: 1px solid;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    &:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 26px rgba(43, 39, 35, 0.14);
     }
+  }
 
-    .swatch {
-      border-radius: 12px;
-      padding: 16px;
-      border: 1px solid;
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+  .rule {
+    height: 3px;
+    width: 30px;
+    border-radius: 2px;
+    margin-bottom: 12px;
+  }
 
-      &:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 26px rgba(43, 39, 35, 0.14);
-      }
-    }
+  .name {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
 
-    .rule {
-      height: 3px;
-      width: 30px;
-      border-radius: 2px;
-      margin-bottom: 12px;
-    }
+  .line {
+    height: 6px;
+    border-radius: 3px;
+    margin-bottom: 6px;
+    opacity: 0.55;
+  }
 
-    .name {
-      font-size: 14px;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
+  .line.short {
+    width: 62%;
+  }
 
-    .line {
-      height: 6px;
-      border-radius: 3px;
-      margin-bottom: 6px;
-      opacity: 0.55;
-    }
-
-    .line.short {
-      width: 62%;
-    }
-
-    .chip {
-      margin-top: 12px;
-      border-radius: 6px;
-      border: 1px solid;
-      padding: 5px 8px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 11px;
-    }
+  .chip {
+    margin-top: 12px;
+    border-radius: 6px;
+    border: 1px solid;
+    padding: 5px 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
   }
 </style>
 
