@@ -214,6 +214,9 @@ struct SidebarView: View {
         }
         Button("Copy Path") { manager.copyPath(row.node.url) }
         Button("Copy Name") { manager.copyText(row.node.name) }
+        if !row.node.isDirectory {
+            Button("Copy Text") { manager.copyContents(of: row.node.url) }
+        }
         Divider()
         Button("Reveal in Finder") { manager.revealInFinder(row.node.url) }
         if !row.node.isDirectory {

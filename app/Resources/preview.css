@@ -23,8 +23,9 @@ body {
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  /* Oldstyle figures are what make numbers in prose look typeset rather than tabular. */
-  font-variant-numeric: oldstyle-nums proportional-nums;
+  /* Lining figures throughout. Oldstyle reads well in running prose, but its 3 4 5 7 9 hang
+     below the baseline at x-height - next to capitals in a heading that looks like a bug. */
+  font-variant-numeric: lining-nums proportional-nums;
   overflow-wrap: break-word;
   hyphens: none;
 }
@@ -46,6 +47,9 @@ h1, h2, h3, h4, h5, h6 {
   letter-spacing: -0.01em;
   line-height: 1.25;
   margin: 1.7em 0 0.55em;
+  /* Tabular on top of the lining figures, so a numbered run of headings puts its titles on
+     one column instead of one per digit width. */
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 #content > :first-child { margin-top: 0; }

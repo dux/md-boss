@@ -67,6 +67,7 @@ struct StatusBarView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointerCursor()
         .help("Save (⌘S)")
     }
 }

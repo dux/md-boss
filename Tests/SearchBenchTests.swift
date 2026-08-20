@@ -51,9 +51,12 @@ struct SearchBenchTests {
         }
         guard !subtrees.isEmpty else { return found }
 
-        let collected = Slots(count: subtrees.count)
-        DispatchQueue.concurrentPerform(iterations: subtrees.count) { index in
-            collected.store(enumeratorSubtree(subtrees[index], skip: skip), at: index)
+        // Bound before dispatch, the same as `FileTree.documents`: the closure must capture a
+        // value rather than a var it could race on.
+        let pending = subtrees
+        let collected = Slots(count: pending.count)
+        DispatchQueue.concurrentPerform(iterations: pending.count) { index in
+            collected.store(enumeratorSubtree(pending[index], skip: skip), at: index)
         }
         return found + collected.flattened
     }

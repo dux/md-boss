@@ -29,6 +29,11 @@ final class MdBossManager {
     /// the preview, until the caret moves off it - so "where did I land" outlives the scroll.
     private(set) var highlightedLine: Int?
 
+    /// The documents opened before this one, oldest first. The Back button walks it from the
+    /// end. Paths rather than documents: a buffer per visited file would hold every file you
+    /// have ever looked at in memory, and where you were is what `ScrollMemory` already keeps.
+    private(set) var history: [URL] = []
+
     /// The file waiting for a "Move Here". Cleared by Escape in the sidebar and by the move.
     var cutFile: URL?
 
@@ -68,7 +73,9 @@ final class MdBossManager {
 
     // MARK: Files
 
-    func open(_ url: URL, anchor: String? = nil, reveal: Bool = false) {
+    /// `pushingHistory` is false for exactly one caller - `goBack` - so walking back does
+    /// not leave the file you just came from sitting on the stack you are walking.
+    func open(_ url: URL, anchor: String? = nil, reveal: Bool = false, pushingHistory: Bool = true) {
         guard FileTree.isDocument(url) else {
             NSWorkspace.shared.open(url)
             return
@@ -80,6 +87,10 @@ final class MdBossManager {
         }
         guard confirmDiscardingChanges() else { return }
 
+        // After the guards: a switch the user cancelled never happened, and pushing here
+        // would have Back returning to a file that was never left.
+        if pushingHistory, let leaving = document?.url { push(leaving) }
+
         let opened = MarkdownDocument(url: url)
         document = opened
         observeDirtyState(of: opened)
@@ -87,6 +98,52 @@ final class MdBossManager {
         settings.lastOpenedFile = url.path
         syncWindowEditedState()
         if reveal { tree.reveal(url) }
+    }
+
+    // MARK: History
+
+    /// How many documents back the button can walk. Deep enough to cover a session's worth
+    /// of following links, shallow enough that the list is never worth thinking about.
+    private static let historyLimit = 50
+
+    var canGoBack: Bool { !history.isEmpty }
+
+    /// What the Back button would return to, for its tooltip.
+    var backTarget: URL? { history.last }
+
+    /// Back to the document you were reading before this one.
+    ///
+    /// Entries that are no longer on disk are stepped over rather than opened into an empty
+    /// buffer: a file that was trashed or moved outside the app is not a place to go back to,
+    /// and the next one down the stack is what "back" meant anyway.
+    func goBack() {
+        while let previous = history.popLast() {
+            guard FileManager.default.fileExists(atPath: previous.path) else { continue }
+            open(previous, reveal: true, pushingHistory: false)
+            return
+        }
+    }
+
+    private func push(_ url: URL) {
+        // Consecutive duplicates would make Back a no-op that still consumed a press.
+        guard history.last?.standardizedFileURL.path != url.standardizedFileURL.path else { return }
+        history.append(url)
+        if history.count > Self.historyLimit { history.removeFirst(history.count - Self.historyLimit) }
+    }
+
+    /// A file that moved is the same document one path later, so the history and the place it
+    /// was left in both follow it.
+    func followMove(from source: URL, to target: URL) {
+        let old = source.standardizedFileURL.path
+        history = history.map { $0.standardizedFileURL.path == old ? target : $0 }
+        ScrollMemory.shared.relocate(from: source, to: target)
+    }
+
+    /// A file that went to the Trash leaves both.
+    func forgetFile(_ url: URL) {
+        let gone = url.standardizedFileURL.path
+        history.removeAll { $0.standardizedFileURL.path == gone }
+        ScrollMemory.shared.forget(url)
     }
 
     /// Returns false when the user cancels. Save is explicit in md-boss, so switching away
@@ -266,6 +323,23 @@ final class MdBossManager {
 
     func copyPath(_ url: URL) {
         copyText(url.path, label: "Path copied")
+    }
+
+    /// The buffer rather than the file when that document is open, so what lands on the
+    /// clipboard is what the panes are showing - unsaved edits included.
+    func copyContents(of url: URL) {
+        if let document, document.url == url {
+            copyText(document.text, label: "Text copied")
+            return
+        }
+
+        var encoding = String.Encoding.utf8
+        guard let text = (try? String(contentsOf: url, encoding: .utf8))
+                ?? (try? String(contentsOf: url, usedEncoding: &encoding)) else {
+            showError("Could not read \(url.lastPathComponent)")
+            return
+        }
+        copyText(text, label: "Text copied")
     }
 
     func copyText(_ text: String, label: String = "Copied") {

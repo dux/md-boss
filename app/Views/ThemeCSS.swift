@@ -35,6 +35,15 @@ enum JSLiteral {
         return literal.replacingOccurrences(of: "</", with: "<\\/")
     }
 
+    /// Any `Encodable` as a JS literal, for handing the page structured data - the csv
+    /// table's rows arrive this way. JSON is a subset of JS, and the same `</` guard applies
+    /// for the same reason: the result is inlined inside a `<script>` element.
+    static func json<Value: Encodable>(_ value: Value) -> String {
+        guard let data = try? JSONEncoder().encode(value),
+              let literal = String(bytes: data, encoding: .utf8) else { return "null" }
+        return literal.replacingOccurrences(of: "</", with: "<\\/")
+    }
+
     /// A `{"42":"text"}` object literal, for handing the page a line-keyed map. Keys are
     /// sorted, so the same notes always produce the same script and change detection
     /// upstream is not defeated by dictionary ordering.

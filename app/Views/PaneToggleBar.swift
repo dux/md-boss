@@ -80,6 +80,7 @@ struct PaneToggleBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointerCursor()
         .help(isOn ? "Hide \(pane.title)" : "Show \(pane.title)")
     }
 }

@@ -6,11 +6,20 @@ import Foundation
 struct FileTreeListingTests {
     @Test("document extensions are recognised case-insensitively")
     func recognisesDocuments() {
-        for name in ["a.md", "a.MD", "a.markdown", "a.mdown", "a.mkd", "a.qmd", "a.Rmd", "a.txt", "a.TXT"] {
+        for name in ["a.md", "a.MD", "a.markdown", "a.mdown", "a.mkd", "a.qmd", "a.Rmd", "a.txt", "a.TXT", "a.csv", "a.CSV"] {
             #expect(FileTree.isDocument(URL(fileURLWithPath: name)), "\(name)")
         }
-        for name in ["a.swift", "a", "a.mdx", "README", "a.png"] {
+        for name in ["a.swift", "a", "a.mdx", "README", "a.png", "a.tsv", "a.xlsx"] {
             #expect(!FileTree.isDocument(URL(fileURLWithPath: name)), "\(name)")
+        }
+    }
+
+    @Test("a csv gets the table renderer, everything else the markdown one")
+    func picksARenderer() {
+        #expect(FileTree.kind(of: URL(fileURLWithPath: "data.csv")) == .csv)
+        #expect(FileTree.kind(of: URL(fileURLWithPath: "data.CSV")) == .csv)
+        for name in ["notes.md", "plain.txt", "paper.qmd", "README"] {
+            #expect(FileTree.kind(of: URL(fileURLWithPath: name)) == .markdown, "\(name)")
         }
     }
 
@@ -248,6 +257,88 @@ struct RootFoldersTests {
         }
 
         #expect(tree.rows.map(\.node.name) == ["notes.md"])
+    }
+
+    /// What the 30-second poll is for. kqueue is capped at a descriptor per directory and
+    /// sees nothing at all on a network volume, so a re-list has to find a file that arrived
+    /// with no event behind it.
+    @Test("a re-list finds a file that no watcher announced")
+    @MainActor
+    func refreshFindsUnwatchedFile() async throws {
+        let (tree, root) = try await activeTree(["notes.md": "# notes"])
+        defer { Fixture.remove(root) }
+
+        try "later".write(to: root.appendingPathComponent("added.md"), atomically: true, encoding: .utf8)
+        tree.refreshAll()
+
+        for _ in 0..<100 where tree.rows.count < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(tree.rows.map(\.node.name) == ["added.md", "notes.md"])
+    }
+
+    /// The cursor is an index, and the poll can insert a row above it at any moment - so
+    /// without re-anchoring, a file arriving on a 30-second tick would slide the keyboard
+    /// cursor onto a different document while you were reading.
+    @Test("a row appearing above the cursor leaves the cursor on its own file")
+    @MainActor
+    func refreshKeepsTheCursorOnItsFile() async throws {
+        let (tree, root) = try await activeTree(["notes.md": "# notes"])
+        defer { Fixture.remove(root) }
+
+        tree.cursor = 0
+        #expect(tree.cursorRow?.node.name == "notes.md")
+
+        // Sorts above notes.md, so holding the index would land the cursor on it.
+        try "later".write(to: root.appendingPathComponent("added.md"), atomically: true, encoding: .utf8)
+        tree.refreshAll()
+
+        for _ in 0..<100 where tree.rows.count < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(tree.rows.map(\.node.name) == ["added.md", "notes.md"])
+        #expect(tree.cursorRow?.node.name == "notes.md")
+        #expect(tree.cursor == 1)
+    }
+
+    /// The row under the cursor going away is the other half: there is nothing to anchor to,
+    /// so the cursor holds its place on screen rather than jumping to the top.
+    @Test("the cursor holds its place when its own row is deleted")
+    @MainActor
+    func refreshClampsWhenTheRowIsGone() async throws {
+        let (tree, root) = try await activeTree(["a.md": "a", "b.md": "b", "c.md": "c"])
+        defer { Fixture.remove(root) }
+
+        tree.cursor = 1
+        #expect(tree.cursorRow?.node.name == "b.md")
+
+        try FileManager.default.removeItem(at: root.appendingPathComponent("b.md"))
+        tree.refreshAll()
+
+        for _ in 0..<100 where tree.rows.count > 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(tree.rows.map(\.node.name) == ["a.md", "c.md"])
+        #expect(tree.cursor == 1)
+    }
+
+    /// A tree whose root is listed and whose rows have landed.
+    @MainActor
+    private func activeTree(_ files: [String: String]) async throws -> (FileTreeModel, URL) {
+        let store = try Fixture.makeFile()
+        let root = try Fixture.make(files)
+
+        let folders = RootFoldersManager(file: store)
+        let tree = FileTreeModel(folders: folders)
+        folders.add(root, atTop: true)
+
+        for _ in 0..<100 where tree.rows.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        return (tree, root)
     }
 }
 

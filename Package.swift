@@ -23,6 +23,8 @@ let package = Package(
                 .copy("Resources/highlight.min.js"),
                 .copy("Resources/preview.js"),
                 .copy("Resources/preview.css"),
+                .copy("Resources/csv.js"),
+                .copy("Resources/csv.css"),
                 .copy("Resources/AppIcon.icns"),
                 .copy("Resources/AppIcon.svg"),
                 .copy("Resources/build-commit.txt")

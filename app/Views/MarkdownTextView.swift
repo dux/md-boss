@@ -24,6 +24,9 @@ struct MarkdownTextView: NSViewRepresentable {
     var notes: [Int: String] = [:]
     /// Indent width in spaces, used by Tab and Shift-Tab.
     var indent = 2
+    /// The open file is not markdown, so the pane stays plain text and Return stays a
+    /// newline. Read off `MarkdownDocument.kind` by the pane - see `MarkdownHighlighter`.
+    var isPlain = false
 
     func makeNSView(context: Context) -> NSScrollView {
         // Assembled by hand rather than by NSTextView.scrollableTextView(), because
@@ -97,6 +100,7 @@ struct MarkdownTextView: NSViewRepresentable {
         context.coordinator.loadedToken = reloadToken
         context.coordinator.loadedURL = document.url
         context.coordinator.notes = notes
+        context.coordinator.isPlain = isPlain
         context.coordinator.load(document.text, into: textView)
         apply(theme: textView, context.coordinator)
 
@@ -116,6 +120,7 @@ struct MarkdownTextView: NSViewRepresentable {
         context.coordinator.document = document
         context.coordinator.indent = indent
         context.coordinator.notes = notes
+        context.coordinator.isPlain = isPlain
 
         // Only replace the string when the document identity changed or an external reload
         // happened. Assigning it unconditionally would destroy the selection, the undo
@@ -192,6 +197,11 @@ struct MarkdownTextView: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate, @preconcurrency NSTextStorageDelegate {
         var document: MarkdownDocument
         var indent: Int
+        /// Mirrored onto the highlighter, which `repaint` creates lazily - the flag arrives
+        /// before there is anything to hand it to.
+        var isPlain = false {
+            didSet { highlighter?.isPlain = isPlain }
+        }
         var loadedToken: UUID?
         /// Which file the text view is currently showing, so a reload of it can be told from
         /// a switch to another one.
@@ -284,7 +294,14 @@ struct MarkdownTextView: NSViewRepresentable {
             // new text has had no pass over it - a file opened into the pane would arrive
             // uncoloured without this.
             if let storage = textView.textStorage { highlighter?.rebuild(storage, index: index) }
-            if let restore { apply(restore, to: textView) }
+            if let restore {
+                apply(restore, to: textView)
+            } else if let line = ScrollMemory.shared.place(for: document.url).line {
+                // A file arriving in the pane opens where it was left. The same recorded
+                // line the preview restores to: both panes speak in source lines, so one
+                // number serves both and they land together.
+                restoreScroll(to: line, in: textView)
+            }
             // A file arriving in the pane is not the reader moving off the line a note just
             // pointed at, so this must not dismiss the landing band.
             reportCursor(textView, navigated: false)
@@ -341,6 +358,7 @@ struct MarkdownTextView: NSViewRepresentable {
             } else {
                 highlighter = MarkdownHighlighter(theme: theme, baseFont: font, paragraph: paragraph)
             }
+            highlighter?.isPlain = isPlain
             highlighter?.rebuild(storage, index: index)
         }
 
@@ -394,6 +412,29 @@ struct MarkdownTextView: NSViewRepresentable {
             isFollowing = true
             scroll(textView, in: scrollView, toLine: position.top)
             isFollowing = false
+        }
+
+        /// Where `ScrollMemory` says this file was left.
+        ///
+        /// Deferred by one turn rather than applied here: on the pass that first loads a
+        /// document the view has no geometry yet, so the clip view is zero-high and any
+        /// offset computed against it is meaningless. The token guard drops the restore when
+        /// another file arrived in the meantime.
+        private func restoreScroll(to line: Double, in textView: NSTextView) {
+            let token = loadedToken
+            DispatchQueue.main.async { [weak self, weak textView] in
+                guard let self, let textView, self.loadedToken == token,
+                      let scrollView = textView.enclosingScrollView,
+                      let layoutManager = textView.layoutManager,
+                      let container = textView.textContainer else { return }
+
+                layoutManager.ensureLayout(for: container)
+                // A programmatic scroll is not the user driving the pane; without this the
+                // preview would be dragged along by the restore.
+                self.isFollowing = true
+                self.scroll(textView, in: scrollView, toLine: line)
+                self.isFollowing = false
+            }
         }
 
         func textDidChange(_ notification: Notification) {
@@ -467,6 +508,10 @@ struct MarkdownTextView: NSViewRepresentable {
 
         @objc private func scrolled() {
             guard !isFollowing, let textView, let line = topVisibleLine(textView) else { return }
+            // Before the sync and unconditionally, for the reason the preview records here
+            // too: `ScrollSync.report` drops the move unless both panes are up, and where
+            // the reader is has to be remembered either way.
+            ScrollMemory.shared.record(line: line, for: document.url)
             ScrollSync.shared.report(line: line, from: .raw)
         }
 
@@ -595,6 +640,10 @@ struct MarkdownTextView: NSViewRepresentable {
         /// Option-Return arrives as `insertNewlineIgnoringFieldEditor`, which never reaches
         /// this switch - that is the way out when you want a plain newline.
         private func continueList(_ textView: NSTextView) -> Bool {
+            // Nothing in a CSV is a list, and a row that happens to start with `- ` must not
+            // gain a bullet on Return.
+            guard !isPlain else { return false }
+
             let caret = textView.selectedRange()
             // A Return that replaces a selection is a deletion first; let AppKit have it.
             guard caret.length == 0 else { return false }

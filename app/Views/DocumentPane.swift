@@ -47,8 +47,13 @@ struct DocumentPane: View {
                 EmptyPane(theme: theme, message: "Select a file.")
             }
         case .preview:
+            // One toggle, two renderers. Which one is the file's own answer, not a mode the
+            // viewer is in - see `DocumentKind`.
             if let document = manager.document {
-                PreviewPane(document: document)
+                switch document.kind {
+                case .markdown: PreviewPane(document: document)
+                case .csv: CSVPane(document: document)
+                }
             } else {
                 EmptyPane(theme: theme, message: "Select a file.")
             }
@@ -80,7 +85,10 @@ struct DocumentPane: View {
     /// number of pixels, so the em is rounded the same way here - a fractional font size
     /// would otherwise leave the frame a point or two off the column inside it.
     private var preferredPreviewWidth: CGFloat {
-        settings.previewMeasure * CGFloat(Int(settings.previewFontSize)) + 2 * Self.previewGutter
+        // A table has no measure - it is as wide as its widest row and scrolls sideways for
+        // the rest, so it asks for everything and takes the four-fifths ceiling below.
+        guard manager.document?.kind != .csv else { return .infinity }
+        return settings.previewMeasure * CGFloat(Int(settings.previewFontSize)) + 2 * Self.previewGutter
     }
 
     private func documentWidths(in total: CGFloat, panes: [Pane]) -> Widths {

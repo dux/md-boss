@@ -178,6 +178,7 @@ extension MdBossManager {
         }
 
         let removed = AnnotationStore.shared.removeAll(for: source)
+        forgetFile(source)
         // The open document finds out from its own watcher, which already has the wording
         // for a file that went out from under it - there is no second mechanism here.
         resettle(source.deletingLastPathComponent())
@@ -195,6 +196,7 @@ extension MdBossManager {
     /// than twice, the same reasoning `acceptDrop` gives for being shared.
     private func relocate(_ source: URL, to target: URL, announcing message: String) {
         followMovedDocument(from: source, to: target)
+        followMove(from: source, to: target)
         AnnotationStore.shared.repoint(from: source, to: target)
         resettleTree(from: source, to: target)
 

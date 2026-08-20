@@ -153,6 +153,15 @@ struct MarkdownPreviewView: NSViewRepresentable {
             if let line = renderedHighlight {
                 run(webView, "mdHighlightLine(\(line));")
             }
+
+            // Where this file was last left. Skipped when the document was opened *at* a
+            // line - an anchor link or a note jump named a place, and that beats the one
+            // reading stopped at.
+            if owner?.anchor == nil, renderedHighlight == nil,
+               let url = owner?.fileURL,
+               let line = ScrollMemory.shared.place(for: url).line {
+                run(webView, "mdScrollToLine(\(line));")
+            }
         }
 
         func observeScrolling(of webView: WKWebView) {
@@ -213,7 +222,14 @@ struct MarkdownPreviewView: NSViewRepresentable {
                     }
                 }
             case "scroll":
-                guard let line = body["line"] as? Double else { return }
+                // A page that has not signalled ready is the one being replaced, and the
+                // message it posted on the way out is about a document that is no longer
+                // open - recording it would file the old file's position under the new one.
+                guard isReady, let line = body["line"] as? Double else { return }
+                // Recorded before the sync, and unconditionally: `ScrollSync.report` drops
+                // the move when the raw pane is not up, which is the default set of panes -
+                // and where the reader is has to be remembered either way.
+                if let url = owner?.fileURL { ScrollMemory.shared.record(line: line, for: url) }
                 ScrollSync.shared.report(line: line, from: .preview)
             case "context":
                 guard let line = body["line"] as? Double else { return }
@@ -235,6 +251,9 @@ struct MarkdownPreviewView: NSViewRepresentable {
 /// `willOpenMenu`, so the web view has to be subclassed.
 final class PreviewWebView: WKWebView {
     var fileURL: URL?
+    /// False for the csv page, which draws no `data-line` anchors - a note there would have
+    /// nowhere to attach and no way to be shown again.
+    var canAnnotate = true
 
     /// The page reports the right-clicked block's source line over the bridge, which is
     /// asynchronous - but a `BlockMenuItem` fires when the item is *picked*, long after the
@@ -246,13 +265,14 @@ final class PreviewWebView: WKWebView {
         guard let fileURL else { return }
 
         let manager = MdBossManager.shared
-        let items: [NSMenuItem] = [
-            BlockMenuItem("Add Note…") { manager.addNoteAtCursor() },
-            .separator(),
-            BlockMenuItem("Copy Path") { manager.copyPath(fileURL) },
-            BlockMenuItem("Reveal in Finder") { manager.revealInFinder(fileURL) },
-            .separator()
-        ]
+        var items: [NSMenuItem] = []
+        if canAnnotate {
+            items.append(BlockMenuItem("Add Note…") { manager.addNoteAtCursor() })
+            items.append(.separator())
+        }
+        items.append(BlockMenuItem("Copy Path") { manager.copyPath(fileURL) })
+        items.append(BlockMenuItem("Reveal in Finder") { manager.revealInFinder(fileURL) })
+        items.append(.separator())
 
         for (offset, item) in items.enumerated() {
             menu.insertItem(item, at: offset)

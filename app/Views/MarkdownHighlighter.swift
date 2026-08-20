@@ -26,6 +26,13 @@ final class MarkdownHighlighter {
 
     var paragraph: NSParagraphStyle
 
+    /// The open file is not markdown - a CSV. The pane still shows its text and still needs
+    /// its base attributes laid down; nothing in it is a heading, and colouring a quoted
+    /// field because it happens to hold an asterisk is worse than plain text.
+    ///
+    /// The same path the line ceiling already takes, rather than a second way to be plain.
+    var isPlain = false
+
     /// The fence open at the start of each line, one entry per line. The single copy of "am I
     /// inside a fence" - what decides how far a re-highlight has to reach, and later what
     /// tells Return-in-a-list from Return-in-code.
@@ -52,7 +59,7 @@ final class MarkdownHighlighter {
         let lines = Self.lines(of: storage.string)
         fences = Self.fenceStates(of: lines)
 
-        guard lines.count <= Self.lineCeiling else {
+        guard !isPlain, lines.count <= Self.lineCeiling else {
             storage.setAttributes(base, range: NSRange(location: 0, length: storage.length))
             return
         }
@@ -73,7 +80,7 @@ final class MarkdownHighlighter {
         let previous = fences
         fences = Self.fenceStates(of: lines)
 
-        guard lines.count <= Self.lineCeiling else {
+        guard !isPlain, lines.count <= Self.lineCeiling else {
             storage.setAttributes(base, range: NSRange(location: 0, length: storage.length))
             return
         }

@@ -69,6 +69,7 @@ struct RootPickerBox: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointerCursor()
         .onHover { isHovered = $0 }
         .help(folders.active?.path ?? "Add a folder (⌘O)")
         .onDrop(of: [.fileURL], isTargeted: dropBinding) { providers in

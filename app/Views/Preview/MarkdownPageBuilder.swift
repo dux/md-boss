@@ -68,6 +68,8 @@ enum Bundled {
     static let highlightJS = text("highlight.min", "js")
     static let previewJS = text("preview", "js")
     static let previewCSS = text("preview", "css")
+    static let csvJS = text("csv", "js")
+    static let csvCSS = text("csv", "css")
 
     private static func text(_ name: String, _ ext: String) -> String {
         guard let url = Bundle.module.url(forResource: name, withExtension: ext),

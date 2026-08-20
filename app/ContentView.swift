@@ -15,7 +15,10 @@ struct ContentView: View {
                     if settings.showSidebar {
                         SidebarView(tree: manager.tree)
                             .frame(width: settings.sidebarWidth)
-                        PaneDivider.width($settings.data.sidebarWidth, theme: theme, min: 160, max: 520)
+                        // 190 rather than 160: the top row is the Back button plus three
+                        // toggle segments now, and a segment narrow enough to truncate
+                        // "Notes" is a control that no longer says what it does.
+                        PaneDivider.width($settings.data.sidebarWidth, theme: theme, min: 190, max: 520)
                     }
 
                     contentArea

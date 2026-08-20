@@ -42,6 +42,7 @@ struct SettingsView: View {
                 Spacer()
                 Button("Reset to defaults") { settings.resetFontSizes() }
                     .buttonStyle(.plain)
+                    .pointerCursor(!isDefault)
                     .textStyle(.buttons)
                     .foregroundColor(theme[.link])
                     .disabled(isDefault)
@@ -83,6 +84,7 @@ struct SettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointerCursor()
     }
 
     private func swatch(_ candidate: Theme) -> some View {
@@ -161,6 +163,7 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointerCursor(enabled)
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.3)
         .help(delta > 0 ? "Bigger" : "Smaller")

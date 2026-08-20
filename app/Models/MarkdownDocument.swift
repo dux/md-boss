@@ -27,6 +27,10 @@ final class MarkdownDocument {
 
     var isDirty: Bool { text != savedText }
 
+    /// Which renderer the rendered pane uses, and whether the raw pane highlights markdown.
+    /// Derived rather than stored, so `relocate` cannot leave it disagreeing with the path.
+    var kind: DocumentKind { FileTree.kind(of: url) }
+
     /// How often the file is stat'd when kqueue has nothing to say. See `syncWithDisk`.
     private static let pollInterval: Duration = .seconds(2)
 

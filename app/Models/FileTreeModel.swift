@@ -22,18 +22,35 @@ struct FlatRow: Identifiable, Equatable {
     var id: String { node.id }
 }
 
+/// Which renderer a document gets. Derived from the extension in one place, because the
+/// pane picker, the raw pane's highlighting and the scroll memory all have to agree - three
+/// separate answers to "is this markdown" is three chances to drift.
+enum DocumentKind: Sendable {
+    case markdown
+    /// Delimited text, drawn as a table by `CSVTable` and the csv page. Not markdown at all:
+    /// a comma is not emphasis and a row is not a paragraph.
+    case csv
+}
+
 // MARK: - Listing (pure, off-actor)
 
 enum FileTree {
-    /// What the sidebar lists and the preview renders. Plain text is included and rendered
-    /// through the same markdown pipeline - a .txt is just markdown that mostly turns into
-    /// paragraphs.
+    /// What the sidebar lists and the document panes open. Plain text goes through the same
+    /// markdown pipeline - a .txt is just markdown that mostly turns into paragraphs - while
+    /// .csv gets the table renderer instead. See `DocumentKind`.
     static let documentExtensions: Set<String> = [
-        "md", "markdown", "mdown", "mkd", "mkdn", "mdwn", "qmd", "rmd", "txt"
+        "md", "markdown", "mdown", "mkd", "mkdn", "mdwn", "qmd", "rmd", "txt", "csv"
     ]
+
+    /// The extensions that are drawn as a table rather than as prose.
+    static let tableExtensions: Set<String> = ["csv"]
 
     static func isDocument(_ url: URL) -> Bool {
         documentExtensions.contains(url.pathExtension.lowercased())
+    }
+
+    static func kind(of url: URL) -> DocumentKind {
+        tableExtensions.contains(url.pathExtension.lowercased()) ? .csv : .markdown
     }
 
     /// The name a typed file name is created under. Anything the sidebar would not list
@@ -205,6 +222,9 @@ final class FileTreeModel {
     private var watcher: DirectoryWatcher?
     /// What the last rebuild was showing, so switching folders can reset the cursor.
     private var lastActive: String?
+    /// Long, because this is a backstop and not the mechanism: kqueue already answers a local
+    /// change in milliseconds, and anything this catches has been wrong for a while already.
+    private static let pollInterval: Duration = .seconds(30)
     /// A reveal target whose row has not been listed yet.
     private var pendingReveal: URL?
 
@@ -224,6 +244,31 @@ final class FileTreeModel {
         }
 
         observeRoots()
+        startPolling()
+    }
+
+    /// Re-lists what is on screen every 30 seconds, whether or not anything said to.
+    ///
+    /// The tree is watched with kqueue, which needs a descriptor per directory and gives up
+    /// past `DirectoryWatcher`'s cap - `watchersSaturated` is that already happening. It also
+    /// sees nothing at all on a network volume, and a file synced in by Dropbox or an
+    /// `rsync` from another machine arrives with no event of any kind. A sidebar that is
+    /// quietly a few minutes stale is worse than one that costs a `readdir` every half minute.
+    ///
+    /// Nothing about this is visible when nothing changed: `refresh` merges rather than
+    /// replaces, and `rebuild` only publishes `rows` when the rows actually differ - so a
+    /// poll over an unchanged folder ends without SwiftUI being told anything at all.
+    ///
+    /// The same shape as `MarkdownDocument.startPolling`, and for the same reason: the loop
+    /// holds `self` weakly, so the last release of the model ends it a tick later.
+    private func startPolling() {
+        Task { [weak self] in
+            while true {
+                try? await Task.sleep(for: Self.pollInterval)
+                guard let self else { return }
+                self.refreshAll()
+            }
+        }
     }
 
     /// Builds the tree for the folders as they stand, and again after every change to them.
@@ -369,19 +414,36 @@ final class FileTreeModel {
 
     private func rebuild() {
         let active = folders.active
-        rows = FileTree.flatten(
+        // Which file the cursor is on, not which line - a row appearing above it shifts every
+        // index below, and the poll makes that something that can happen while you are simply
+        // reading. Re-anchoring is what "silently" has to mean: the keyboard stays where you
+        // put it whether or not the list moved under it.
+        let anchor = cursorRow?.id
+        let flattened = FileTree.flatten(
             root: active,
             children: children,
             expanded: expanded,
             denied: denied
         )
 
+        // Assigning an identical array is not free even when Observation declines to report
+        // it - `rows` feeds a `ForEach` and the comparison here is one pass over what the
+        // sidebar is already holding.
+        if rows != flattened { rows = flattened }
+
+        let target: Int
         if active?.path != lastActive {
-            lastActive = active?.path
-            cursor = 0
+            target = 0
+        } else if let anchor, let moved = rows.firstIndex(where: { $0.id == anchor }) {
+            target = moved
         } else {
-            cursor = min(cursor, max(0, rows.count - 1))
+            // The row itself is gone - deleted, or collapsed into a folder above it. Holding
+            // the index keeps the cursor where it was on screen, which is what a list does
+            // when the thing under it disappears.
+            target = min(cursor, max(0, rows.count - 1))
         }
+        lastActive = active?.path
+        if cursor != target { cursor = target }
 
         if let target = pendingReveal, rows.contains(where: { $0.id == target.path }) {
             pendingReveal = nil

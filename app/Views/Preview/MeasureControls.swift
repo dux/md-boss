@@ -41,6 +41,7 @@ struct MeasureControls: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointerCursor()
         .help(help)
     }
 }

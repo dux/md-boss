@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - Text Styles
 // Use like CSS classes: Text("Hello").textStyle(.default)
@@ -102,6 +103,64 @@ extension View {
             RoundedRectangle(cornerRadius: 5)
                 .fill(RowHighlightStyle.fill(theme: theme, isSelected: isSelected, isFocused: isFocused, isHovered: isHovered))
         )
+    }
+
+    /// The pointing hand over a button. Every button the app draws itself carries this, and
+    /// nothing else does - a list row that selects something keeps the arrow, which is why
+    /// the sidebar tree and the folder dropdown are left alone.
+    ///
+    /// Pass the button's own enabled state: a control that is dimmed and does nothing must
+    /// not advertise a click. `.disabled()` greys the label but says nothing about the cursor.
+    func pointerCursor(_ isEnabled: Bool = true) -> some View {
+        overlay(CursorArea(isEnabled: isEnabled).allowsHitTesting(false))
+    }
+}
+
+/// An invisible AppKit layer that claims the cursor over whatever it covers.
+///
+/// Neither `pointerStyle` nor an `onHover` that calls `NSCursor.set()` survives the measure
+/// arrows, which are the app's only buttons floating over a `WKWebView`: the web view sets
+/// the cursor from its own mouse tracking, and whatever SwiftUI set a moment earlier is taken
+/// straight back. `cursorUpdate(with:)` is the point in the event cycle where AppKit asks the
+/// frontmost tracking area under the pointer what the cursor should be, so answering there
+/// wins by construction rather than by winning a race.
+///
+/// One mechanism for every button rather than the plain case and the hard case done
+/// differently - two answers to "what does the cursor do over a button" is the kind of split
+/// that leaves one of them quietly wrong, which is how the arrows got missed to begin with.
+private struct CursorArea: NSViewRepresentable {
+    let isEnabled: Bool
+
+    func makeNSView(context: Context) -> TrackingView { TrackingView() }
+
+    func updateNSView(_ view: TrackingView, context: Context) {
+        view.isEnabled = isEnabled
+    }
+
+    final class TrackingView: NSView {
+        var isEnabled = true
+
+        override func updateTrackingAreas() {
+            super.updateTrackingAreas()
+            for area in trackingAreas { removeTrackingArea(area) }
+            // `.inVisibleRect` keeps the area correct as the button resizes with the font
+            // setting, which is otherwise a rect measured once at the old size.
+            addTrackingArea(NSTrackingArea(
+                rect: .zero,
+                options: [.cursorUpdate, .activeInActiveApp, .inVisibleRect],
+                owner: self
+            ))
+        }
+
+        override func cursorUpdate(with event: NSEvent) {
+            guard isEnabled else { return super.cursorUpdate(with: event) }
+            NSCursor.pointingHand.set()
+        }
+
+        /// Never take the click. Tracking areas are dispatched off the view's frame rather
+        /// than hit testing, so the cursor still arrives here while the button underneath
+        /// keeps every mouse event.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
     }
 }
 

@@ -28,9 +28,16 @@ a newline. ⌥Return always is.
 over rather than opening a pane, and Esc gives it back.
 Search is case-insensitive until you type a capital.
 
-The sidebar lists `.md`, `.markdown` and `.txt` files, and hides folders that have no
+The sidebar lists `.md`, `.markdown`, `.txt` and `.csv` files, and hides folders that have no
 documents anywhere below them, so pointing it at a source repo shows you the docs rather than
 the source tree.
+
+A `.csv` opens as a table rather than as prose: columns keep their natural width and the page
+scrolls sideways to meet them, so nothing is squeezed to fit. The delimiter is read off the
+file, so a semicolon export lands in columns too.
+
+Every document reopens where you stopped reading. Go back with the arrow in the top-left
+corner or ⌘[, or just click the file again.
 
 [Demo page](https://dux.github.io/md-boss/web-demo/)
 

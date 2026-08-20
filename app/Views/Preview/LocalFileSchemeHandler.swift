@@ -9,7 +9,9 @@ import WebKit
 ///
 /// Ported from file_explorer_swift's HTMLPreviewView.
 final class LocalFileSchemeHandler: NSObject, WKURLSchemeHandler {
-    static let scheme = "previewfile"
+    /// `nonisolated`, because `MarkdownPageBuilder` builds the page off the main actor and
+    /// this is a string constant - there is nothing here for an actor to protect.
+    nonisolated static let scheme = "previewfile"
 
     static func src(for url: URL) -> String {
         let encoded = Data(url.path.utf8).base64EncodedString()

@@ -31,7 +31,9 @@ app/
     MdBossManagerSearch.swift    extension: opening what a search found
     RootFoldersManager.swift     the sidebar's root folders, stored in roots.txt, MRU-ordered
     ScrollSync.swift       raw <-> preview scroll sync, last-driver-wins
-    FileTreeModel.swift    FileNode/FlatRow, lazy listing, expansion, flattening
+    FileTreeModel.swift    DocumentKind, FileNode/FlatRow, lazy listing, expansion, flattening
+    CSVTable.swift         a delimited file parsed into rows, delimiter guessed
+    ScrollMemory.swift     where each document was left, per session
     DocumentScanner.swift  memoised "does this folder contain documents?"
     DirectoryWatcher.swift per-directory and per-file kqueue watching
     MarkdownDocument.swift one open file: text, dirty state, save, external changes
@@ -56,6 +58,7 @@ app/
     RootPicker.swift       the root folder select box and its dropdown
     DocumentPane.swift     preview / editor / split, gated on width
     EditorPane.swift       editor plus the external-change banner
+    ExternalChangeBanner.swift  what the file did on disk - drawn by both document panes
     MarkdownTextView.swift NSTextView bridge
     MarkdownHighlighter.swift  paints MarkdownSyntax spans onto the text storage
     EditorTextView.swift   the NSTextView subclass - the raw pane's file drop target
@@ -63,14 +66,19 @@ app/
     Preview/
       PreviewPane.swift        debounced live rendering
       MeasureControls.swift    the reading-measure arrows, pinned to the page's top-right corner
+      BackButton.swift         "< go back", pinned to the page's top-left corner
       MarkdownPreviewView.swift WKWebView bridge, link routing, JS bridge
       MarkdownPageBuilder.swift the HTML shell, CSP nonce, bundled resources
       MarkdownLinkTarget.swift  external / file / directory / missing (ported verbatim)
       LocalFileSchemeHandler.swift previewfile:// image serving (ported verbatim)
+      CSVPane.swift            the debounced off-actor parse
+      CSVPreviewView.swift     the table's WKWebView bridge
+      CSVPageBuilder.swift     the csv page's HTML shell and JSON payload
   Resources/
     marked.min.js          v15.0.12, vendored from file_explorer_swift
     highlight.min.js       v11.9.0, vendored from file_explorer_swift
     preview.js / preview.css  the page's script and stylesheet, as real files
+    csv.js / csv.css          the same, for the table page
     AppIcon.svg/.icns      regenerate with `hammer icon`
     build-commit.txt       gitignored, written by the Hammerfile before every SwiftPM run
 Tests/
@@ -128,6 +136,42 @@ is worse than one rule, and a status bar still at 11pt under an 18pt tree reads 
 For the same reason SF Symbols use `.iconStyle(_:scale:)` rather than a literal point size,
 so an icon is always measured off the text it sits next to; row heights and hit areas in the
 sidebar and the toggle bar are computed from the same two sizes.
+
+**A button says so with the cursor; a row does not.** Every button the app draws itself
+carries `.pointerCursor()`, next to `.textStyle` and `.iconStyle` in `TextStyles.swift`.
+Almost all of them are `.buttonStyle(.plain)`, which paints something that looks clickable
+and then behaves like inert text under the mouse. It takes the button's *enabled* state,
+because `.disabled()` dims a label and says nothing about the cursor, and a dimmed control
+advertising a click is a worse lie than no cursor at all. Native `pointerStyle(.link)` on
+macOS 15 and up, `NSCursor.pointingHand` below it. Sidebar rows and the folder dropdown are
+deliberately left out: they select rather than act, and the arrow is what macOS lists use.
+
+**A file that moves or disappears keeps its buffer, and both panes say so.** `syncWithDisk`
+sets `.detached` rather than closing anything - your text is still here, and a document that
+vanished from the sidebar because someone ran `git checkout` is not a reason to throw work
+away. `ExternalChangeBanner` is drawn by `PreviewPane` as well as `EditorPane`: the default
+set of panes is the preview alone, so a banner only the editor knows how to draw is a banner
+nobody sees. A moved file being silently stale under a reader is the same bug as under a
+typist.
+
+**The sidebar re-lists itself every 30 seconds.** kqueue answers a local change in
+milliseconds and is the mechanism; this is the backstop for what it cannot see. It needs a
+descriptor per directory and gives up past `DirectoryWatcher`'s cap - `watchersSaturated` is
+that already happening - and it reports nothing at all on a network volume, so a file arriving
+by Dropbox or an `rsync` from another machine comes with no event of any kind.
+
+Silent is a requirement, not a nicety, because the poll fires while you are simply reading.
+`refresh` merges rather than replaces, `rebuild` publishes `rows` only when they differ, and
+the cursor is re-anchored to the *file* it was on rather than the index: a row appearing above
+it shifts every index below, so without that a file syncing in on a 30-second tick would slide
+the keyboard cursor onto a different document under your hands. When the anchored row is gone
+the index is held instead, which is what a list does when the thing under it disappears.
+
+One case it does not cover: a folder that answered "no documents below me" and later gains one
+out of kqueue's sight stays hidden, because `DocumentScanner` memoises that answer and
+dropping it every 30 seconds would re-walk each document-free subtree on every tick. A folder
+that is *new* is scanned fresh, so this is only the folder that was already there and already
+empty.
 
 **MdBossManager is a singleton, not a `@StateObject`.** SwiftUI's `.commands` closures live
 outside the view hierarchy and cannot read view state, so the menu bar and the views have to
@@ -351,6 +395,106 @@ live config up before the run and restores it in an `ensure`, and the demo `.md-
 written and removed around the run rather than committed, since note paths carry the home
 directory of whoever took them. Line numbers for those notes are looked up by their text,
 so editing a sample document cannot quietly move a note off the line it talks about.
+
+## A .csv is drawn as a table, not lexed as prose
+
+`DocumentKind` is the whole switch: `FileTree.kind(of:)` reads the extension, `DocumentPane`
+picks `CSVPane` over `PreviewPane`, and `EditorPane` passes the same answer down as
+`isPlain`. One derived fact rather than a flag on the document or a mode on the viewer -
+the same reasoning as a theme's polarity being read off its background.
+
+The renderer is a page of its own rather than a mode of the markdown one. Nothing the two
+would share survives the difference: no marked, no highlight.js, no measure, no `data-line`
+anchors, no images and therefore a tighter CSP. What *is* shared is the two-phase shape -
+one load per file, everything after it an `evaluateJavaScript` call - and that lives in the
+two coordinators, not in one page.
+
+`CSVTable` is a hand-rolled RFC 4180 parse rather than a `split(separator:)`, for the reason
+`MarkdownLinks.destinations` is hand-rolled: none of what has to be right here is regular.
+A field can carry the delimiter, a newline and a doubled quote, and a `\r\n` has to end one
+record rather than two. Iterating `Character` is what makes that last one a single case,
+since a CRLF is one Swift `Character`.
+
+The delimiter is *guessed*, over the first record only. Half the CSVs in the world are
+semicolon-separated because that is what a European Excel writes, and one column per row is
+not a table anyone can read; counting the whole file instead would let a prose column full
+of commas outvote the real separator. Ragged rows are padded to the widest, because a short
+`<tr>` shifts every cell to its right into the wrong column.
+
+Rows stop at `CSVTable.rowLimit` and the page says so. This is the one place the app caps
+rather than failing open the way `DocumentScanner.budget` does: a million-row export is a
+file to grep, and a page that lays out for ten seconds reads as a hang. The count past the
+cap is still real, so the notice names it.
+
+The parse runs on a detached task and the page keys its re-render on a *version* counter -
+comparing two 5,000-row tables cell by cell on every update pass is exactly the cost the
+files that can least afford it would pay. Cells reach the DOM through `textContent`, so a
+cell holding markup is a cell holding markup.
+
+The table takes the four-fifths ceiling `DocumentPane` already held rather than a reading
+measure: it is as wide as its widest row and the page scrolls sideways for the rest. Cells
+stop growing at `--cell-max` and wrap there, which is what keeps one prose column from
+pushing every column after it off the far side. It is set at `previewFontSize`, unscaled -
+this is the rendered pane whichever renderer draws it, so it answers to the same setting and
+the same ⌘+/- zoom, and a size derived from that one would be a second text size to find and
+adjust.
+
+**The sheet is grabbable.** A wide table is mostly off screen, and reaching for a horizontal
+scrollbar to see column twelve is the wrong gesture, so a drag pans it the way a map does.
+A single-click drag pans and therefore does not select; a double or triple click still takes
+a word or a cell, which is what keeps copying out of the table possible. That is the whole
+reason the handler checks `event.detail` - `preventDefault` on mousedown suppresses the
+selection the browser would otherwise start, the double click's included. The offset is
+measured from where the drag began rather than accumulated per event, the same reasoning
+`DividerHost` gives.
+
+**Neither pane may render the document it is no longer showing.** `PreviewPane.draft` and
+`CSVPane.parsed` each carry the file their text came from, because both are `@State` on a
+pane that is *reused* when another document arrives: the update pass that hands the web view
+the new `fileURL` runs before the task that refreshes them. Without the check the new file's
+page is built out of the old file's text, and then rendered, scrolled and restored against a
+document that is not open - which is what silently broke the reading place on every switch.
+
+For the same reason a page that has not signalled `ready` cannot report a place. The message
+it posts on its way out describes the document being replaced, and recording it would file
+one file's position under another's name.
+
+## Coming back to a file lands where you left it
+
+`ScrollMemory` holds one place per document for the session. Lines for text - the raw pane
+and the preview both speak in source lines, so one recorded number serves both and it
+survives a font or measure change that a pixel offset would not. Pixels for a table, which
+has no anchors to interpolate against and scrolls sideways as well as down. Both are kept
+side by side rather than one over the other, because a CSV has a raw pane recording lines
+*and* a table recording a point.
+
+It is written from the same place each pane already reports its scroll from, and *before*
+`ScrollSync.report` rather than through it: that call drops the move unless both document
+panes are up, which is not the default set, and where the reader is has to be remembered
+either way.
+
+Deliberately not `@Observable` and not in `SettingsData`. It is written on every scroll
+frame, so anything observing it would re-evaluate its body sixty times a second - the same
+reason `ScrollSync` is a Combine subject - and a position per file would grow the one
+persisted struct without bound and rewrite it while you scroll.
+
+The restore is queued with the page load rather than sent on the next update pass, and it
+gives way to an anchor link or a note jump: those named a place, and that beats the one
+reading stopped at. The raw pane's restore waits one turn, because on the pass that loads a
+document the view has no geometry yet and any offset computed against it is meaningless.
+
+`MdBossManager.history` is the other half. Back is a stack of paths, not of documents - a
+buffer per visited file would hold every file you have ever looked at, and where you were is
+what `ScrollMemory` already keeps. It is pushed *after* `open`'s guards, so a switch the user
+cancelled never happened, and entries whose file is gone are stepped over rather than opened
+into an empty buffer. A move takes the history and the place with it; the Trash takes both.
+
+The button sits in the sidebar's top-left corner next to the pane toggles, since the history
+belongs to the app rather than to one pane, and it is drawn disabled rather than hidden so
+the corner does not shuffle the toggles sideways the first time you follow a link. That is
+also why the sidebar's minimum width went from 160 to 190: `PaneToggleBar` fitted exactly
+three segments at 160, and a segment narrow enough to truncate "Notes" is a control that no
+longer says what it does.
 
 ## Two-phase preview rendering
 
@@ -697,6 +841,10 @@ repointed links after a move.
 Plus markdown syntax highlighting in the raw pane, on the same palette the preview draws.
 Plus Return continuing a list, and a Format menu for bold, italic and link.
 Plus Find in Project and Go to File, as modes of the sidebar.
+
+Plus `.csv`, drawn as a table by a renderer of its own, and a document that reopens where you
+stopped reading - by the Back button in the rendered pane's top-left corner or by clicking the
+file again.
 
 Still open, from phase 5-6 of the plan:
 a new folder in the sidebar, moving folders rather than files, rewriting the moved file's

@@ -166,6 +166,14 @@ struct MdBossCommands: Commands {
         // .sidebar lands in the system View menu. A CommandMenu("View") would create a
         // second one next to it.
         CommandGroup(replacing: .sidebar) {
+            // ⌘[ is what every browser and every editor on this platform means by Back, and
+            // nothing in md-boss was using it.
+            Button("Back") { manager.goBack() }
+                .keyboardShortcut("[", modifiers: .command)
+                .disabled(!manager.canGoBack)
+
+            Divider()
+
             ForEach(Pane.allCases) { pane in
                 Button("\(settings.isVisible(pane) ? "Hide" : "Show") \(pane.title)") {
                     manager.togglePane(pane)
