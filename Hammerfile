@@ -310,3 +310,126 @@ task :watch do
     end
   end
 end
+
+# The Tauri port in tauri-rust/ (doc/feature/port-tauri.md). Namespaced while the Swift
+# app is still the one that ships; the last phase of the port promotes these to the
+# top-level names.
+TAURI_DIR ||= 'tauri-rust'
+
+namespace :tauri do
+  private
+
+  def tauri_sh(cmd)
+    sh "cd #{TAURI_DIR} && #{cmd}"
+  end
+
+  task :install do
+    desc 'bun install - the JS side of the toolchain'
+    proc { tauri_sh 'bun install --frozen-lockfile' }
+  end
+
+  task :lint do
+    desc 'tsc --noEmit and cargo clippy'
+    proc do
+      tauri_sh 'bun x tsc --noEmit'
+      tauri_sh 'cd src-tauri && cargo clippy --quiet -- -D warnings'
+    end
+  end
+
+  task :test do
+    desc 'bun test and cargo test'
+    proc do
+      # --pass-with-no-tests: bun exits 1 on an empty tests/, which is only the state
+      # before the first port lands, not a failure worth stopping a build over.
+      tauri_sh 'bun test --pass-with-no-tests'
+      tauri_sh 'cd src-tauri && cargo test --quiet'
+    end
+  end
+
+  task :dev do
+    desc 'Install, then run the app against the vite dev server (the inner loop)'
+    proc do
+      hammer 'tauri:install'
+      tauri_sh 'bun tauri dev'
+    end
+  end
+
+  task :build do
+    desc 'Lint, test, then build the app - debug and unbundled unless --release'
+    opt :release, type: :boolean, desc: 'Optimised build with the platform bundles (dmg / msi / deb ...)'
+    proc do |opts|
+      hammer 'tauri:install'
+      hammer 'tauri:lint'
+      hammer 'tauri:test'
+      flags = opts[:release] ? '' : '--debug --no-bundle'
+      say "building #{APP_NAME} (tauri, #{opts[:release] ? 'release' : 'debug'})", :cyan
+      tauri_sh "bun tauri build #{flags}".strip
+      say.green 'built'
+    end
+  end
+
+  task :icon do
+    desc 'Regenerate src-tauri/icons from app/Resources/AppIcon.svg'
+    proc do
+      tauri_sh 'bun tauri icon ../app/Resources/AppIcon.svg'
+      say.green 'icons regenerated'
+    end
+  end
+
+  task :clean do
+    desc 'Remove the tauri build artifacts (dist, cargo target)'
+    proc do
+      sh "rm -rf #{TAURI_DIR}/dist #{TAURI_DIR}/src-tauri/target"
+      say.green 'clean complete'
+    end
+  end
+end
+
+namespace :tauri do
+  task :probe do
+    desc <<~TXT
+      Launch the dev app against a scratch config and capture its window to tmp/probe.png.
+
+      MD_BOSS_CONFIG points the app at --config (default tmp/probe-config, so the real
+      ~/.config/md-boss is never touched). The window id comes from CGWindowList, so no
+      accessibility permission is needed - only Screen Recording for screencapture.
+    TXT
+    opt :config, type: :string, desc: 'config dir with roots.txt / settings.json (default tmp/probe-config)'
+    opt :wait, type: :string, desc: 'seconds to wait after launch before the shot (default 6)'
+    opt :out, type: :string, desc: 'png path (default tmp/probe.png)'
+    proc do |opts|
+      config = File.expand_path(opts[:config] || 'tmp/probe-config')
+      out    = File.expand_path(opts[:out] || 'tmp/probe.png')
+      wait   = (opts[:wait] || '6').to_f
+      winid  = File.expand_path('tmp/winid.swift')
+      sh "mkdir -p #{config} #{File.dirname(out)}"
+      File.write winid, <<~SWIFT
+        import CoreGraphics
+        import Foundation
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { exit(1) }
+        for window in windows {
+            guard let owner = window[kCGWindowOwnerName as String] as? String, ["md-boss", "MdBoss"].contains(owner),
+                  let number = window[kCGWindowNumber as String] as? Int,
+                  let bounds = window[kCGWindowBounds as String] as? [String: Any],
+                  let height = bounds["Height"] as? Double, height > 100 else { continue }
+            print(number); exit(0)
+        }
+        exit(2)
+      SWIFT
+      pid = spawn({ 'MD_BOSS_CONFIG' => config }, "cd #{TAURI_DIR} && bun tauri dev", out: File::NULL, err: File::NULL)
+      begin
+        90.times { break if system('pgrep -x md-boss >/dev/null') && system('lsof -ti :1420 >/dev/null 2>&1'); sleep 1 }
+        sleep wait
+        id = `swift #{winid}`.strip
+        error 'no md-boss window on screen' if id.empty?
+        sh "screencapture -o -x -l #{id} #{out}"
+        say.green "captured #{out}"
+      ensure
+        `pkill -x md-boss 2>/dev/null`
+        Process.kill('TERM', pid) rescue nil
+        sleep 1
+        `lsof -ti :1420 | xargs kill 2>/dev/null`
+      end
+    end
+  end
+end

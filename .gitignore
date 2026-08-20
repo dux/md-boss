@@ -17,3 +17,14 @@ xcuserdata/
 
 # written and removed around a `hammer shots` run - never committed
 /web-demo/sample/.md-boss
+
+# tauri-rust port
+/tauri-rust/node_modules
+/tauri-rust/dist
+/tauri-rust/src-tauri/target
+/tauri-rust/src-tauri/gen
+/tauri-rust/src-tauri/icons/android
+/tauri-rust/src-tauri/icons/ios
+
+# per-machine agent task queue (llm todo)
+LLM_TODO.local.md

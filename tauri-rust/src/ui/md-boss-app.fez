@@ -1,0 +1,102 @@
+<script>
+  // Root layout: sidebar | document, status bar across the bottom - the shape of the Swift
+  // ContentView. The sidebar holds the root picker and the tree; watcher and keyboard
+  // navigation land with the next P3 tasks (doc/feature/port-tauri.md).
+  class {
+    init() {
+      this.state.sidebarWidth = MdBoss.manager.settings.data.sidebarWidth
+      this.state.root = null
+      this.state.file = null
+      this.state.error = null
+    }
+
+    onMount() {
+      this.local.unsubscribe = MdBoss.manager.onChange(() => this.pull())
+      this.pull()
+    }
+
+    onDestroy() {
+      if (this.local.unsubscribe) this.local.unsubscribe()
+    }
+
+    pull() {
+      const manager = MdBoss.manager
+      this.state.root = manager.activeRoot
+      this.state.file = manager.document ? manager.document.path : null
+      this.state.error = manager.error
+      if (manager.document) {
+        const pane = Fez.find(this.root.querySelector('.fez-preview-pane'))
+        if (pane) pane.render(manager.document.text)
+      }
+    }
+
+  }
+</script>
+
+<style>
+  display: grid;
+  height: 100%;
+  /* Explicit placement rather than grid-template-areas: the fez CSS minifier collapses
+     the whitespace between area names and the value turns invalid. */
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 1fr auto;
+
+  aside {
+    grid-column: 1;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    box-sizing: border-box;
+
+    .top {
+      padding: 8px;
+    }
+
+    side-bar {
+      flex: 1;
+      min-height: 0;
+    }
+  }
+
+  main {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 0;
+  }
+
+  .empty {
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+  }
+
+  footer {
+    grid-column: 1 / 3;
+    grid-row: 2;
+    border-top: 1px solid var(--border);
+    padding: 4px 12px;
+    color: var(--muted);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
+
+<aside style="width: {state.sidebarWidth}px">
+  <div class="top">
+    <root-picker></root-picker>
+  </div>
+  <side-bar></side-bar>
+</aside>
+<main>
+  {#unless state.file}
+    <div class="empty">Open a folder to begin</div>
+  {/unless}
+  <preview-pane style={state.file ? '' : 'display: none'}></preview-pane>
+</main>
+<footer>{state.error || state.file || 'No file open'}</footer>

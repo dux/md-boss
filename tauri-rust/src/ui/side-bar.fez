@@ -1,0 +1,154 @@
+<script>
+  // The folder tree: rows from the tree model, indented by depth, a chevron on folders.
+  // Clicking a folder row toggles it, a file row opens the document.
+  class {
+    init() {
+      this.state.rows = []
+      this.state.cursor = 0
+      this.state.selected = null
+      this.state.message = null
+    }
+
+    onMount() {
+      this.local.unsubscribe = [
+        MdBoss.manager.tree.onChange(() => this.pull()),
+        MdBoss.manager.onChange(() => this.pull()),
+      ]
+      this.pull()
+    }
+
+    onDestroy() {
+      for (const off of this.local.unsubscribe || []) off()
+    }
+
+    pull() {
+      const manager = MdBoss.manager
+      const tree = manager.tree
+      this.state.rows = tree.rows.map((row) => ({
+        path: row.node.path,
+        name: row.node.name,
+        isDir: row.node.isDir,
+        depth: row.depth,
+        isDenied: row.isDenied,
+        isExpanded: tree.isExpanded(row.node),
+      }))
+      this.state.cursor = tree.cursor
+      this.state.selected = manager.document ? manager.document.path : null
+      this.state.message = this.emptyMessage(manager, tree)
+    }
+
+    emptyMessage(manager, tree) {
+      if (tree.rows.length) return null
+      const active = manager.activeRoot
+      if (!active) return 'No folders yet.\nPress ⌘O to add one.'
+      if (tree.activeIsMissing) return `No folder or files found in\n${active}`
+      if (tree.activeIsDenied) return 'No access to that folder.'
+      return 'No documents here.'
+    }
+
+    rowAt(index) {
+      return MdBoss.manager.tree.rows[Number(index)]
+    }
+
+    toggle(index) {
+      const row = this.rowAt(index)
+      if (row) MdBoss.manager.tree.toggle(row.node)
+    }
+
+    open(index) {
+      const row = this.rowAt(index)
+      if (!row) return
+      MdBoss.manager.tree.moveCursor(Number(index))
+      if (row.node.isDir) MdBoss.manager.tree.toggle(row.node)
+      else MdBoss.manager.open(row.node.path)
+    }
+  }
+</script>
+
+<style>
+  display: block;
+  height: 100%;
+  overflow: auto;
+  padding: 4px;
+  box-sizing: border-box;
+
+  .empty {
+    padding: 24px 12px;
+    color: var(--muted);
+    text-align: center;
+    white-space: pre-line;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 5px;
+    color: var(--text);
+    white-space: nowrap;
+    cursor: default;
+    user-select: none;
+  }
+
+  .row:hover {
+    background: var(--surface);
+  }
+
+  .row.selected,
+  .row.cursor {
+    background: var(--selection);
+  }
+
+  .chevron {
+    width: 12px;
+    flex: none;
+    color: var(--muted);
+    font-size: 9px;
+    text-align: center;
+  }
+
+  .icon {
+    width: 14px;
+    flex: none;
+    color: var(--muted);
+    font-size: 11px;
+    text-align: center;
+  }
+
+  .row.dir .icon {
+    color: var(--accent);
+  }
+
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .denied {
+    margin-left: 6px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+</style>
+
+{#if state.message}
+  <div class="empty">{state.message}</div>
+{:else}
+  {#each state.rows as row, index}
+    <div
+      class={'row' + (row.isDir ? ' dir' : '') + (row.path === state.selected ? ' selected' : '') + (index === state.cursor ? ' cursor' : '')}
+      style="padding-left: {8 + row.depth * 14}px"
+      title={row.path}
+      onclick="fez.open({index})"
+    >
+      <span class="chevron" onclick!="fez.toggle({index})">{row.isDir ? (row.isExpanded ? '▼' : '▶') : ''}</span>
+      <span class="icon">{row.isDir ? '▰' : '▤'}</span>
+      <span class="name">{row.name}</span>
+      {#if row.isDenied}
+        <span class="denied">no access</span>
+      {/if}
+    </div>
+  {/each}
+{/if}

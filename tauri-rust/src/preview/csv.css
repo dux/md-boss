@@ -1,0 +1,98 @@
+/* The csv page. Every colour is a var(--token) injected by Theme.rootCSS - never a literal,
+   and never a colour-scheme media query. See doc/THEMES.md.
+
+   This is a data surface, not a reading one: system sans rather than the preview's serif,
+   tabular figures so columns of numbers line up, and no measure at all - a table is as wide
+   as its widest row and the page scrolls sideways to meet it. */
+
+:root {
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+  --body-size: 17px;
+  /* Cells stop growing here and wrap instead. A column of paragraphs would otherwise push
+     every column after it off the far side of a screen nobody can scroll back from. */
+  --cell-max: 400px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+}
+
+body {
+  font-family: var(--sans);
+  /* The preview's own size, unscaled. Cells are set in sans rather than the reading serif,
+     and a size derived from that one would be a second text size to discover and adjust. */
+  font-size: var(--body-size);
+  line-height: 1.45;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Room under the last row rather than the preview's 45vh: there is nothing to centre here,
+   and a table that scrolls a screen past its end reads as broken.
+
+   Grabbable, because a wide table is mostly off screen and dragging it is the gesture that
+   suits that - see the pan handler in csv.js. */
+#sheet { padding: 0 0 96px; cursor: grab; }
+
+body.panning, body.panning #sheet { cursor: grabbing; }
+
+/* `max-content` is what stops the browser condensing columns to fit the window - the point
+   of the horizontal scroll is that a wide table stays wide and readable. */
+table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+}
+
+th, td {
+  border: 1px solid var(--border);
+  border-top: 0;
+  border-left: 0;
+  padding: 5px 10px;
+  text-align: left;
+  vertical-align: top;
+  max-width: var(--cell-max);
+  /* Newlines inside a quoted field are content, and a long unbroken token has to give way
+     rather than blow the cap. */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* Sticky against the page scroll, so the column names stay put however far down you are. */
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--table-head);
+  font-weight: 600;
+  white-space: nowrap;
+  /* A sticky cell's own border scrolls away with the row behind it; this one is painted. */
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+
+tbody tr:nth-child(even) { background: var(--table-stripe); }
+tbody tr:hover { background: var(--selection); }
+
+/* The row cap and the empty file both say so here, in the one place a table has for a
+   message. */
+.notice {
+  font-size: 0.95em;
+  color: var(--muted);
+  padding: 14px 12px;
+  border-bottom: 1px solid var(--border);
+  /* Sticks to the left edge while the table scrolls sideways under it. */
+  position: sticky;
+  left: 0;
+  max-width: 100vw;
+}
+
+.notice code {
+  font-family: var(--mono);
+  font-size: 0.9em;
+}

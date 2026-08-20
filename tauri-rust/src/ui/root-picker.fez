@@ -1,0 +1,177 @@
+<script>
+  // The sidebar's root-folder select box. Hand-rolled rather than a <select>: system popup
+  // chrome cannot be forced to the paper palette, and this box sits directly on the sidebar
+  // where any mismatch shows. The dropped-open list covers the tree instead of pushing it
+  // down, which is what makes it read as a select box rather than a disclosure group.
+  class {
+    init() {
+      this.state.active = null
+      this.state.activeName = ''
+      this.state.recent = []
+      this.state.open = false
+    }
+
+    onMount() {
+      this.local.unsubscribe = MdBoss.manager.onChange(() => this.pull())
+      this.local.onDocumentClick = (event) => {
+        if (this.state.open && !this.root.contains(event.target)) this.state.open = false
+      }
+      document.addEventListener('click', this.local.onDocumentClick)
+      this.pull()
+    }
+
+    onDestroy() {
+      if (this.local.unsubscribe) this.local.unsubscribe()
+      document.removeEventListener('click', this.local.onDocumentClick)
+    }
+
+    pull() {
+      const manager = MdBoss.manager
+      const active = manager.activeRoot
+      this.state.active = active
+      this.state.activeName = active ? active.slice(active.lastIndexOf('/') + 1) : ''
+      this.state.recent = manager.folders.recent.map((path) => ({
+        path,
+        name: path.slice(path.lastIndexOf('/') + 1),
+        parent: manager.abbreviateHome(path.slice(0, path.lastIndexOf('/')) || '/'),
+        isActive: path === active,
+      }))
+    }
+
+    boxClicked() {
+      if (!this.state.active) MdBoss.manager.addFolders()
+      else this.state.open = !this.state.open
+    }
+
+    pick(path) {
+      MdBoss.manager.selectRoot(path)
+      this.state.open = false
+    }
+  }
+</script>
+
+<style>
+  display: block;
+  position: relative;
+
+  .box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    /* bg, not surface: in the paper palette surface and sidebar-bg are the same hex, so a
+       surface box would be invisible against the sidebar. */
+    background: var(--bg);
+    color: var(--text);
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .box:hover,
+  .box.open {
+    border-color: var(--border-strong);
+  }
+
+  .box.empty {
+    color: var(--muted);
+  }
+
+  .box .name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .box .glyph {
+    color: var(--accent);
+    font-size: 11px;
+  }
+
+  .box.empty .glyph,
+  .box .updown {
+    color: var(--muted);
+  }
+
+  .box .updown {
+    font-size: 9px;
+  }
+
+  .list {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 30px;
+    z-index: 10;
+    max-height: 60vh;
+    overflow: auto;
+    padding: 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--bg);
+    box-shadow: 0 2px 8px var(--border-strong);
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 5px;
+    cursor: default;
+    white-space: nowrap;
+  }
+
+  .row:hover {
+    background: var(--selection);
+  }
+
+  .row .check {
+    width: 10px;
+    flex: none;
+    color: var(--accent);
+    font-size: 10px;
+  }
+
+  /* Truncated from the head - the tail of a path is the part that tells two "docs" apart.
+     The rtl container does the clipping; the bdi keeps the text itself reading left to right. */
+  .row .parent {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl;
+    text-align: left;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .row .parent bdi {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
+  .row.active .name {
+    font-weight: 600;
+  }
+</style>
+
+<div class={'box' + (state.active ? '' : ' empty') + (state.open ? ' open' : '')} title={state.active || 'Add a folder (⌘O)'} onclick="fez.boxClicked()">
+  <span class="glyph">▰</span>
+  <span class="name">{state.active ? state.activeName : 'Add a folder…'}</span>
+  <span class="updown">▲▼</span>
+</div>
+{#if state.open}
+  <div class="list">
+    {#each state.recent as item}
+      <div class={'row' + (item.isActive ? ' active' : '')} title={item.path} onclick="fez.pick('{item.path}')">
+        <span class="check">{item.isActive ? '✓' : ''}</span>
+        <span class="name">{item.name}</span>
+        <span class="parent"><bdi>{item.parent}</bdi></span>
+      </div>
+    {/each}
+  </div>
+{/if}
