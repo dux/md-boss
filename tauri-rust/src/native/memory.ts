@@ -1,4 +1,5 @@
 import { isDocument } from '../models/fileKinds'
+import { parseAnnotationFile, serializeAnnotationFile } from '../models/notes'
 import type { Entry, Listing, Native, Stat, Unwatch } from './bridge'
 
 // An in-memory Native over a { "/abs/path/file.md": "text" } map - what the tests and
@@ -8,6 +9,10 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
   const norm = (p: string) => p.replace(/\/+$/, '') || '/'
   // Directories exist implicitly above every file, plus whatever mkdir created.
   const dirs = new Set<string>()
+  // A write through this Native bumps the file's mtime, so a stamp can tell a rewrite of the
+  // same length. A test that pokes the map directly is a same-second rewrite at best.
+  const mtimes = new Map<string, number>()
+  let clock = 0
   // Watchers fire for writes made through this Native; a test that pokes the map directly
   // is a change no watcher saw, which is what the backstop poll is for.
   const watchers = new Set<{ dir: string; cb: (changed: string[]) => void }>()
@@ -32,11 +37,12 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
   }
 
   const stat = async (p: string): Promise<Stat> => {
-    if (p in files) return { isDir: false, isFile: true, size: files[p].length, mtime: null, ino: null }
+    if (p in files) return { isDir: false, isFile: true, size: files[p].length, mtime: mtimes.get(p) ?? 0, ino: null }
     if (isDir(dirs, p)) return { isDir: true, isFile: false, size: 0, mtime: null, ino: null }
     throw new Error(`no such file: ${p}`)
   }
 
+  let clipboard: string | null = null
   const roots = [...new Set(paths().map((f) => f.split('/').slice(0, -1).join('/')))]
     .sort((a, b) => a.length - b.length)
 
@@ -49,6 +55,7 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
       write: async (p, text) => {
         if (!isDir(dirs, p.slice(0, p.lastIndexOf('/')))) throw new Error(`no such directory for: ${p}`)
         files[p] = text
+        mtimes.set(p, ++clock)
         notify(p)
       },
       mkdir: async (dir) => {
@@ -58,7 +65,14 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
       stat,
       exists: async (p) => p in files || isDir(dirs, p),
     },
+    clipboard: {
+      readText: async () => clipboard,
+      writeText: async (text) => {
+        clipboard = text
+      },
+    },
     dialog: {
+      confirm: async () => true,
       openFolders: async () => roots.slice(0, 1),
       openFile: async () => paths().find((p) => p.endsWith('.md')) ?? null,
     },
@@ -83,6 +97,50 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
         return { kind: 'entries', entries }
       },
       documentsUnder: async (dir, skipFolders) => documentsBelow(norm(dir), new Set(skipFolders)),
+      // The same rules as search.rs, over the in-memory tree: case follows the query,
+      // lines split on \n and lose a trailing \r, columns are UTF-16 (JS strings already
+      // are), budgets as in Limits::default().
+      search: async (root, skipFolders, query, buffers) => {
+        if (!query) return { hits: [], truncated: false, filesSearched: 0 }
+        const sensitive = /\p{Lu}/u.test(query)
+        const needle = sensitive ? query : query.toLowerCase()
+        const targets = documentsBelow(norm(root), new Set(skipFolders))
+        const hits: { path: string; line: number; column: number; length: number; text: string }[] = []
+        let truncated = false
+        for (const path of targets) {
+          const text = buffers[path] ?? files[path] ?? ''
+          const room = Math.min(50, 2000 - hits.length)
+          if (room <= 0) return { hits, truncated: true, filesSearched: targets.length }
+          let count = 0
+          const lines = text.split('\n')
+          for (let i = 0; i < lines.length && count <= room; i++) {
+            const line = lines[i].endsWith('\r') ? lines[i].slice(0, -1) : lines[i]
+            const hay = sensitive ? line : line.toLowerCase()
+            let from = 0
+            for (;;) {
+              const at = hay.indexOf(needle, from)
+              if (at < 0 || count > room) break
+              count++
+              if (count <= room) hits.push({ path, line: i + 1, column: at, length: needle.length, text: line })
+              from = at + Math.max(1, needle.length)
+            }
+          }
+          if (count > room) truncated = true
+        }
+        return { hits, truncated, filesSearched: targets.length }
+      },
+      readNotes: async (storePath) => parseAnnotationFile(files[storePath] ?? ''),
+      writeNotes: async (storePath, file) => {
+        if (file.notes.length === 0) {
+          delete files[storePath]
+        } else {
+          files[storePath] = serializeAnnotationFile({
+            notes: file.notes.map((n) => ({ path: n.path, line: n.line, title: n.title ?? '', body: n.body ?? '' })),
+          })
+          mtimes.set(storePath, ++clock)
+        }
+        notify(storePath)
+      },
       invalidateScan: async () => {},
     },
 

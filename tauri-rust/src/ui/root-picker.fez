@@ -3,26 +3,56 @@
   // chrome cannot be forced to the paper palette, and this box sits directly on the sidebar
   // where any mismatch shows. The dropped-open list covers the tree instead of pushing it
   // down, which is what makes it read as a select box rather than a disclosure group.
+  //
+  // While the list is open it owns the keyboard - it is a modal choice, not a second list -
+  // so keys are taken in the capture phase, before the tree behind it sees them.
   class {
     init() {
       this.state.active = null
       this.state.activeName = ''
       this.state.recent = []
       this.state.open = false
+      this.state.cursor = 0
     }
 
     onMount() {
       this.local.unsubscribe = MdBoss.manager.onChange(() => this.pull())
-      this.local.onDocumentClick = (event) => {
+      this.on(document, 'click', (event) => {
         if (this.state.open && !this.root.contains(event.target)) this.state.open = false
-      }
-      document.addEventListener('click', this.local.onDocumentClick)
+      })
+      this.on(document, 'keydown', (event) => this.keyDown(event), { capture: true })
       this.pull()
     }
 
     onDestroy() {
       if (this.local.unsubscribe) this.local.unsubscribe()
-      document.removeEventListener('click', this.local.onDocumentClick)
+    }
+
+    keyDown(event) {
+      if (!this.state.open || event.metaKey || event.ctrlKey || event.altKey) return
+      const count = this.state.recent.length
+      switch (event.key) {
+        case 'Escape':
+          this.state.open = false
+          break
+        case 'ArrowDown':
+          this.state.cursor = Math.min(count - 1, this.state.cursor + 1)
+          break
+        case 'ArrowUp':
+          this.state.cursor = Math.max(0, this.state.cursor - 1)
+          break
+        case 'Enter':
+        case ' ': {
+          const item = this.state.recent[this.state.cursor]
+          if (item) this.pick(item.path)
+          this.state.open = false
+          break
+        }
+        default:
+          return
+      }
+      event.preventDefault()
+      event.stopPropagation()
     }
 
     pull() {
@@ -40,7 +70,10 @@
 
     boxClicked() {
       if (!this.state.active) MdBoss.manager.addFolders()
-      else this.state.open = !this.state.open
+      else {
+        this.state.cursor = 0
+        this.state.open = !this.state.open
+      }
     }
 
     pick(path) {
@@ -58,7 +91,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    height: 26px;
+    height: calc(var(--font-buttons) + 14px);
     padding: 0 8px;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -89,7 +122,7 @@
 
   .box .glyph {
     color: var(--accent);
-    font-size: 11px;
+    font-size: 0.85em;
   }
 
   .box.empty .glyph,
@@ -98,7 +131,7 @@
   }
 
   .box .updown {
-    font-size: 9px;
+    font-size: 0.7em;
   }
 
   .list {
@@ -127,7 +160,8 @@
     white-space: nowrap;
   }
 
-  .row:hover {
+  .row:hover,
+  .row.cursor {
     background: var(--selection);
   }
 
@@ -135,7 +169,7 @@
     width: 10px;
     flex: none;
     color: var(--accent);
-    font-size: 10px;
+    font-size: 0.8em;
   }
 
   /* Truncated from the head - the tail of a path is the part that tells two "docs" apart.
@@ -146,7 +180,6 @@
     direction: rtl;
     text-align: left;
     color: var(--muted);
-    font-size: 11px;
   }
 
   .row .parent bdi {
@@ -159,18 +192,18 @@
   }
 </style>
 
-<div class={'box' + (state.active ? '' : ' empty') + (state.open ? ' open' : '')} title={state.active || 'Add a folder (⌘O)'} onclick="fez.boxClicked()">
+<div class={'box text-default pointer' + (state.active ? '' : ' empty') + (state.open ? ' open' : '')} title={state.active || 'Add a folder (⌘O)'} onclick="fez.boxClicked()">
   <span class="glyph">▰</span>
   <span class="name">{state.active ? state.activeName : 'Add a folder…'}</span>
   <span class="updown">▲▼</span>
 </div>
 {#if state.open}
   <div class="list">
-    {#each state.recent as item}
-      <div class={'row' + (item.isActive ? ' active' : '')} title={item.path} onclick="fez.pick('{item.path}')">
+    {#each state.recent as item, index}
+      <div class={'row text-default' + (item.isActive ? ' active' : '') + (index === state.cursor ? ' cursor' : '')} title={item.path} onclick="fez.pick('{item.path}')">
         <span class="check">{item.isActive ? '✓' : ''}</span>
         <span class="name">{item.name}</span>
-        <span class="parent"><bdi>{item.parent}</bdi></span>
+        <span class="parent text-small"><bdi>{item.parent}</bdi></span>
       </div>
     {/each}
   </div>

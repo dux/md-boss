@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "dialog:allow-open",
+    "dialog:allow-ask",
     "fs:allow-read-text-file",
     "fs:allow-write-text-file",
     "fs:allow-mkdir",

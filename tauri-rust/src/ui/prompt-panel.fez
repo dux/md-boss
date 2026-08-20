@@ -1,0 +1,172 @@
+<script>
+  // A one-field prompt - a note's body, a rename - answered in the window. Installs itself
+  // as the manager's prompt handler on mount; Escape cancels, Return confirms a single-line
+  // field, Cmd-Return a multi-line one.
+  class {
+    init() {
+      this.state.open = false
+      this.state.title = ''
+      this.state.message = ''
+      this.state.confirm = 'Save'
+      this.state.multiline = false
+      this.state.placeholder = ''
+    }
+
+    onMount() {
+      MdBoss.manager.prompts.handler = (options) => this.ask(options)
+      this.on(document, 'keydown', (event) => {
+        if (!this.state.open) return
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          event.stopPropagation()
+          this.finish(null)
+        } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey || !this.state.multiline)) {
+          event.preventDefault()
+          event.stopPropagation()
+          this.finish(this.field().value)
+        }
+      }, { capture: true })
+    }
+
+    onDestroy() {
+      if (MdBoss.manager.prompts.handler === this.local.handler) MdBoss.manager.prompts.handler = null
+    }
+
+    field() {
+      return this.find('.field')
+    }
+
+    ask(options) {
+      if (this.local.resolve) this.finish(null)
+      this.state.title = options.title
+      this.state.message = options.message
+      this.state.confirm = options.confirm || 'Save'
+      this.state.multiline = !!options.multiline
+      this.state.placeholder = options.placeholder || ''
+      this.local.value = options.value
+      this.state.open = true
+      return new Promise((resolve) => {
+        this.local.resolve = resolve
+      })
+    }
+
+    afterRender() {
+      const field = this.field()
+      if (this.state.open && field && !field.dataset.primed) {
+        field.dataset.primed = '1'
+        field.value = this.local.value || ''
+        field.focus()
+        field.select()
+      }
+    }
+
+    finish(answer) {
+      const resolve = this.local.resolve
+      this.local.resolve = null
+      this.state.open = false
+      if (resolve) resolve(answer)
+    }
+
+    confirm() {
+      this.finish(this.field().value)
+    }
+
+    cancel() {
+      this.finish(null)
+    }
+  }
+</script>
+
+<style>
+  display: block;
+
+  .overlay.hidden {
+    display: none;
+  }
+
+  .overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+  }
+
+  .panel {
+    width: 420px;
+    box-sizing: border-box;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--bg);
+    box-shadow: 0 8px 30px var(--border-strong);
+  }
+
+  .title {
+    font-weight: 600;
+  }
+
+  .message {
+    color: var(--muted);
+  }
+
+  .field {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+    resize: vertical;
+  }
+
+  textarea.field {
+    min-height: 96px;
+  }
+
+  .buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .buttons button {
+    padding: 4px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+  }
+
+  .buttons button.primary {
+    border-color: var(--link);
+    background: var(--link);
+    color: var(--bg);
+    font-weight: 600;
+  }
+</style>
+
+<div class={'overlay' + (state.open ? '' : ' hidden')}>
+  {#if state.open}
+    <div class="panel">
+      <div class="title text-default">{state.title}</div>
+      <div class="message text-small text-mono">{state.message}</div>
+      {#if state.multiline}
+        <textarea class="field text-default" spellcheck="false" placeholder={state.placeholder}></textarea>
+      {:else}
+        <input class="field text-default" type="text" spellcheck="false" placeholder={state.placeholder}>
+      {/if}
+      <div class="buttons">
+        <button class="text-buttons pointer" onclick="fez.cancel()">Cancel</button>
+        <button class="primary text-buttons pointer" onclick="fez.confirm()">{state.confirm}</button>
+      </div>
+    </div>
+  {/if}
+</div>

@@ -1,11 +1,20 @@
 <script>
   // The rendered document. Lives in an iframe (srcdoc) so the page's CSP and the
   // vendored scripts stay isolated from the app; the first render loads the page, later
-  // ones call mdRender on the iframe's window so scroll position survives.
+  // ones call mdRender on the iframe's window so scroll position survives. Opening or
+  // reloading a file shows immediately; typing is debounced 250 ms.
+  const TYPING_DELAY = 250
+
   class {
     init() {
       this.local.loaded = false
       this.local.pending = null
+      this.local.path = null
+      this.local.reloadToken = -1
+      this.local.typing = null
+      // Where to land once the next render is in: the remembered place of a file that
+      // just arrived. Restored after the render, which is when the page has anchors.
+      this.local.restoreTo = null
     }
 
     onMount() {
@@ -17,18 +26,121 @@
           this.local.loaded = true
           if (this.local.pending !== null) this.render(this.local.pending)
         }
+        // The page suppresses its own echo after mdScrollToLine, so what arrives here is
+        // the reader scrolling. Recorded before the sync and unconditionally: the sync
+        // drops the move unless both panes are up, and where the reader is has to be
+        // remembered either way.
+        if (msg.kind === 'scroll') {
+          if (this.local.path) MdBoss.manager.scrollMemory.recordLine(this.local.path, msg.line)
+          MdBoss.manager.scrollSync.report(msg.line, 'preview', performance.now())
+        }
+        // A right-click on a block: the page says which source line, and where, in its
+        // own coordinates - the iframe's offset puts the menu under the pointer.
+        if (msg.kind === 'context') this.contextMenu(msg)
       }
       window.addEventListener('message', this.local.onMessage)
+      this.local.unsubscribe = [
+        MdBoss.manager.scrollSync.onMove((move) => {
+          if (move.source === 'preview' || !this.local.loaded) return
+          this.frame.contentWindow.mdScrollToLine(move.line)
+          MdBoss.manager.scrollSync.applied(performance.now())
+        }),
+        MdBoss.manager.onChange(() => this.pull()),
+        MdBoss.manager.notes.onChange(() => this.pushNotes()),
+        MdBoss.manager.onCursorChange(() => this.pushHighlight()),
+        // Told which theme to use, never left to prefers-color-scheme: the page swaps its
+        // <style id=theme> in place, so the scroll position and the rendered DOM survive.
+        MdBoss.manager.settings.onChange((data) => {
+          if (data.themeID !== this.local.themeID) {
+            this.local.themeID = data.themeID
+            if (this.local.loaded) this.frame.contentWindow.mdSetTheme(MdBoss.rootCSS(MdBoss.themeNamed(data.themeID)))
+          }
+          if (data.previewFontSize !== this.local.fontSize) {
+            this.local.fontSize = data.previewFontSize
+            if (this.local.loaded) this.frame.contentWindow.mdSetFontSize(data.previewFontSize)
+          }
+          if (data.previewMeasure !== this.local.measure) {
+            this.local.measure = data.previewMeasure
+            if (this.local.loaded) this.frame.contentWindow.mdSetMeasure(data.previewMeasure)
+          }
+        }),
+      ]
+      const data = MdBoss.manager.settings.data
+      this.local.themeID = data.themeID
+      this.local.fontSize = data.previewFontSize
+      this.local.measure = data.previewMeasure
+      this.pull()
     }
 
     onDestroy() {
       window.removeEventListener('message', this.local.onMessage)
+      for (const off of this.local.unsubscribe || []) off()
+      if (this.local.typing) clearTimeout(this.local.typing)
+    }
+
+    pushNotes() {
+      if (!this.local.loaded || !this.local.path) return
+      const map = {}
+      for (const [line, text] of MdBoss.manager.notes.noteTexts(this.local.path)) map[String(line)] = text
+      this.frame.contentWindow.mdSetNotes(map)
+    }
+
+    pushHighlight() {
+      if (!this.local.loaded) return
+      const line = MdBoss.manager.highlightedLine
+      if (line === this.local.highlighted) return
+      this.local.highlighted = line
+      this.frame.contentWindow.mdHighlightLine(line)
+    }
+
+    contextMenu(msg) {
+      const manager = MdBoss.manager
+      const doc = manager.document
+      if (!doc) return
+      manager.reportCursorLine(msg.line)
+      const box = this.frame.getBoundingClientRect()
+      const hasNote = manager.hasNoteAtCursor
+      MdBoss.menus.open(box.left + (msg.x || 0), box.top + (msg.y || 0), [
+        { label: hasNote ? 'Edit Note…' : 'Add Note…', action: () => manager.addNoteAtCursor() },
+        { separator: true },
+        { label: 'Copy Path', action: () => manager.copyText(doc.path, 'Path copied') },
+        { label: 'Copy Path with Line', action: () => manager.copyText(manager.notes.key(doc.path) + ':' + msg.line, 'Path copied') },
+      ])
+    }
+
+    pull() {
+      const doc = MdBoss.manager.document
+      if (!doc) return
+      this.pushHighlight()
+      const fresh = doc.path !== this.local.path || doc.reloadToken !== this.local.reloadToken
+      if (fresh) {
+        if (this.local.typing) clearTimeout(this.local.typing)
+        this.local.typing = null
+        if (doc.path !== this.local.path) {
+          this.local.restoreTo = MdBoss.manager.scrollMemory.place(doc.path).line ?? 1
+        }
+        this.local.path = doc.path
+        this.local.reloadToken = doc.reloadToken
+        this.render(doc.text)
+        return
+      }
+      if (this.local.typing) clearTimeout(this.local.typing)
+      this.local.typing = setTimeout(() => {
+        this.local.typing = null
+        const current = MdBoss.manager.document
+        if (current && current.path === this.local.path) this.render(current.text)
+      }, TYPING_DELAY)
     }
 
     render(markdown) {
       if (this.local.loaded) {
         this.local.pending = null
         this.frame.contentWindow.mdRender(markdown)
+        this.pushNotes()
+        if (this.local.restoreTo !== null) {
+          this.frame.contentWindow.mdScrollToLine(this.local.restoreTo)
+          this.local.restoreTo = null
+        }
         return
       }
       if (this.local.pending !== null) {
@@ -39,17 +151,26 @@
       this.local.pending = markdown
       this.frame.srcdoc = MdBoss.buildPreviewPage({
         markdown,
-        themeCSS: MdBoss.rootCSS(MdBoss.theme),
-        fontSize: 16,
-        measure: 48,
+        themeCSS: MdBoss.rootCSS(MdBoss.manager.theme),
+        fontSize: MdBoss.manager.settings.data.previewFontSize,
+        measure: MdBoss.manager.settings.data.previewMeasure,
       })
     }
   }
 </script>
 
 <style>
-  display: block;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+
+  /* Outside the page's scroll, so the Back button stays in its corner while the page
+     moves under it - and below the banner, so it is pushed down rather than covered. */
+  .page {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+  }
 
   iframe {
     display: block;
@@ -58,6 +179,24 @@
     border: 0;
     background: var(--bg);
   }
+
+  .back {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+  }
+
+  /* Opposite the Back button, clear of the page's scrollbar. */
+  .measure {
+    position: absolute;
+    top: 10px;
+    right: 32px;
+  }
 </style>
 
-<iframe fez:this="frame" title="preview" sandbox="allow-scripts allow-same-origin"></iframe>
+<change-banner></change-banner>
+<div class="page">
+  <iframe fez:this="frame" title="preview" sandbox="allow-scripts allow-same-origin"></iframe>
+  <div class="back"><back-button></back-button></div>
+  <div class="measure"><measure-controls></measure-controls></div>
+</div>

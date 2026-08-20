@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod notes;
+mod search;
 mod walk;
 
 use std::path::PathBuf;
@@ -29,11 +31,15 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(Arc::new(walk::Scanner::default()))
+        .manage(Arc::new(search::Generation::default()))
         .invoke_handler(tauri::generate_handler![
             config_dir,
             walk::list_dir_cmd,
             walk::documents_under_cmd,
-            walk::invalidate_scan
+            walk::invalidate_scan,
+            notes::read_notes_cmd,
+            notes::write_notes_cmd,
+            search::search_cmd
         ])
         .setup(|app| {
             // Debug builds only: the webview's console.error/warn land here too (main.ts

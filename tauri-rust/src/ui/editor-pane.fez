@@ -1,0 +1,130 @@
+<script>
+  // The raw pane: CodeMirror over the open document. The editor is an external DOM
+  // library, so the template is one container and nothing in state drives it - the
+  // component pushes text in when the document or its reload token changes, and every
+  // edit goes straight to the manager, which owns the dirty flag.
+  class {
+    onMount() {
+      this.local.editor = null
+      this.local.path = null
+      this.local.reloadToken = -1
+      this.local.unsubscribe = [
+        MdBoss.manager.onChange(() => this.pull()),
+        MdBoss.manager.notes.onChange(() => this.pushNotes()),
+        MdBoss.manager.onCursorChange(() => this.pushLanding()),
+        MdBoss.manager.scrollSync.onMove((move) => {
+          if (move.source === 'raw' || !this.local.editor) return
+          this.local.editor.scrollToLine(move.line)
+          MdBoss.manager.scrollSync.applied(performance.now())
+        }),
+        MdBoss.manager.settings.onChange((data) => {
+          if (this.local.editor) this.local.editor.setFontSize(data.editorFontSize)
+        }),
+      ]
+      this.pull()
+    }
+
+    onDestroy() {
+      for (const off of this.local.unsubscribe || []) off()
+      if (this.local.editor) this.local.editor.destroy()
+    }
+
+    pull() {
+      const doc = MdBoss.manager.document
+      if (!doc) {
+        this.local.path = null
+        if (this.local.editor) this.local.editor.setText('')
+        return
+      }
+      const sameBuffer = doc.path === this.local.path && doc.reloadToken === this.local.reloadToken
+      if (!sameBuffer) this.load(doc)
+      this.pushNotes()
+      this.pushLanding()
+      this.followScrollRequest()
+    }
+
+    /** A document arrived, or was reloaded from disk. */
+    load(doc) {
+      const switched = doc.path !== this.local.path
+      this.local.path = doc.path
+      this.local.reloadToken = doc.reloadToken
+      const highlight = MdBoss.documentKind(doc.path) === 'markdown'
+      if (!this.local.editor) {
+        this.local.editor = MdBoss.createEditor({
+          parent: this.find('.host'),
+          text: doc.text,
+          fontSize: MdBoss.manager.settings.data.editorFontSize,
+          highlight,
+          onChange: (text, edit) => MdBoss.manager.setDocumentText(text, edit),
+          onCursor: (line, text, navigated) => MdBoss.manager.reportCursor(line, text, navigated),
+          onContextMenu: (x, y, line) => this.contextMenu(x, y, line),
+          onScroll: (line) => this.scrolled(line),
+        })
+      } else {
+        if (switched) this.local.editor.setHighlight(highlight)
+        this.local.editor.setText(doc.text)
+      }
+      // A file arriving in the pane opens where it was left. The same recorded line the
+      // preview restores to: both panes speak in source lines, so one number serves both
+      // and they land together.
+      const place = MdBoss.manager.scrollMemory.place(doc.path)
+      if (switched) this.local.editor.scrollToLine(place.line ?? 1)
+    }
+
+    /** The gutter dots for the open document. */
+    pushNotes() {
+      if (!this.local.editor || !this.local.path) return
+      this.local.editor.setNotes(MdBoss.manager.notes.noteTexts(this.local.path))
+    }
+
+    pushLanding() {
+      if (this.local.editor) this.local.editor.setLandingLine(MdBoss.manager.highlightedLine)
+    }
+
+    /** A note jump or a search hit asked for a line. Each request has its own id, so asking
+     *  for the same line twice still moves the view. */
+    followScrollRequest() {
+      const request = MdBoss.manager.scrollRequest
+      if (!request || !this.local.editor || request.id === this.local.scrollRequestId) return
+      this.local.scrollRequestId = request.id
+      this.local.editor.revealLine(request.line)
+    }
+
+    /** Right-clicking somewhere other than the caret should act on where you clicked. */
+    contextMenu(x, y, line) {
+      const manager = MdBoss.manager
+      const doc = manager.document
+      if (!doc) return
+      manager.reportCursorLine(line)
+      const hasNote = manager.hasNoteAtCursor
+      MdBoss.menus.open(x, y, [
+        { label: hasNote ? 'Edit Note…' : 'Add Note…', action: () => manager.addNoteAtCursor() },
+        { separator: true },
+        { label: 'Copy Path', action: () => manager.copyText(doc.path, 'Path copied') },
+        { label: 'Copy Path with Line', action: () => manager.copyText(manager.notes.key(doc.path) + ':' + line, 'Path copied') },
+      ])
+    }
+
+    /** Recorded before the sync and unconditionally: the sync drops the move unless both
+     *  panes are up, and where the reader is has to be remembered either way. */
+    scrolled(line) {
+      if (this.local.path) MdBoss.manager.scrollMemory.recordLine(this.local.path, line)
+      MdBoss.manager.scrollSync.report(line, 'raw', performance.now())
+    }
+  }
+</script>
+
+<style>
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+
+  .host {
+    flex: 1;
+    min-height: 0;
+  }
+</style>
+
+<change-banner></change-banner>
+<div class="host"></div>

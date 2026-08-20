@@ -1,0 +1,43 @@
+<script>
+  // Narrow and widen the preview's reading measure. In em, so the column keeps tracking
+  // the text size instead of fighting it. Pinned to the preview's top-right corner rather
+  // than sitting in the toggle bar: the bar spans every pane, and this only affects the
+  // rendered column. One step is 2em, about 5% of the default measure (Manager.measureStep).
+  class {
+    narrower() {
+      MdBoss.manager.changeMeasure(-MdBoss.manager.constructor.measureStep)
+    }
+
+    wider() {
+      MdBoss.manager.changeMeasure(MdBoss.manager.constructor.measureStep)
+    }
+  }
+</script>
+
+<style>
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+
+  /* Tracks the button font, so nothing clips once it is raised. */
+  button {
+    width: max(22px, calc(var(--font-buttons) + 10px));
+    height: max(22px, calc(var(--font-buttons) + 10px));
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-weight: 600;
+  }
+
+  button + button {
+    border-left: 1px solid var(--border);
+  }
+</style>
+
+<button class="text-buttons pointer" title="Narrower text column" onclick="fez.narrower()">‹</button>
+<button class="text-buttons pointer" title="Wider text column" onclick="fez.wider()">›</button>

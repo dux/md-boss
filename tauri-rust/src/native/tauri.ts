@@ -1,9 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
 import { homeDir, join } from '@tauri-apps/api/path'
-import { open } from '@tauri-apps/plugin-dialog'
+import { ask, open } from '@tauri-apps/plugin-dialog'
 import { exists, mkdir, readDir, readTextFile, stat, watch, writeTextFile } from '@tauri-apps/plugin-fs'
 import { error as logError, info as logInfo, warn as logWarn } from '@tauri-apps/plugin-log'
-import type { Native } from './bridge'
+import type { Native, NotesFile, SearchResult } from './bridge'
 
 export const tauriNative: Native = {
   fs: {
@@ -33,7 +33,22 @@ export const tauriNative: Native = {
     exists: (path) => exists(path),
   },
 
+  // The webview's own clipboard: WebKit and WebView2 allow readText from a key press, which
+  // is the only time the app reads it (Cmd-K). The clipboard plugin can replace this if a
+  // platform turns out to prompt.
+  clipboard: {
+    readText: async () => {
+      try {
+        return await navigator.clipboard.readText()
+      } catch {
+        return null
+      }
+    },
+    writeText: (text) => navigator.clipboard.writeText(text),
+  },
+
   dialog: {
+    confirm: (message, okLabel, cancelLabel) => ask(message, { kind: 'warning', okLabel, cancelLabel }),
     openFolders: async (startIn) => {
       const picked = await open({ directory: true, multiple: true, defaultPath: startIn ?? undefined, title: 'Choose folders to show in the sidebar' })
       return picked ?? []
@@ -59,6 +74,10 @@ export const tauriNative: Native = {
       return { kind: 'entries', entries: (raw.entries ?? []).map((e) => ({ name: e.name, path: e.path, isDir: e.is_dir })) }
     },
     documentsUnder: (path, skipFolders) => invoke<string[]>('documents_under_cmd', { path, skipFolders }),
+    search: (root, skipFolders, query, buffers, generation) =>
+      invoke<SearchResult>('search_cmd', { root, skipFolders, query, buffers, generation }),
+    readNotes: (storePath) => invoke<NotesFile>('read_notes_cmd', { path: storePath }),
+    writeNotes: (storePath, file) => invoke<void>('write_notes_cmd', { path: storePath, file }),
     invalidateScan: (path) => invoke<void>('invalidate_scan', { path: path ?? null }),
   },
 

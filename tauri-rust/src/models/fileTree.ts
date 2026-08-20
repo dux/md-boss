@@ -39,3 +39,26 @@ export function flatten(
 export const sameRows = (a: FlatRow[], b: FlatRow[]) =>
   a.length === b.length &&
   a.every((r, i) => r.node.path === b[i].node.path && r.depth === b[i].depth && r.isDenied === b[i].isDenied && r.node.isDir === b[i].node.isDir)
+
+/** The row to jump to for a typed prefix: forward from the cursor first, wrapping round,
+ *  so typing the same prefix again cycles through the matches. -1 when nothing matches. */
+export function prefixMatch(rows: readonly FlatRow[], cursor: number, prefix: string): number {
+  if (rows.length === 0 || prefix === '') return -1
+  const wanted = prefix.toLowerCase()
+  for (let step = 1; step <= rows.length; step++) {
+    const index = (cursor + step) % rows.length
+    if (rows[index].node.name.toLowerCase().startsWith(wanted)) return index
+  }
+  return -1
+}
+
+/** The nearest row above `cursor` one level up - what Left jumps to from a file or a
+ *  collapsed folder. -1 at the top level. */
+export function parentRow(rows: readonly FlatRow[], cursor: number): number {
+  const row = rows[cursor]
+  if (!row || row.depth === 0) return -1
+  for (let index = cursor - 1; index >= 0; index--) {
+    if (rows[index].depth === row.depth - 1) return index
+  }
+  return -1
+}

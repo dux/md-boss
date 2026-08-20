@@ -594,7 +594,9 @@
   // know which block was right-clicked before it is built.
   content.addEventListener('contextmenu', function (event) {
     var node = event.target.closest ? event.target.closest('[data-line]') : null;
-    post({ kind: 'context', line: node ? Number(node.getAttribute('data-line')) : 1 });
+    // The pane draws the menu itself, at the click - so the page's own menu stays shut.
+    event.preventDefault();
+    post({ kind: 'context', line: node ? Number(node.getAttribute('data-line')) : 1, x: event.clientX, y: event.clientY });
   });
 
   document.addEventListener('scroll', function () {

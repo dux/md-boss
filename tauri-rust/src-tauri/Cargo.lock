@@ -1863,6 +1863,7 @@ name = "md-boss"
 version = "0.1.0"
 dependencies = [
  "log",
+ "memchr",
  "serde",
  "serde_json",
  "tauri",

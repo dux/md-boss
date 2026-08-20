@@ -17,6 +17,9 @@
     "vite": "^8.2.2"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.11.0",
+    "@codemirror/state": "^6.7.1",
+    "@codemirror/view": "^6.43.9",
     "@dinoreic/fez": "github:dux/fez#fb09f4c",
     "@tauri-apps/api": "^2.11.1",
     "@tauri-apps/plugin-dialog": "~2",

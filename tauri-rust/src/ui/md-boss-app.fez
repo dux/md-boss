@@ -1,35 +1,114 @@
 <script>
-  // Root layout: sidebar | document, status bar across the bottom - the shape of the Swift
-  // ContentView. The sidebar holds the root picker and the tree; watcher and keyboard
-  // navigation land with the next P3 tasks (doc/feature/port-tauri.md).
+  // 190 rather than 160: the top row grows a Back button and three toggle segments (P4),
+  // and a segment narrow enough to truncate "Notes" no longer says what it does.
+  const MIN_SIDEBAR = 190
+  const MAX_SIDEBAR = 520
+
+  // Free space either side of the preview's reading column when raw sits next to it.
+  const PREVIEW_GUTTER = 40
+
+  // Root layout: sidebar | divider | document, status bar across the bottom - the shape of
+  // the Swift ContentView. The sidebar holds the root picker and the tree; Cmd-0 hides it
+  // and the divider drags its width, both persisted through settings. The document side
+  // shows whichever panes are switched on, left to right: preview, raw (notes with P6).
+  // Side by side, the preview is sized to its own reading measure plus a gutter and raw
+  // takes what is left - the column the measure asks for is the width worth showing.
   class {
     init() {
-      this.state.sidebarWidth = MdBoss.manager.settings.data.sidebarWidth
+      const data = MdBoss.manager.settings.data
+      this.state.sidebarWidth = data.sidebarWidth
+      this.state.showSidebar = data.showSidebar
+      this.state.panes = MdBoss.visiblePanes(data)
+      this.state.previewWidth = this.previewWidth(data)
+      this.state.dragging = false
       this.state.root = null
       this.state.file = null
+      this.state.dirty = false
       this.state.error = null
+      this.state.notice = null
+    }
+
+    /** What the preview asks for next to raw: the measure in em of the body size, which
+     *  the page builder writes as whole pixels, so the em is rounded the same way here. */
+    previewWidth(data) {
+      return data.previewMeasure * Math.trunc(data.previewFontSize) + 2 * PREVIEW_GUTTER
     }
 
     onMount() {
-      this.local.unsubscribe = MdBoss.manager.onChange(() => this.pull())
+      this.local.unsubscribe = [
+        MdBoss.manager.onChange(() => this.pull()),
+        MdBoss.manager.settings.onChange((data) => {
+          this.state.sidebarWidth = data.sidebarWidth
+          this.state.showSidebar = data.showSidebar
+          this.state.panes = MdBoss.visiblePanes(data)
+          this.state.previewWidth = this.previewWidth(data)
+          this.toggleClass('no-sidebar', !data.showSidebar)
+        }),
+      ]
+      this.toggleClass('no-sidebar', !this.state.showSidebar)
       this.pull()
     }
 
     onDestroy() {
-      if (this.local.unsubscribe) this.local.unsubscribe()
+      for (const off of this.local.unsubscribe || []) off()
     }
 
     pull() {
       const manager = MdBoss.manager
       this.state.root = manager.activeRoot
-      this.state.file = manager.document ? manager.document.path : null
+      this.state.file = manager.document ? manager.abbreviateHome(manager.document.path) : null
+      this.state.dirty = manager.isDirty
       this.state.error = manager.error
-      if (manager.document) {
-        const pane = Fez.find(this.root.querySelector('.fez-preview-pane'))
-        if (pane) pane.render(manager.document.text)
-      }
+      this.notify(manager.notice)
     }
 
+    /** A one-line notice shows for a few seconds and then gives the footer back to the
+     *  path - the toast overlay (P9) takes this over. */
+    notify(notice) {
+      if (!notice || notice === this.local.lastNotice) return
+      this.local.lastNotice = notice
+      this.state.notice = notice
+      if (this.local.noticeTimer) clearTimeout(this.local.noticeTimer)
+      this.local.noticeTimer = setTimeout(() => {
+        this.state.notice = null
+        this.local.lastNotice = null
+        MdBoss.manager.notice = null
+      }, 3000)
+    }
+
+    save() {
+      MdBoss.manager.saveDocument()
+    }
+
+    // MARK: Divider
+
+    // The width the drag started from plus the pointer's travel, so the pane tracks the
+    // cursor exactly instead of accumulating rounding drift across move events. Pointer
+    // capture keeps the moves coming while the pointer is over the preview iframe.
+    dragStart(event) {
+      if (event.button !== 0) return
+      const divider = event.currentTarget
+      const startX = event.clientX
+      const startWidth = MdBoss.manager.settings.data.sidebarWidth
+      const move = (e) => {
+        const width = Math.min(MAX_SIDEBAR, Math.max(MIN_SIDEBAR, startWidth + e.clientX - startX))
+        MdBoss.manager.settings.patch({ sidebarWidth: Math.round(width) })
+      }
+      const end = () => {
+        divider.removeEventListener('pointermove', move)
+        divider.removeEventListener('pointerup', end)
+        divider.removeEventListener('pointercancel', end)
+        this.state.dragging = false
+        this.toggleClass('dragging', false)
+      }
+      divider.setPointerCapture(event.pointerId)
+      divider.addEventListener('pointermove', move)
+      divider.addEventListener('pointerup', end)
+      divider.addEventListener('pointercancel', end)
+      this.state.dragging = true
+      this.toggleClass('dragging', true)
+      event.preventDefault()
+    }
   }
 </script>
 
@@ -38,8 +117,17 @@
   height: 100%;
   /* Explicit placement rather than grid-template-areas: the fez CSS minifier collapses
      the whitespace between area names and the value turns invalid. */
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   grid-template-rows: 1fr auto;
+
+  /* Hidden, not unmounted: the tree keeps its scroll and the picker its state while the
+     sidebar is away, and Cmd-0 back costs no relisting. The class sits on the wrapper node,
+     outside the template, so it is toggled by hand when the setting changes - a render
+     whose HTML has not changed is skipped by fez, afterRender included. */
+  &.no-sidebar aside,
+  &.no-sidebar .divider {
+    display: none;
+  }
 
   aside {
     grid-column: 1;
@@ -48,23 +136,102 @@
     flex-direction: column;
     min-height: 0;
     background: var(--sidebar-bg);
-    border-right: 1px solid var(--border);
     box-sizing: border-box;
 
     .top {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
       padding: 8px;
     }
 
-    side-bar {
+    .fez-side-bar {
       flex: 1;
       min-height: 0;
     }
   }
 
-  main {
+  /* A hairline that widens and takes the accent while it is being dragged; the padding
+     either side is the grab area. */
+  .divider {
     grid-column: 2;
     grid-row: 1;
+    width: 5px;
+    cursor: col-resize;
+    touch-action: none;
+    display: flex;
+    justify-content: center;
+  }
+
+  .divider span {
+    display: block;
+    width: 1px;
+    height: 100%;
+    background: var(--border-strong);
+  }
+
+  .divider.dragging span {
+    width: 2px;
+    background: var(--accent);
+  }
+
+  main {
+    grid-column: 3;
+    grid-row: 1;
     min-height: 0;
+    min-width: 460px;
+    display: flex;
+  }
+
+  main .pane {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* Next to raw the preview takes its reading column, capped at four fifths of what is
+     left once the fixed notes column is taken, so a narrow window still leaves raw a
+     usable strip rather than a sliver. */
+  main.split .pane.preview {
+    flex: 0 1 var(--preview-width);
+    max-width: 80%;
+  }
+
+  main.split.with-notes .pane.preview {
+    max-width: calc((100% - 355px) * 0.8);
+  }
+
+  main .pane.hidden {
+    display: none;
+  }
+
+  /* Notes are a list, so they get a fixed column (paneFixedWidth). */
+  main .pane.notes {
+    flex: 0 0 350px;
+    border-left: 0;
+  }
+
+  main .separator {
+    flex: none;
+    width: 1px;
+    margin: 0 2px;
+    background: var(--border);
+  }
+
+  .pane-empty {
+    height: 100%;
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+  }
+
+  .empty {
+    font-size: var(--font-default);
+  }
+
+  /* The preview iframe would swallow the pointer mid-drag. */
+  &.dragging iframe {
+    pointer-events: none;
   }
 
   .empty {
@@ -75,28 +242,93 @@
   }
 
   footer {
-    grid-column: 1 / 3;
+    grid-column: 1 / 4;
     grid-row: 2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: calc(var(--font-small) + 13px);
     border-top: 1px solid var(--border);
-    padding: 4px 12px;
+    padding: 0 12px;
+    background: var(--surface);
     color: var(--muted);
-    font-size: 11px;
     white-space: nowrap;
+  }
+
+  footer .path {
     overflow: hidden;
     text-overflow: ellipsis;
+    /* Truncated from the head - the tail of a path is the part that tells files apart. */
+    direction: rtl;
+    text-align: left;
+  }
+
+  footer .path bdi {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
+  /* The one control down here, and only when there is something to do with it. It says
+     what an "edited" label would say and does something about it. Link blue rather than
+     the accent: this is the call to action; the label takes bg to stay readable on every
+     palette's blue. */
+  footer .save {
+    flex: none;
+    height: calc(var(--font-small) + 7px);
+    padding: 0 9px;
+    border: 0;
+    border-radius: 4px;
+    background: var(--link);
+    color: var(--bg);
+    font-family: inherit;
+    font-weight: 600;
   }
 </style>
 
 <aside style="width: {state.sidebarWidth}px">
   <div class="top">
+    <pane-toggle-bar></pane-toggle-bar>
     <root-picker></root-picker>
   </div>
   <side-bar></side-bar>
 </aside>
-<main>
+<div class={'divider' + (state.dragging ? ' dragging' : '')} role="separator" aria-orientation="vertical" aria-label="Sidebar width" aria-valuenow={state.sidebarWidth} title="Drag to resize the sidebar" onpointerdown="fez.dragStart(event)"><span></span></div>
+<main class={(state.panes.includes('preview') && state.panes.includes('raw') ? 'split' : '') + (state.panes.includes('notes') ? ' with-notes' : '')} style="--preview-width: {state.previewWidth}px">
   {#unless state.file}
     <div class="empty">Open a folder to begin</div>
   {/unless}
-  <preview-pane style={state.file ? '' : 'display: none'}></preview-pane>
+  <!-- Always mounted, hidden rather than removed: the iframe keeps its page and its
+       scroll, and the first render after a file opens has somewhere to land. -->
+  <div class={'pane preview' + (state.file && state.panes.includes('preview') ? '' : ' hidden')}>
+    <preview-pane></preview-pane>
+  </div>
+  {#if state.file && state.panes.includes('raw')}
+    {#if state.panes.includes('preview')}
+      <div class="separator"></div>
+    {/if}
+    <div class="pane raw">
+      <editor-pane></editor-pane>
+    </div>
+  {/if}
+  {#if state.panes.includes('notes')}
+    {#if state.file && (state.panes.includes('preview') || state.panes.includes('raw'))}
+      <div class="separator"></div>
+    {/if}
+    <div class="pane notes"><notes-pane></notes-pane></div>
+  {/if}
 </main>
-<footer>{state.error || state.file || 'No file open'}</footer>
+<settings-panel></settings-panel>
+<prompt-panel></prompt-panel>
+<context-menu></context-menu>
+<footer class="text-small">
+  {#if state.dirty}
+    <button class="save text-small pointer" title="Save (⌘S)" onclick="fez.save()">Save</button>
+  {/if}
+  {#if state.error}
+    <span class="path">{state.error}</span>
+  {:else if state.notice}
+    <span class="path">{state.notice}</span>
+  {:else}
+    <span class="path"><bdi>{state.file || 'No file open'}</bdi></span>
+  {/if}
+</footer>

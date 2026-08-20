@@ -33,6 +33,8 @@ export interface NativeFs {
 }
 
 export interface NativeDialog {
+  /** A two-way question. True for `okLabel`. Closing the dialog counts as cancel. */
+  confirm(message: string, okLabel: string, cancelLabel: string): Promise<boolean>
   /** Folder picker, several at once, starting where the last one ended. Empty when cancelled. */
   openFolders(startIn: string | null): Promise<string[]>
   /** Single document picker. Null when cancelled. */
@@ -58,8 +60,37 @@ export type Listing =
   | { kind: 'denied' }
   | { kind: 'missing' }
 
+/** The `.md-boss` file as the Rust store reads and writes it (src-tauri/src/notes.rs). */
+export interface NotesFile {
+  notes: { path: string; line: number; title?: string; body?: string }[]
+}
+
+export interface SearchHit {
+  path: string
+  /** 1-based, split on `\n` only. */
+  line: number
+  /** UTF-16 offset of the match within `text`. */
+  column: number
+  length: number
+  text: string
+}
+
+export interface SearchResult {
+  hits: SearchHit[]
+  /** A budget was reached - the pane says so rather than quietly showing less. */
+  truncated: boolean
+  filesSearched: number
+}
+
 /** The filesystem-heavy passes, answered by the Rust side (src-tauri/src/walk.rs). */
 export interface NativeCommands {
+  /** Every match under `root` (src-tauri/src/search.rs). `buffers` is unsaved text by path;
+   *  `generation` cancels any older search still running. */
+  search(root: string, skipFolders: string[], query: string, buffers: Record<string, string>, generation: number): Promise<SearchResult>
+  /** Missing or malformed reads as empty; legacy bookmarks/comments fold into notes. */
+  readNotes(storePath: string): Promise<NotesFile>
+  /** Canonical shape, atomic; an empty file is removed. */
+  writeNotes(storePath: string, file: NotesFile): Promise<void>
   listDir(path: string, skipFolders: string[]): Promise<Listing>
   /** Every document below `path`, documents before subtrees, each level in name order. */
   documentsUnder(path: string, skipFolders: string[]): Promise<string[]>
@@ -70,9 +101,16 @@ export interface NativeCommands {
 /** Stop watching. */
 export type Unwatch = () => void
 
+export interface NativeClipboard {
+  /** Null when the clipboard is empty or not readable. */
+  readText(): Promise<string | null>
+  writeText(text: string): Promise<void>
+}
+
 export interface Native {
   fs: NativeFs
   dialog: NativeDialog
+  clipboard: NativeClipboard
   paths: NativePaths
   commands: NativeCommands
   /** One directory, its direct entries only, debounced; `changed` carries the paths the

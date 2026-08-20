@@ -4,7 +4,7 @@
 
 import { native } from '../native/bridge'
 import { DirectoryWatcher } from './directoryWatcher'
-import { flatten, sameRows, type FileNode, type FlatRow } from './fileTree'
+import { flatten, parentRow, prefixMatch, sameRows, type FileNode, type FlatRow } from './fileTree'
 
 export class FileTreeModel {
   rows: FlatRow[] = []
@@ -105,13 +105,68 @@ export class FileTreeModel {
     return this.rows[this.cursor] ?? null
   }
 
-  moveCursor(to: number): void {
-    if (this.rows.length === 0) return
+  /** Clamped to the rows. Returns whether there was a row to land on at all - the key
+   *  handler ignores the press when there was not, so it stays available to something else. */
+  moveCursor(to: number): boolean {
+    if (this.rows.length === 0) return false
     const target = Math.min(this.rows.length - 1, Math.max(0, to))
     if (target !== this.cursor) {
       this.cursor = target
       this.emit()
     }
+    return true
+  }
+
+  moveCursorBy(delta: number): boolean {
+    return this.moveCursor(this.cursor + delta)
+  }
+
+  /** Right arrow: opens a closed folder, steps into an open one. Nothing on a file. */
+  expandOrDescend(): boolean {
+    const row = this.cursorRow
+    if (!row || !row.node.isDir) return false
+    if (this.expanded.has(row.node.path)) return this.moveCursorBy(1)
+    this.expand(row.node)
+    return true
+  }
+
+  /** Left arrow, NSOutlineView semantics: closes an open folder, otherwise jumps to the
+   *  parent row. Nothing at the top level. */
+  collapseOrAscend(): boolean {
+    const row = this.cursorRow
+    if (!row) return false
+    if (row.node.isDir && this.expanded.has(row.node.path)) {
+      this.collapse(row.node)
+      return true
+    }
+    const parent = parentRow(this.rows, this.cursor)
+    return parent >= 0 && this.moveCursor(parent)
+  }
+
+  /** Type-to-jump. A prefix with no match still counts as handled: the keystroke was
+   *  meant for the tree, it just named nothing. */
+  jumpTo(prefix: string): boolean {
+    const match = prefixMatch(this.rows, this.cursor, prefix)
+    if (match >= 0) this.moveCursor(match)
+    return true
+  }
+
+  /** Opens every folder above `path` and puts the cursor on it. Only within the active
+   *  root - the manager switches roots first when it has to. */
+  async reveal(path: string): Promise<void> {
+    const root = this.root
+    if (root === null || !path.startsWith(root + '/')) return
+    const parts = path.slice(root.length + 1).split('/')
+    let dir = root
+    for (const part of parts.slice(0, -1)) {
+      dir = `${dir}/${part}`
+      if (!this.expanded.has(dir)) this.expanded.add(dir)
+      await this.refresh(dir)
+    }
+    if (!this.children.has(root)) await this.refresh(root)
+    this.rebuild()
+    const index = this.rows.findIndex((r) => r.node.path === path)
+    if (index >= 0) this.moveCursor(index)
   }
 
   // MARK: Listing
