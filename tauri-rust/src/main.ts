@@ -22,7 +22,12 @@ const menu = new AppMenu(globalThis.MdBoss, native().platform, aboutInfo(await n
 await menu.install()
 installShortcuts(globalThis.MdBoss, menu)
 globalThis.MdBoss.manager.startPolling()
-void globalThis.MdBoss.manager.restoreSession()
+// `md-boss <paths>` opens those instead of the last session; a later launch while this one
+// runs arrives on onOpen, its window already brought forward by the Rust side.
+const launch = await native().cli.launch()
+if (launch.paths.length > 0) void globalThis.MdBoss.manager.openFromCLI(launch)
+else void globalThis.MdBoss.manager.restoreSession()
+await native().cli.onOpen((request) => void globalThis.MdBoss.manager.openFromCLI(request))
 installThemeSync(globalThis.MdBoss.settings, document.getElementById('theme')!)
 
 // Fez after the app object: components reach MdBoss from init().

@@ -3,7 +3,7 @@ import { rewriting } from '../models/markdownLinks'
 import { parseAnnotationFile, serializeAnnotationFile } from '../models/notes'
 import { dirname } from '../models/paths'
 import type { MenuModel, MenuPatch } from '../models/appMenu'
-import type { Entry, Listing, Native, NativeMenu, RewriteOutcome, Stat, Unwatch } from './bridge'
+import type { Entry, Listing, Native, NativeCli, NativeMenu, OpenRequest, RewriteOutcome, Stat, Unwatch } from './bridge'
 
 /** The menu twin keeps what it was given, so a test can read the installed model, the
  *  patches that followed, and click an item the way the menu bar would. */
@@ -29,6 +29,25 @@ function memoryMenu(): MemoryMenu {
     },
     click(id) {
       action?.(id)
+    },
+  }
+}
+
+/** The cli twin: no arguments in a browser tab or a test, and `open` plays a second launch. */
+export interface MemoryCli extends NativeCli {
+  open(request: OpenRequest): void
+}
+
+function memoryCli(cwd: string): MemoryCli {
+  const listeners = new Set<(request: OpenRequest) => void>()
+  return {
+    launch: async () => ({ paths: [], cwd }),
+    async onOpen(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    open(request) {
+      for (const listener of listeners) listener(request)
     },
   }
 }
@@ -234,6 +253,7 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
     },
 
     menu: memoryMenu(),
+    cli: memoryCli(home),
 
     watch: async (dir, cb): Promise<Unwatch> => {
       const entry = { dir: norm(dir), cb }

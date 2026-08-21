@@ -2,8 +2,9 @@
 // listed, which file is open, what it says. A singleton on purpose - menu commands live
 // outside the component tree and cannot read view state.
 
-import { native, type RewriteOutcome, type SearchHit } from '../native/bridge'
+import { native, type OpenRequest, type RewriteOutcome, type SearchHit } from '../native/bridge'
 import { AnnotationStore, FALLBACK_FILE_NAME } from './annotationStore'
+import { launchPaths } from './cli'
 import { DirectoryWatcher } from './directoryWatcher'
 import { OpenDocument } from './document'
 import { documentName, isDocument } from './fileKinds'
@@ -649,6 +650,30 @@ export class Manager {
     if (picked === null) return
     this.settings.patch({ lastOpenedFolder: dirname(picked) })
     await this.open(picked)
+  }
+
+  /** `md-boss <paths>` - the first launch's arguments, or a later launch's forwarded to this
+   *  window (src/models/cli.ts makes them absolute). Every path in turn: a folder joins
+   *  the sidebar at the top and is the active one; a file opens, and its folder is listed
+   *  when no root holds it; what is not there is said by name, as AppDelegate did. */
+  async openFromCLI(request: OpenRequest): Promise<void> {
+    for (const path of launchPaths(request.paths, request.cwd, this.home)) await this.openExternal(path)
+  }
+
+  async openExternal(path: string): Promise<void> {
+    let isDir: boolean
+    try {
+      isDir = (await native().fs.stat(path)).isDir
+    } catch {
+      this.showError(`Not found: ${basename(path)}`)
+      return
+    }
+    if (isDir) {
+      this.addRoot(path)
+      return
+    }
+    await this.open(path)
+    if (this.document?.path === path) await this.reveal(path)
   }
 
   /** Restores the last session's file once the roots are known. A file that is gone is

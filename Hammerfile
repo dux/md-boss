@@ -376,6 +376,22 @@ namespace :tauri do
     end
   end
 
+  task :link do
+    desc <<~TXT
+      Put the md-boss command on PATH: tauri-rust/bin/md-boss copied to ~/bin (macOS, Linux).
+
+      The launcher execs the installed binary - /Applications/MdBoss.app on macOS, /usr/bin
+      on Linux, or MD_BOSS_APP - so `md-boss .` resolves against the shell's cwd and a second
+      launch reaches the running window. Windows needs no launcher: put the install folder
+      (%LOCALAPPDATA%/MdBoss) on PATH and `md-boss file.md` runs md-boss.exe the same way.
+    TXT
+    proc do
+      sh 'mkdir -p ~/bin'
+      sh "install -m 755 #{TAURI_DIR}/bin/md-boss ~/bin/md-boss"
+      say.green 'installed ~/bin/md-boss'
+    end
+  end
+
   task :clean do
     desc 'Remove the tauri build artifacts (dist, cargo target)'
     proc do

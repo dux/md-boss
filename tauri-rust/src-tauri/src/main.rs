@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cli;
 mod links;
 mod notes;
 mod search;
@@ -10,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tauri::Manager;
+use tauri_plugin_cli::CliExt;
 
 /// `~/.config/md-boss` on every OS - plain text, meant to be edited by hand. `MD_BOSS_CONFIG`
 /// points a dev build or a test at a scratch folder instead of the real one.
@@ -54,7 +56,11 @@ fn allow_asset_roots_cmd(app: tauri::AppHandle, roots: Vec<String>) -> Result<()
 }
 
 fn main() {
-    tauri::Builder::default()
+    // Single-instance first: a second launch is answered (cli::forward) and exits inside
+    // the build, before any other plugin runs or a window exists.
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(cli::forward))
+        .plugin(tauri_plugin_cli::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -64,6 +70,7 @@ fn main() {
             config_dir,
             trash_cmd,
             allow_asset_roots_cmd,
+            cli::launch_cmd,
             walk::list_dir_cmd,
             walk::documents_under_cmd,
             walk::invalidate_scan,
@@ -84,6 +91,24 @@ fn main() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // `--help` and `--version` are answered on the terminal and never open a window - the
+    // window is created by run(), so this is the last moment before it shows.
+    match app.cli().matches().map(|m| cli::launch(&m)) {
+        Ok(cli::Launch::Help(text)) => {
+            println!("{text}");
+            return;
+        }
+        Ok(cli::Launch::Version) => {
+            let info = app.package_info();
+            println!("{} {}", info.name, info.version);
+            return;
+        }
+        _ => {}
+    }
+    app.manage(cli::launch_request(app.handle()));
+
+    app.run(|_, _| {});
 }

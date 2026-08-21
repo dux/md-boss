@@ -31,7 +31,6 @@ export interface SettingsData {
   lastOpenedFolder: string | null
   /** Never listed in the tree. Editable by hand in settings.json. */
   skipFolders: string[]
-  installCLI: boolean
   windowX: number | null
   windowY: number | null
   windowWidth: number | null
@@ -59,7 +58,6 @@ export function defaultSettings(): SettingsData {
       'node_modules', '.build', '.git', 'DerivedData',
       'Pods', '__pycache__', '.next', 'vendor', 'dist', 'coverage',
     ],
-    installCLI: true,
     windowX: null,
     windowY: null,
     windowWidth: null,

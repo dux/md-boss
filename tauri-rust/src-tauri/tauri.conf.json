@@ -3,6 +3,7 @@
   "productName": "MdBoss",
   "version": "0.1.0",
   "identifier": "com.dux.md-boss",
+  "mainBinaryName": "md-boss",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
@@ -27,6 +28,20 @@
         "enable": true,
         "scope": []
       }
+    }
+  },
+  "plugins": {
+    "cli": {
+      "description": "Opens folders and files in md-boss: a folder is added to the top of the sidebar, a file is opened and its folder listed. Relative paths resolve against the current directory; while the app runs, a second launch hands them to its window.",
+      "args": [
+        {
+          "name": "paths",
+          "index": 1,
+          "takesValue": true,
+          "multiple": true,
+          "description": "Folders and files to open"
+        }
+      ]
     }
   },
   "bundle": {

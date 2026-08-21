@@ -186,6 +186,24 @@ export interface NativeApp {
   version(): Promise<string>
 }
 
+/** `md-boss <paths...>`: the positional arguments as typed and the directory they were
+ *  typed in - src/models/cli.ts resolves one against the other. */
+export interface OpenRequest {
+  paths: string[]
+  cwd: string
+}
+
+/** The command line (src-tauri/src/cli.rs). One process serves every launch: the first
+ *  one's arguments are read at boot, a later `md-boss …` hands its own to the running
+ *  window and exits. */
+export interface NativeCli {
+  /** What this process was started with. No paths from the Dock, a double-click or a bare
+   *  `md-boss`, and the session is restored instead. */
+  launch(): Promise<OpenRequest>
+  /** A second launch while this one runs; the shell has already brought the window forward. */
+  onOpen(listener: (request: OpenRequest) => void): Promise<Unwatch>
+}
+
 export interface Native {
   platform: Platform
   app: NativeApp
@@ -196,6 +214,7 @@ export interface Native {
   paths: NativePaths
   commands: NativeCommands
   menu: NativeMenu
+  cli: NativeCli
   /** Files dragged in from the OS. An HTML5 drop never carries a native path, so the raw
    *  pane's "drop a file, get a link" listens here for anything from outside the window. */
   onFileDrag(listener: (drag: FileDrag) => void): Promise<Unwatch>

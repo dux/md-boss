@@ -1,5 +1,6 @@
 import { getVersion } from '@tauri-apps/api/app'
 import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
 import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from '@tauri-apps/api/menu'
 import { homeDir, join } from '@tauri-apps/api/path'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
@@ -9,7 +10,7 @@ import { error as logError, info as logInfo, warn as logWarn } from '@tauri-apps
 import { openPath, openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import type { MenuEntry } from '../models/appMenu'
 import { platformFromUserAgent } from '../models/platform'
-import type { Native, NotesFile, RewriteOutcome, SearchResult } from './bridge'
+import type { Native, NotesFile, OpenRequest, RewriteOutcome, SearchResult } from './bridge'
 
 const platform = platformFromUserAgent(navigator.userAgent)
 
@@ -166,6 +167,13 @@ export const tauriNative: Native = {
       if (patch.enabled !== undefined) await item.setEnabled(patch.enabled)
       if (patch.checked !== undefined && item instanceof CheckMenuItem) await item.setChecked(patch.checked)
     },
+  },
+
+  // Both answered by src-tauri/src/cli.rs: the launch from the state it parsed before the
+  // window existed, a second launch as the event the single-instance callback emits.
+  cli: {
+    launch: () => invoke<OpenRequest>('launch_cmd'),
+    onOpen: (listener) => listen<OpenRequest>('cli-open', (event) => listener(event.payload)),
   },
 
   // The event's position is typed PhysicalPosition, but wry fills it per platform: macOS
