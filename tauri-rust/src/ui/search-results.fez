@@ -1,0 +1,248 @@
+<script>
+  // What the search field found, in the tree's place. Text hits grouped by file the way the
+  // notes pane groups its own rows, with the match itself in the accent - the row has to
+  // say *why* it is here, and a bare line does not. Go to File is names, ranked loosely,
+  // on the same surface.
+  //
+  // Keys are not handled here: the sidebar owns the keyboard and moves the cursor through
+  // the model; this only draws it and keeps it on screen.
+  class {
+    init() {
+      this.state.mode = 'text'
+      this.state.running = false
+      this.state.truncated = false
+      this.state.cursor = 0
+      this.state.groups = []
+      this.state.files = []
+    }
+
+    onMount() {
+      this.local.unsubscribe = MdBoss.manager.search.onChange(() => this.pull())
+      this.pull()
+    }
+
+    afterRender() {
+      const cursor = this.find('.row.cursor')
+      if (cursor) cursor.scrollIntoView({ block: 'nearest' })
+    }
+
+    onDestroy() {
+      if (this.local.unsubscribe) this.local.unsubscribe()
+    }
+
+    pull() {
+      const search = MdBoss.manager.search
+      this.state.mode = search.mode
+      this.state.running = search.isRunning
+      this.state.truncated = search.truncated
+      this.state.cursor = search.cursor
+      this.state.groups = search.mode === 'text' ? this.groupHits(search.hits) : []
+      this.state.files = search.mode === 'files' ? this.fileRows(search.files) : []
+    }
+
+    /** Grouped by path, in path order; each row keeps its index into the hits, which is
+     *  what the cursor counts. */
+    groupHits(hits) {
+      const byPath = new Map()
+      hits.forEach((hit, index) => {
+        if (!byPath.has(hit.path)) byPath.set(hit.path, [])
+        byPath.get(hit.path).push({ index, line: hit.line, ...this.marked(hit) })
+      })
+      return [...byPath.keys()].sort().map((path) => ({
+        path,
+        name: path.slice(path.lastIndexOf('/') + 1),
+        rows: byPath.get(path),
+      }))
+    }
+
+    /** The line cut into before / match / after. Long lines are clipped from the left, so a
+     *  match late in one is still visible. */
+    marked(hit) {
+      const text = hit.text
+      const start = Math.max(0, Math.min(hit.column, text.length))
+      const end = Math.max(start, Math.min(start + hit.length, text.length))
+      const leadingRoom = 24
+      const cut = start > leadingRoom ? start - leadingRoom : 0
+      return {
+        before: (cut > 0 ? '…' : '') + text.slice(cut, start),
+        match: text.slice(start, end),
+        after: text.slice(end),
+      }
+    }
+
+    fileRows(files) {
+      return files.map((ranked) => {
+        const slash = ranked.display.lastIndexOf('/')
+        return {
+          path: ranked.path,
+          name: slash >= 0 ? ranked.display.slice(slash + 1) : ranked.display,
+          dir: slash >= 0 ? ranked.display.slice(0, slash) : '',
+        }
+      })
+    }
+
+    goToHit(index) {
+      const hit = MdBoss.manager.search.hits[Number(index)]
+      if (hit) MdBoss.manager.goToHit(hit)
+    }
+
+    openFile(path) {
+      MdBoss.manager.openFoundFile(path)
+    }
+  }
+</script>
+
+<style>
+  display: block;
+  padding: 2px 0 8px;
+
+  .empty {
+    padding: 24px 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .file {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 8px 8px 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+  }
+
+  .file .count {
+    color: var(--muted);
+  }
+
+  .row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    cursor: default;
+    user-select: none;
+  }
+
+  .row:hover {
+    background: var(--surface);
+  }
+
+  .row.cursor {
+    background: var(--selection);
+  }
+
+  .row .line {
+    flex: none;
+    min-width: 26px;
+    text-align: right;
+    color: var(--muted);
+  }
+
+  .row .text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .row .before {
+    color: var(--muted);
+  }
+
+  .row .match {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .row .after {
+    color: var(--text);
+  }
+
+  .more {
+    padding: 8px 8px 0;
+    color: var(--muted);
+  }
+
+  .file-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    cursor: default;
+    user-select: none;
+  }
+
+  .file-row:hover {
+    background: var(--surface);
+  }
+
+  .file-row.cursor {
+    background: var(--selection);
+  }
+
+  .file-row .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text);
+  }
+
+  /* Truncated from the head - the tail of a path is the part that tells files apart. */
+  .file-row .dir {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl;
+    text-align: left;
+    color: var(--muted);
+  }
+
+  .file-row .dir bdi {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+</style>
+
+{#if state.mode === 'files'}
+  {#if state.files.length === 0}
+    <div class="empty text-default">No file matches.</div>
+  {:else}
+    {#each state.files as file, index}
+      <div class={'file-row row' + (index === state.cursor ? ' cursor' : '')} title={file.path} onclick="fez.openFile('{file.path}')">
+        <span class="name text-default">{file.name}</span>
+        {#if file.dir}
+          <span class="dir text-small"><bdi>{file.dir}</bdi></span>
+        {/if}
+      </div>
+    {/each}
+  {/if}
+{:else if state.groups.length === 0}
+  {#if state.running}
+    <div class="empty text-default">Searching…</div>
+  {:else}
+    <div class="empty text-default">Nothing found.</div>
+  {/if}
+{:else}
+  {#each state.groups as group}
+    <div class="file text-small" title={group.path}>
+      <span class="name">{group.name}</span>
+      <span class="count text-mono">{group.rows.length}</span>
+    </div>
+    {#each group.rows as row}
+      <div class={'row' + (row.index === state.cursor ? ' cursor' : '')} onclick="fez.goToHit({row.index})">
+        <span class="line text-small text-mono">{row.line}</span>
+        <span class="text text-small"><span class="before">{row.before}</span><span class="match">{row.match}</span><span class="after">{row.after}</span></span>
+      </div>
+    {/each}
+  {/each}
+  {#if state.truncated}
+    <div class="more text-small">More matches than shown.</div>
+  {/if}
+{/if}

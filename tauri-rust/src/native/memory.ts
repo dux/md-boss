@@ -1,6 +1,37 @@
 import { isDocument } from '../models/fileKinds'
+import { rewriting } from '../models/markdownLinks'
 import { parseAnnotationFile, serializeAnnotationFile } from '../models/notes'
-import type { Entry, Listing, Native, Stat, Unwatch } from './bridge'
+import { dirname } from '../models/paths'
+import type { MenuModel, MenuPatch } from '../models/appMenu'
+import type { Entry, Listing, Native, NativeMenu, RewriteOutcome, Stat, Unwatch } from './bridge'
+
+/** The menu twin keeps what it was given, so a test can read the installed model, the
+ *  patches that followed, and click an item the way the menu bar would. */
+export interface MemoryMenu extends NativeMenu {
+  installed: MenuModel[] | null
+  patches: MenuPatch[]
+  click(id: string): void
+}
+
+function memoryMenu(): MemoryMenu {
+  let action: ((id: string) => void) | null = null
+  return {
+    installed: null,
+    patches: [],
+    // False: no menu bar here, the page routes the shortcuts itself.
+    async install(menus, onAction) {
+      this.installed = menus
+      action = onAction
+      return false
+    },
+    async update(patch) {
+      this.patches.push(patch)
+    },
+    click(id) {
+      action?.(id)
+    },
+  }
+}
 
 // An in-memory Native over a { "/abs/path/file.md": "text" } map - what the tests and
 // the browser dev page (vite without Tauri) run against.
@@ -47,6 +78,10 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
     .sort((a, b) => a.length - b.length)
 
   return {
+    platform: 'macos',
+    app: {
+      version: async () => '0.0.0-dev',
+    },
     fs: {
       read: async (p) => {
         if (!(p in files)) throw new Error(`no such file: ${p}`)
@@ -56,6 +91,29 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
         if (!isDir(dirs, p.slice(0, p.lastIndexOf('/')))) throw new Error(`no such directory for: ${p}`)
         files[p] = text
         mtimes.set(p, ++clock)
+        notify(p)
+      },
+      create: async (p) => {
+        if (p in files) throw new Error(`already exists: ${p}`)
+        if (!isDir(dirs, p.slice(0, p.lastIndexOf('/')))) throw new Error(`no such directory for: ${p}`)
+        files[p] = ''
+        mtimes.set(p, ++clock)
+        notify(p)
+      },
+      rename: async (from, to) => {
+        if (!(from in files)) throw new Error(`no such file: ${from}`)
+        if (!isDir(dirs, to.slice(0, to.lastIndexOf('/')))) throw new Error(`no such directory for: ${to}`)
+        files[to] = files[from]
+        delete files[from]
+        mtimes.set(to, ++clock)
+        mtimes.delete(from)
+        notify(from)
+        notify(to)
+      },
+      trash: async (p) => {
+        if (!(p in files)) throw new Error(`no such file: ${p}`)
+        delete files[p]
+        mtimes.delete(p)
         notify(p)
       },
       mkdir: async (dir) => {
@@ -70,6 +128,14 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
       writeText: async (text) => {
         clipboard = text
       },
+    },
+    // Nothing to reveal or open into in a browser tab; a test that cares swaps these in.
+    // No asset protocol either: the page leaves a file: image where it is.
+    shell: {
+      reveal: async () => {},
+      openURL: async () => {},
+      openPath: async () => {},
+      assetBase: () => '',
     },
     dialog: {
       confirm: async () => true,
@@ -142,13 +208,40 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
         notify(storePath)
       },
       invalidateScan: async () => {},
+      allowAssetRoots: async () => {},
+      // The same pass as links.rs, over the map: every document under the root, the buffer
+      // winning over the map and handed back rather than stored, the rest written in place.
+      rewriteLinks: async (root, skipFolders, moves, buffers, excluding, home): Promise<RewriteOutcome> => {
+        const outcome: RewriteOutcome = { written: [], buffered: [], failed: [] }
+        if (moves.length === 0) return outcome
+        const skipped = new Set(excluding)
+        for (const path of documentsBelow(norm(root), new Set(skipFolders))) {
+          if (skipped.has(path)) continue
+          const buffer = buffers[path]
+          const result = rewriting(buffer ?? files[path], dirname(path), moves, home ? { home } : {})
+          if (!result) continue
+          if (buffer !== undefined) {
+            outcome.buffered.push({ path, text: result.text, count: result.count })
+            continue
+          }
+          files[path] = result.text
+          mtimes.set(path, ++clock)
+          notify(path)
+          outcome.written.push({ path, count: result.count })
+        }
+        return outcome
+      },
     },
+
+    menu: memoryMenu(),
 
     watch: async (dir, cb): Promise<Unwatch> => {
       const entry = { dir: norm(dir), cb }
       watchers.add(entry)
       return () => watchers.delete(entry)
     },
+    // No OS to drag from.
+    onFileDrag: async () => () => {},
   }
 
   function documentsBelow(dir: string, skip: Set<string>): string[] {

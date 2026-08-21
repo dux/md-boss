@@ -4,6 +4,9 @@
 // It grows a member at a time, as the phases in doc/feature/port-tauri.md
 // need them.
 
+import type { MenuModel, MenuPatch } from '../models/appMenu'
+import type { Platform } from '../models/platform'
+
 export interface Entry {
   name: string
   isDir: boolean
@@ -25,6 +28,15 @@ export interface NativeFs {
   read(path: string): Promise<string>
   /** Whole-file replace; the directory must exist. */
   write(path: string, text: string): Promise<void>
+  /** An empty file, failing when one is already there - the sidebar's New File, where
+   *  clobbering a file would be silent. */
+  create(path: string): Promise<void>
+  /** Moves a file to a new path, in the same folder (a rename) or another one. A plain file
+   *  already at `to` is replaced, so callers validate first (fileMove.ts). */
+  rename(from: string, to: string): Promise<void>
+  /** The OS trash, not a delete: Cmd-Z is the editor's, so the Trash is what makes this
+   *  recoverable. The Rust side does it (src-tauri/src/main.rs, the `trash` crate). */
+  trash(path: string): Promise<void>
   /** Creates parents as needed; an existing directory is fine. */
   mkdir(dir: string): Promise<void>
   list(dir: string): Promise<Entry[]>
@@ -39,6 +51,34 @@ export interface NativeDialog {
   openFolders(startIn: string | null): Promise<string[]>
   /** Single document picker. Null when cancelled. */
   openFile(startIn: string | null): Promise<string | null>
+}
+
+/** The desktop the app runs on - the one string the UI varies by it is the reveal label
+ *  (src/models/platform.ts); the Tauri side also reads it for drag coordinates. */
+export type { Platform }
+
+export interface NativeShell {
+  /** The file selected in Finder / Explorer / the file manager. */
+  reveal(path: string): Promise<void>
+  /** A URL in whatever handles its scheme - the browser, the mail client. */
+  openURL(url: string): Promise<void>
+  /** A file in whatever the OS opens it with: what a click on a non-document link does. */
+  openPath(path: string): Promise<void>
+  /** The prefix the preview page turns a local image path into a loadable URL with:
+   *  `assetBase() + encodeURIComponent(path)`. The Tauri asset protocol, which serves only
+   *  what `commands.allowAssetRoots` has allowed. A prefix rather than a function because
+   *  the page finds its images after rendering, inside its own iframe. Empty when there is
+   *  no such protocol (the browser build), and the page then leaves `file:` URLs alone. */
+  assetBase(): string
+}
+
+/** An OS file drag over the window, in CSS pixels from the page's top-left. `paths` is
+ *  what is being dragged - filled on `enter` and `drop`, empty on `over` and `leave`. */
+export interface FileDrag {
+  kind: 'enter' | 'over' | 'drop' | 'leave'
+  paths: string[]
+  x: number
+  y: number
 }
 
 export interface NativePaths {
@@ -82,6 +122,22 @@ export interface SearchResult {
   filesSearched: number
 }
 
+/** One file that has moved, for the link rewrite. */
+export interface LinkMove {
+  old: string
+  new: string
+}
+
+/** What the rewrite pass did (src-tauri/src/links.rs). */
+export interface RewriteOutcome {
+  /** Rewritten on disk, atomically. */
+  written: { path: string; count: number }[]
+  /** Text that came from `buffers`, handed back rewritten - the caller owns that buffer. */
+  buffered: { path: string; text: string; count: number }[]
+  /** Needed rewriting and could not be written. */
+  failed: string[]
+}
+
 /** The filesystem-heavy passes, answered by the Rust side (src-tauri/src/walk.rs). */
 export interface NativeCommands {
   /** Every match under `root` (src-tauri/src/search.rs). `buffers` is unsaved text by path;
@@ -96,6 +152,14 @@ export interface NativeCommands {
   documentsUnder(path: string, skipFolders: string[]): Promise<string[]>
   /** Drop the "has documents below" memo for `path` and its ancestors/descendants; all of it when omitted. */
   invalidateScan(path?: string): Promise<void>
+  /** Repoints every inline link under `root` that resolved to a moved file, in every
+   *  document below it (src-tauri/src/links.rs). `buffers` is unsaved text by path and wins
+   *  over the disk; `excluding` are never read; `home` is what `~` expands to. */
+  rewriteLinks(root: string, skipFolders: string[], moves: LinkMove[], buffers: Record<string, string>, excluding: string[], home: string | null): Promise<RewriteOutcome>
+  /** Lets the preview's asset protocol serve files below these folders - the sidebar's
+   *  roots, so an image next to a document loads and nothing outside the listed folders
+   *  does. Grows as roots are added; a removed root is not revoked. */
+  allowAssetRoots(roots: string[]): Promise<void>
 }
 
 /** Stop watching. */
@@ -107,12 +171,34 @@ export interface NativeClipboard {
   writeText(text: string): Promise<void>
 }
 
+/** The menu bar (src/models/appMenu.ts is the model, src/ui/appMenu.ts keeps it in step). */
+export interface NativeMenu {
+  /** Draws the menus and wires every action item to `onAction` by id. Resolves to whether
+   *  the shell registered the accelerators with the OS - true under Tauri, false in the
+   *  browser build, where the page routes the shortcuts itself (src/ui/keys.ts). */
+  install(menus: MenuModel[], onAction: (id: string) => void): Promise<boolean>
+  /** A label, an enabled flag or a check changed under a live menu. */
+  update(patch: MenuPatch): Promise<void>
+}
+
+export interface NativeApp {
+  /** The version from tauri.conf.json - what the About panel shows. */
+  version(): Promise<string>
+}
+
 export interface Native {
+  platform: Platform
+  app: NativeApp
   fs: NativeFs
   dialog: NativeDialog
   clipboard: NativeClipboard
+  shell: NativeShell
   paths: NativePaths
   commands: NativeCommands
+  menu: NativeMenu
+  /** Files dragged in from the OS. An HTML5 drop never carries a native path, so the raw
+   *  pane's "drop a file, get a link" listens here for anything from outside the window. */
+  onFileDrag(listener: (drag: FileDrag) => void): Promise<Unwatch>
   /** One directory, its direct entries only, debounced; `changed` carries the paths the
    *  platform reported (the directory itself when it went away). */
   watch(dir: string, onChange: (changed: string[]) => void): Promise<Unwatch>

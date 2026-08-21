@@ -2,22 +2,29 @@
 // listed, which file is open, what it says. A singleton on purpose - menu commands live
 // outside the component tree and cannot read view state.
 
-import { native } from '../native/bridge'
+import { native, type RewriteOutcome, type SearchHit } from '../native/bridge'
 import { AnnotationStore, FALLBACK_FILE_NAME } from './annotationStore'
 import { DirectoryWatcher } from './directoryWatcher'
 import { OpenDocument } from './document'
+import { documentName, isDocument } from './fileKinds'
+import { checkMove, checkRename, moveMessage, renameMessage } from './fileMove'
 import { FileTreeModel } from './fileTreeModel'
 import { LineIndex } from './lineIndex'
+import { resolveLinkTarget } from './linkTarget'
+import { snippet } from './markdownLinks'
 import { type Note, suggestedTitle } from './notes'
 import type { Edit } from './noteShift'
-import { dirname } from './paths'
+import { basename, dirname, joinPath, normalizePath } from './paths'
 import { Prompts } from './prompts'
 import { RootFolders } from './rootFolders'
 import { ScrollMemory } from './scrollMemory'
 import { ScrollSync } from './scrollSync'
 import { canChangeFontSize, defaultSettings, FONT_SETTINGS, fontDefault, type FontSetting, fontSize, type Pane, resetFontSizes, setFontSize, showPane, togglePane, visiblePanes, ZOOMABLE, fontSetting } from './settings'
 import { SettingsStore } from './settingsStore'
+import { SidebarSearch } from './sidebarSearch'
 import { flippedTheme, selectingTheme, type Theme, type ThemeChoice, type ThemeID, themeChoice, themeNamed } from '../theme/theme'
+
+export type Format = 'bold' | 'italic' | 'link'
 
 export class Manager {
   readonly tree: FileTreeModel
@@ -31,6 +38,18 @@ export class Manager {
   /** Every loaded `.md-boss`. Its own change event - the pane and the gutter listen. */
   readonly notes: AnnotationStore
   readonly prompts = new Prompts()
+  /** Find in project and Go to File - the sidebar's field and what it found. */
+  readonly search: SidebarSearch
+  /** Cmd-F: a request for the raw pane to open its find panel. Carries an id so asking
+   *  twice still opens it; the pane nulls it once followed, so a pane toggled away and back
+   *  does not reopen the panel unasked. */
+  findRequest: { id: number } | null = null
+  private findRequestCount = 0
+  /** The Format menu's Bold / Italic / Link, for the raw pane. The editor's own keymap
+   *  answers the keys while it has the focus; this is the path for a menu click and for
+   *  the platforms where the accelerator never reaches the page. */
+  formatRequest: { format: Format; id: number } | null = null
+  private formatRequestCount = 0
   /** Caret position in the raw pane, 1-based, plus the text of that line. Notes anchor to
    *  it, and the pane uses it to highlight the entry you are on. */
   currentLine = 1
@@ -38,6 +57,10 @@ export class Manager {
   /** A request for the raw pane to scroll to a line. Carries an id so asking for the same
    *  line twice still moves the view. */
   scrollRequest: { line: number; id: number } | null = null
+  /** A link asked for a heading: the preview scrolls to it once the document is rendered.
+   *  Carries an id so the same anchor twice still moves the page. */
+  anchorRequest: { id: string; seq: number } | null = null
+  private anchorRequestCount = 0
   /** The line a note jump landed on. Painted as a band in the raw pane and highlighted in
    *  the preview, until the caret moves off it - so "where did I land" outlives the scroll. */
   highlightedLine: number | null = null
@@ -53,8 +76,14 @@ export class Manager {
   /** How many documents back the button can walk. Deep enough to cover a session's worth
    *  of following links, shallow enough that the list is never worth thinking about. */
   static readonly historyLimit = 50
-  /** The file waiting for a "Move Here" (P8). Cleared by Escape in the sidebar and by the move. */
+  /** The file waiting for a "Move Here". Cleared by Escape in the sidebar and by the move. */
   cutFile: string | null = null
+  /** The sidebar row being dragged, for the drop on a folder. Not an app-wide event: only
+   *  the drop targets read it, and it says nothing until something lands. */
+  draggedFile: string | null = null
+  /** The row the sidebar is drawing as a name field. Held here rather than in the sidebar
+   *  because the File menu's Rename starts it from outside the component tree. */
+  renaming: string | null = null
   private readonly listeners = new Set<() => void>()
   /** The open file's folder, so a save from another editor shows up on tab-back. */
   private readonly documentWatcher = new DirectoryWatcher((_, changed) => void this.documentChangedOnDisk(changed))
@@ -76,6 +105,12 @@ export class Manager {
     this.notes = new AnnotationStore(folders, `${configDir}/${FALLBACK_FILE_NAME}`, home)
     void this.notes.reload()
     this.tree = new FileTreeModel(settings.data.expandedPaths)
+    this.search = new SidebarSearch({
+      root: () => this.folders.active,
+      skipFolders: () => this.settings.data.skipFolders,
+      recent: () => (this.settings.data.lastOpenedFile ? [this.settings.data.lastOpenedFile] : []),
+      buffers: () => (this.document?.isDirty ? { [this.document.path]: this.document.text } : {}),
+    })
     this.scrollSync = new ScrollSync(() => {
       const panes = visiblePanes(this.settings.data)
       return panes.includes('raw') && panes.includes('preview')
@@ -126,6 +161,17 @@ export class Manager {
     } finally {
       this.syncing = false
     }
+  }
+
+  /** File > Revert to Saved: the disk's text back in the buffer, the edits gone. */
+  async revertDocument(): Promise<void> {
+    if (!this.isDirty) return
+    await this.reloadFromDisk()
+  }
+
+  /** Save and Revert are live only while there is something unsaved. */
+  get canSave(): boolean {
+    return this.isDirty
   }
 
   /** The banner's "Reload from Disk". */
@@ -325,6 +371,141 @@ export class Manager {
 
   private rootsChanged(): void {
     this.tree.setRoot(this.folders.active, this.settings.data.skipFolders)
+    this.search.rootChanged()
+    // The preview may load images from under any listed folder, and from nowhere else.
+    void native().commands.allowAssetRoots(this.folders.roots).catch((err) => console.error('asset roots not allowed:', err))
+    this.emit()
+  }
+
+  // MARK: Links
+
+  /** Where a link clicked inside the preview goes. The href arrives absolute - the page
+   *  resolves it against the document's folder - and is classified against the disk. */
+  async followLink(href: string): Promise<void> {
+    const target = await resolveLinkTarget(href, async (path) => {
+      try {
+        return (await native().fs.stat(path)).isDir ? 'dir' : 'file'
+      } catch {
+        return null
+      }
+    })
+    switch (target.kind) {
+      case 'external':
+        await native().shell.openURL(target.url)
+        return
+      case 'file':
+        // A PDF or an image is not ours to show: the OS opens it with whatever does.
+        if (!isDocument(target.path)) {
+          await native().shell.openPath(target.path)
+          return
+        }
+        await this.open(target.path)
+        // Not after a switch the user cancelled. Same file, new anchor - just move within it.
+        if (this.document?.path !== target.path) return
+        await this.reveal(target.path)
+        if (target.fragment !== null) this.requestAnchor(target.fragment)
+        return
+      case 'directory':
+        if (this.folders.rootContaining(target.path)) await this.reveal(target.path)
+        else this.addRoot(target.path)
+        return
+      case 'missing':
+        this.showError(`Not found: ${basename(target.path)}`)
+    }
+  }
+
+  requestAnchor(id: string): void {
+    this.anchorRequest = { id, seq: ++this.anchorRequestCount }
+    this.emit()
+  }
+
+  /** What files dropped into the raw pane become: one link per line, relative to the open
+   *  document, an embed for an image - the name you dragged is the name you get. Null
+   *  with nothing open to be relative to. */
+  linksFor(paths: string[]): string | null {
+    const doc = this.document
+    if (!doc || paths.length === 0) return null
+    return paths.map((p) => snippet(p, dirname(doc.path))).join('\n')
+  }
+
+  /** The file selected in Finder / Explorer / the file manager. */
+  showInFileManager(path: string): void {
+    void native().shell.reveal(path).catch((err) => this.showError(`Could not reveal ${basename(path)}: ${String(err)}`))
+  }
+
+  /** Cmd-Shift-R: the open document, or the sidebar's row when nothing is open. */
+  revealSelection(): void {
+    const path = this.actionTarget
+    if (path) this.showInFileManager(path)
+  }
+
+  // MARK: Search
+
+  /** The field is always on screen, so these are "put the caret here, in this mode" rather
+   *  than "open a panel" - but the sidebar has to be showing for there to be a field. */
+  findInProject(): void {
+    if (!this.settings.data.showSidebar) this.settings.patch({ showSidebar: true })
+    this.search.focus('text')
+  }
+
+  goToFile(): void {
+    if (!this.settings.data.showSidebar) this.settings.patch({ showSidebar: true })
+    this.search.focus('files')
+  }
+
+  get canSearch(): boolean {
+    return this.folders.active !== null
+  }
+
+  /** The whole jump: `goToLine` forces the raw pane open when neither document pane is up
+   *  and drives the landing band, so a search hit and a note land the same way. */
+  async goToHit(hit: SearchHit): Promise<void> {
+    await this.open(hit.path)
+    if (this.document?.path !== hit.path) return
+    await this.reveal(hit.path)
+    this.goToLine(hit.line)
+  }
+
+  /** A Go to File pick. The query has done its job; leaving it there would hide the tree
+   *  behind a stale one. */
+  async openFoundFile(path: string): Promise<void> {
+    await this.open(path)
+    if (this.document?.path !== path) return
+    await this.reveal(path)
+    this.search.clear()
+  }
+
+  /** Return in the search field: open whatever the cursor is on. */
+  async openSearchCursor(): Promise<void> {
+    const search = this.search
+    if (search.mode === 'files') {
+      const ranked = search.files[search.cursor]
+      if (ranked) await this.openFoundFile(ranked.path)
+    } else {
+      const hit = search.hits[search.cursor]
+      if (hit) await this.goToHit(hit)
+    }
+  }
+
+  /** Cmd-F. The find panel is the raw pane's, so the pane is shown if it is not - there is
+   *  nothing else in the window that could search the open document. */
+  findInDocument(): void {
+    if (!this.document) return
+    if (!visiblePanes(this.settings.data).includes('raw')) this.settings.set(showPane(this.settings.data, 'raw'))
+    this.findRequest = { id: ++this.findRequestCount }
+    this.emit()
+  }
+
+  // MARK: Format
+
+  /** The Format menu is about the raw pane, so it greys out when that pane is not up. */
+  get canFormat(): boolean {
+    return this.document !== null && visiblePanes(this.settings.data).includes('raw')
+  }
+
+  format(format: Format): void {
+    if (!this.canFormat) return
+    this.formatRequest = { format, id: ++this.formatRequestCount }
     this.emit()
   }
 
@@ -499,6 +680,7 @@ export class Manager {
       this.scrollSync.reset()
       this.highlightedLine = null
       this.scrollRequest = null
+      this.findRequest = null
       this.settings.patch({ lastOpenedFile: path })
       this.documentWatcher.sync(new Set([dirname(path)]))
       if (this.folders.rootContaining(path) === null) this.addRoot(dirname(path))
@@ -518,6 +700,331 @@ export class Manager {
     if (!save) return true
     await this.saveDocument()
     return !doc.isDirty
+  }
+
+  // MARK: Files
+
+  /** What a File-menu action acts on: the open document, or the row the sidebar cursor is
+   *  on when nothing is open. */
+  get actionTarget(): string | null {
+    return this.document?.path ?? this.tree.cursorRow?.node.path ?? null
+  }
+
+  /** Cmd-N and the blank space below the tree. Created in the active folder: with several
+   *  subfolders expanded at once there is no "current" one, and picking the cursor's would
+   *  be a guess the user cannot see before the file lands. */
+  async newFile(): Promise<void> {
+    const root = this.folders.active
+    if (!root) return
+    const typed = await this.prompts.text({
+      title: 'New File',
+      message: `Created in ${basename(root)}`,
+      value: '',
+      placeholder: 'notes.md',
+      confirm: 'Create',
+    })
+    if (typed === null) return
+    const path = joinPath(root, documentName(typed))
+    const name = basename(path)
+    if (await native().fs.exists(path)) {
+      this.showError(`${name} already exists`)
+      return
+    }
+    try {
+      await native().fs.create(path)
+    } catch (err) {
+      this.showError(`Could not create ${name}: ${String(err)}`)
+      return
+    }
+    // The watcher would get there on its own; refreshing now is what puts the row under
+    // the cursor at once rather than at the watcher's pace.
+    await this.resettle(root)
+    await this.open(path)
+    if (this.document?.path === path) await this.reveal(path)
+  }
+
+  /** Rename… on a row, or the File menu on the action target. The sidebar turns the row
+   *  into a field; a file with no row to edit in - outside every listed folder - is asked
+   *  for its name in the prompt instead. */
+  async startRename(path: string): Promise<void> {
+    await this.reveal(path)
+    if (this.tree.rows.some((r) => r.node.path === path)) {
+      this.renaming = path
+      this.emit()
+      return
+    }
+    const typed = await this.prompts.text({ title: 'Rename', message: `In ${basename(dirname(path))}`, value: basename(path), confirm: 'Rename' })
+    if (typed !== null) await this.rename(path, typed)
+  }
+
+  cancelRename(): void {
+    if (this.renaming === null) return
+    this.renaming = null
+    this.emit()
+  }
+
+  renameSelection(): void {
+    const path = this.actionTarget
+    if (path) void this.startRename(path)
+  }
+
+  /** Renames a file where it stands, repointing every link to it - a rename is a move
+   *  that stays in its folder, so it runs the same rewrite pass rather than a second one.
+   *  An empty or unchanged name is a cancel, not a mistake. */
+  async rename(source: string, typed: string): Promise<void> {
+    this.renaming = null
+    this.emit()
+    const trimmed = typed.trim()
+    if (trimmed === '') return
+    // The same defaulting newFile applies, for the same reason: a file the tree then
+    // hides is the one outcome worth ruling out.
+    const name = documentName(trimmed)
+    const refusal = await checkRename(source, name)
+    if (refusal) {
+      const message = renameMessage(refusal, source, name)
+      if (message) this.showError(message)
+      return
+    }
+    const target = joinPath(dirname(source), name)
+    try {
+      await native().fs.rename(source, target)
+    } catch (err) {
+      // Nothing has been written yet, so a failure here leaves the project untouched.
+      this.showError(`Could not rename ${basename(source)}: ${String(err)}`)
+      return
+    }
+    await this.relocate(source, target, `Renamed to ${name}`)
+  }
+
+  trashSelection(): void {
+    const path = this.actionTarget
+    if (path) void this.trash(path)
+  }
+
+  /** Moves a file to the Trash. It asks first, because Cmd-Z is the editor's and undoes
+   *  text, not the filesystem - the Trash is what makes this recoverable. Links to the file
+   *  are deliberately left alone: following one already says "Not found", and rewriting
+   *  other people's documents because one file went is a worse surprise than a dead link.
+   *  The open document finds out from its own watcher, which already has the wording for
+   *  a file that went out from under it. */
+  async trash(path: string): Promise<void> {
+    const name = basename(path)
+    let stat
+    try {
+      stat = await native().fs.stat(path)
+    } catch {
+      this.showError(`${name} is no longer there`)
+      return
+    }
+    if (stat.isDir) {
+      this.showError('Only files can be moved to the Trash')
+      return
+    }
+    const notes = this.notes.noteCount(path)
+    const carried = notes === 0 ? '' : ` Its ${notes === 1 ? 'note goes' : `${notes} notes go`} with it.`
+    const confirmed = await this.prompts.confirm({
+      title: `Move ${name} to the Trash?`,
+      message: `Links to it in other documents are left as they are.${carried}`,
+      confirm: 'Move to Trash',
+    })
+    if (!confirmed) return
+    try {
+      await native().fs.trash(path)
+    } catch (err) {
+      this.showError(`Could not trash ${name}: ${String(err)}`)
+      return
+    }
+    const removed = await this.notes.removeAll(path)
+    this.forgetFile(path)
+    if (this.cutFile === path) this.cutFile = null
+    if (this.draggedFile === path) this.draggedFile = null
+    if (this.renaming === path) this.renaming = null
+    this.flash(removed === 0
+      ? `Moved ${name} to the Trash`
+      : `Moved ${name} to the Trash - ${removed} ${removed === 1 ? 'note' : 'notes'} removed`)
+    await this.resettle(dirname(path))
+  }
+
+  // MARK: Moving
+
+  /** Right-click Cut: the row dims and every folder's menu offers to move it there. */
+  cut(path: string): void {
+    this.cutFile = path
+    this.emit()
+  }
+
+  /** Whether a drop on `destination` would do anything. Drives the highlight and the menu
+   *  item, so it must be cheap and must not complain about anything. */
+  async canMove(source: string, destination: string): Promise<boolean> {
+    return (await checkMove(source, destination)) === null
+  }
+
+  /** "Move Here" on a folder row or the root box. */
+  async moveCut(destination: string): Promise<void> {
+    const source = this.cutFile
+    if (source) await this.move(source, destination)
+  }
+
+  /** A row dropped on a folder. Deliberately limited to a drag that started in the sidebar
+   *  - `draggedFile` is only ever set there - so a file dragged in from the Finder is not
+   *  moved out of wherever it lives. */
+  /** `source` is named by a native drop, which can arrive after the HTML5 dragend has
+   *  already cleared `draggedFile`; an HTML5 drop reads it here. */
+  async dropDragged(destination: string, source = this.draggedFile): Promise<void> {
+    this.draggedFile = null
+    if (source) await this.move(source, destination)
+  }
+
+  /** Moves `source` into `destination` and repoints every link to it under the active
+   *  root, notes included. Not undoable - Cmd-Z is the editor's, and it undoes text, not
+   *  the filesystem. A collision stops it before anything is touched. */
+  async move(source: string, destination: string): Promise<void> {
+    const refusal = await checkMove(source, destination)
+    if (refusal) {
+      const message = moveMessage(refusal, source, destination)
+      if (message) this.showError(message)
+      // Nothing to come back for: the file is gone, or it is already there.
+      if (refusal === 'missingSource' || refusal === 'sameFolder') this.cancelCut()
+      return
+    }
+    const target = joinPath(destination, basename(source))
+    try {
+      await native().fs.rename(source, target)
+    } catch (err) {
+      // Nothing has been written yet, so a failure here leaves the project untouched and
+      // the cut file still queued for another try.
+      this.showError(`Could not move ${basename(source)}: ${String(err)}`)
+      return
+    }
+    await this.relocate(source, target, `Moved ${basename(target)} to ${basename(destination)}`)
+  }
+
+  /** Right-click Copy Text: the buffer rather than the file when that document is open, so
+   *  what lands on the clipboard is what the panes are showing, unsaved edits included. */
+  async copyContents(path: string): Promise<void> {
+    if (this.document?.path === path) {
+      await this.copyText(this.document.text, 'Text copied')
+      return
+    }
+    try {
+      await this.copyText(await native().fs.read(path), 'Text copied')
+    } catch {
+      this.showError(`Could not read ${basename(path)}`)
+    }
+  }
+
+  /** What a move and a rename share once the file is on its new path: the open document
+   *  follows, the history and the reading place follow, the notes follow, the tree resettles,
+   *  and one Move drives the rewrite pass. */
+  private async relocate(source: string, target: string, message: string): Promise<void> {
+    const doc = this.document
+    if (doc && doc.path === source) {
+      await doc.relocate(target)
+      this.settings.patch({ lastOpenedFile: target })
+      this.documentWatcher.sync(new Set([dirname(target)]))
+    }
+    this.followMove(source, target)
+    await this.notes.repoint(source, target)
+    this.cutFile = null
+    this.draggedFile = null
+    this.flash(message)
+    await this.resettleTree(source, target)
+    await this.rewriteReferences(source, target)
+  }
+
+  private async resettleTree(source: string, target: string): Promise<void> {
+    const origin = dirname(source)
+    const destination = dirname(target)
+    await this.resettle(origin)
+    // A rename never leaves its folder, so there is only the one to resettle.
+    if (destination !== origin) await this.resettle(destination)
+    await this.tree.reveal(target)
+  }
+
+  /** A folder whose contents changed. Explicit rather than left to the watcher: a collapsed
+   *  folder is not being watched, so its event would never arrive - and the "has documents
+   *  below" memo has to go before the re-list or a new file in an empty folder stays hidden. */
+  private async resettle(folder: string): Promise<void> {
+    await native().commands.invalidateScan(folder)
+    await this.tree.refresh(folder)
+  }
+
+  /** The inbound links under the active root, repointed by the Rust pass. The moved file's
+   *  own outbound links are out of scope, and excluding it is how that is enforced rather
+   *  than merely left undone. Unsaved edits win over what is on disk, or the rewrite would
+   *  be computed against a stale copy and then written back over the user's work. */
+  private async rewriteReferences(source: string, target: string): Promise<void> {
+    const root = this.folders.active
+    if (!root) return
+    const doc = this.document
+    const buffers = doc && doc.isDirty ? { [normalizePath(doc.path)]: doc.text } : {}
+    const outcome = await native().commands.rewriteLinks(
+      root,
+      this.settings.data.skipFolders,
+      [{ old: source, new: target }],
+      buffers,
+      [normalizePath(target)],
+      this.home,
+    )
+    await this.applyRewrites(outcome)
+  }
+
+  /** Places what the pass handed back. A rewritten buffer lands in the open document and
+   *  stays unsaved - saving someone's work to fix a link is worse than the link - unless
+   *  that document is no longer dirty, in which case the text goes to disk like the rest.
+   *  A file rewritten on disk that is open and clean is reloaded, so the panes show it. */
+  private async applyRewrites(outcome: RewriteOutcome): Promise<void> {
+    let links = 0
+    let files = 0
+    let unsaved = 0
+    let failed = outcome.failed.length
+    for (const rewrite of outcome.buffered) {
+      const doc = this.document
+      const open = doc && normalizePath(doc.path) === normalizePath(rewrite.path) ? doc : null
+      if (open?.isDirty) {
+        open.replaceBuffer(rewrite.text)
+        unsaved++
+      } else {
+        try {
+          await native().fs.write(rewrite.path, rewrite.text)
+        } catch {
+          failed++
+          continue
+        }
+        if (open) await open.reloadFromDisk()
+      }
+      links += rewrite.count
+      files++
+    }
+    for (const rewrite of outcome.written) {
+      const doc = this.document
+      if (doc && normalizePath(doc.path) === normalizePath(rewrite.path)) await doc.reloadFromDisk()
+      links += rewrite.count
+      files++
+    }
+    if (failed > 0) {
+      // The move is the durable part; a stale link is visible and re-fixable, which is
+      // exactly why this has to say so rather than claim success.
+      this.showError(`Moved, but ${failed} ${failed === 1 ? 'file' : 'files'} could not be updated`)
+      return
+    }
+    if (files === 0) return
+    const counted = `Updated ${links} ${links === 1 ? 'link' : 'links'} in ${files} ${files === 1 ? 'file' : 'files'}`
+    this.flash(unsaved > 0 ? `${counted} - ${unsaved} unsaved` : counted)
+  }
+
+  // MARK: Messages
+
+  /** A transient line in the footer. The toast overlay (P9) takes both of these over;
+   *  until then an error is said the same way, since a refusal that stuck in the footer
+   *  until the next open would outlive the mistake. */
+  flash(message: string): void {
+    this.notice = message
+    this.emit()
+  }
+
+  showError(message: string): void {
+    this.flash(message)
   }
 
   // MARK: History

@@ -1,14 +1,17 @@
 // Preview page script, inlined into the preview iframe by src/preview/page.ts.
 //
 // App -> page: mdRender, mdSetTheme, mdSetFontSize, mdSetMeasure, mdScrollToAnchor,
-//              mdScrollToLine, mdSetNotes, mdHighlightLine - called on the iframe's window.
+//              mdScrollToLine, mdSetNotes, mdHighlightLine, mdSetBase - called on the
+//              iframe's window.
 // Page -> app: window.parent.postMessage({kind, ...}) - the pane listens for "message".
 
 (function () {
   'use strict';
 
   var content = document.getElementById('content');
-  var scheme = document.documentElement.getAttribute('data-filescheme');
+  // Where a local image can be loaded from: the app's asset protocol prefix, to which the
+  // encoded path is appended. Empty when there is none - then a file: image is left alone.
+  var assetBase = document.documentElement.getAttribute('data-asset-base') || '';
 
   // How long after a programmatic scroll the resulting events are ignored. One assignment
   // to scrollTop settles over several frames, and echoing those back would have the editor
@@ -60,21 +63,16 @@
     });
   }
 
-  // A page loaded from a string cannot pull file:// subresources, so local images are
-  // routed through the previewfile:// scheme handler instead.
+  // A page loaded from a string cannot pull file:// subresources, so local images - which
+  // the <base> has resolved to file: URLs - are routed through the asset protocol instead.
   function rewriteLocalImages() {
+    if (!assetBase) { return; }
     content.querySelectorAll('img').forEach(function (img) {
       if (img.src.indexOf('file://') !== 0) { return; }
       var path = decodeURIComponent(new URL(img.src).pathname);
-      var binary = '';
-      new TextEncoder().encode(path).forEach(function (byte) {
-        binary += String.fromCharCode(byte);
-      });
-      var encoded = btoa(binary)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-      img.src = scheme + '://f/' + encoded;
+      // file:///C:/x parses to the pathname /C:/x.
+      if (/^\/[A-Za-z]:/.test(path)) { path = path.slice(1); }
+      img.src = assetBase + encodeURIComponent(path);
     });
   }
 
@@ -578,16 +576,33 @@
     document.scrollingElement.scrollTop = Math.min(limit, Math.max(0, topForLine(line)));
   };
 
-  // MARK: page -> Swift
+  // The document's folder, so a link written as ./doc/API.md resolves against the file
+  // the page is showing. Swapped in place when another file is rendered into this page.
+  window.mdSetBase = function (url) {
+    var base = document.getElementById('base');
+    if (!base) {
+      base = document.createElement('base');
+      base.id = 'base';
+      document.head.appendChild(base);
+    }
+    base.href = url;
+  };
 
-  // Same-document anchors are handled here and never reach the navigation delegate.
+  // MARK: page -> app
+
+  // Same-document anchors are handled here; every other link goes to the app, already
+  // absolute, and the page itself never navigates away from the document it is rendering.
   document.addEventListener('click', function (event) {
     var anchor = event.target.closest ? event.target.closest('a') : null;
     if (!anchor) { return; }
     var href = anchor.getAttribute('href') || '';
-    if (href.charAt(0) !== '#') { return; }
+    if (!href) { return; }
     event.preventDefault();
-    window.mdScrollToAnchor(href.slice(1));
+    if (href.charAt(0) === '#') {
+      window.mdScrollToAnchor(href.slice(1));
+    } else {
+      post({ kind: 'link', href: anchor.href });
+    }
   });
 
   // Notes anchor to a source line, so the native context menu needs to

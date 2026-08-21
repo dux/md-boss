@@ -1,7 +1,7 @@
-// Right-click menus drawn in the window. Native context menus arrive with P9's menu work;
-// until then - and for the preview iframe, which cannot host a native menu anyway - one
-// component draws the list where the click was. Commands outside the component tree open
-// it through this emitter, the way panels and prompts work.
+// Right-click menus drawn in the window - the menu bar is native (src/ui/appMenu.ts), these
+// stay in the page: the preview iframe cannot host a native menu, and one component drawing
+// the list where the click was serves every pane the same way. Commands outside the
+// component tree open it through this emitter, the way panels and prompts work.
 
 export interface MenuItem {
   label: string

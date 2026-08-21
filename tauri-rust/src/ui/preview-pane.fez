@@ -22,9 +22,12 @@
         if (event.source !== this.frame.contentWindow) return
         const msg = event.data || {}
         if (msg.kind === 'error') console.error('preview page:', msg.message)
+        if (msg.kind === 'link') void MdBoss.manager.followLink(msg.href)
+        if (msg.kind === 'anchorMiss') MdBoss.manager.showError('No heading: ' + msg.id)
         if (msg.kind === 'ready') {
           this.local.loaded = true
           if (this.local.pending !== null) this.render(this.local.pending)
+          this.followAnchorRequest()
         }
         // The page suppresses its own echo after mdScrollToLine, so what arrives here is
         // the reader scrolling. Recorded before the sync and unconditionally: the sync
@@ -105,12 +108,24 @@
         { separator: true },
         { label: 'Copy Path', action: () => manager.copyText(doc.path, 'Path copied') },
         { label: 'Copy Path with Line', action: () => manager.copyText(manager.notes.key(doc.path) + ':' + msg.line, 'Path copied') },
+        { label: MdBoss.revealLabel, action: () => manager.showInFileManager(doc.path) },
       ])
+    }
+
+    /** A link asked for a heading. One-shot by id, and applied only once the document it
+     *  names is rendered - so it waits out a page still loading or a render still pending. */
+    followAnchorRequest() {
+      const request = MdBoss.manager.anchorRequest
+      if (!request || request.seq === this.local.anchorSeq) return
+      if (!this.local.loaded || this.local.pending !== null) return
+      this.local.anchorSeq = request.seq
+      this.frame.contentWindow.mdScrollToAnchor(request.id)
     }
 
     pull() {
       const doc = MdBoss.manager.document
-      if (!doc) return
+      // A delimited file is csv-pane's; the page keeps the last markdown document, hidden.
+      if (!doc || MdBoss.documentKind(doc.path) !== 'markdown') return
       this.pushHighlight()
       const fresh = doc.path !== this.local.path || doc.reloadToken !== this.local.reloadToken
       if (fresh) {
@@ -122,8 +137,10 @@
         this.local.path = doc.path
         this.local.reloadToken = doc.reloadToken
         this.render(doc.text)
+        this.followAnchorRequest()
         return
       }
+      this.followAnchorRequest()
       if (this.local.typing) clearTimeout(this.local.typing)
       this.local.typing = setTimeout(() => {
         this.local.typing = null
@@ -132,9 +149,18 @@
       }, TYPING_DELAY)
     }
 
+    /** The page's <base> follows the file on screen, so its relative links and images
+     *  resolve against that file and not the one the page was first built for. */
+    pushBase() {
+      if (!this.local.path || this.local.path === this.local.basePath) return
+      this.local.basePath = this.local.path
+      this.frame.contentWindow.mdSetBase(MdBoss.documentBaseURL(this.local.path))
+    }
+
     render(markdown) {
       if (this.local.loaded) {
         this.local.pending = null
+        this.pushBase()
         this.frame.contentWindow.mdRender(markdown)
         this.pushNotes()
         if (this.local.restoreTo !== null) {
@@ -149,11 +175,14 @@
         return
       }
       this.local.pending = markdown
+      this.local.basePath = this.local.path
       this.frame.srcdoc = MdBoss.buildPreviewPage({
         markdown,
         themeCSS: MdBoss.rootCSS(MdBoss.manager.theme),
         fontSize: MdBoss.manager.settings.data.previewFontSize,
         measure: MdBoss.manager.settings.data.previewMeasure,
+        baseURL: this.local.path ? MdBoss.documentBaseURL(this.local.path) : null,
+        assetBase: MdBoss.native().shell.assetBase(),
       })
     }
   }

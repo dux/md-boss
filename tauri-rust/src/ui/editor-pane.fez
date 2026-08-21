@@ -8,7 +8,14 @@
       this.local.editor = null
       this.local.path = null
       this.local.reloadToken = -1
+      // Files dragged in from the OS arrive as native drag events - an HTML5 drop never
+      // carries their paths - and in the Tauri shell so does a sidebar row, since HTML5
+      // drops never reach the page there (the drag note in doc/feature/port-tauri.md). The
+      // editor's own dragover/drop handlers serve the browser build.
+      this.local.nativeDrag = null
+      const unlisten = MdBoss.native().onFileDrag((drag) => this.fileDrag(drag))
       this.local.unsubscribe = [
+        () => unlisten.then((off) => off()),
         MdBoss.manager.onChange(() => this.pull()),
         MdBoss.manager.notes.onChange(() => this.pushNotes()),
         MdBoss.manager.onCursorChange(() => this.pushLanding()),
@@ -41,6 +48,25 @@
       this.pushNotes()
       this.pushLanding()
       this.followScrollRequest()
+      this.followFindRequest()
+      this.followFormatRequest()
+    }
+
+    /** The Format menu asked for bold, italic or a link. One-shot, like the find request. */
+    followFormatRequest() {
+      const request = MdBoss.manager.formatRequest
+      if (!request || !this.local.editor) return
+      MdBoss.manager.formatRequest = null
+      this.local.editor.format(request.format)
+    }
+
+    /** Cmd-F asked for the find panel. One-shot: the request is nulled once the panel is
+     *  up, so a pane hidden and shown again does not open it unasked. */
+    followFindRequest() {
+      const request = MdBoss.manager.findRequest
+      if (!request || !this.local.editor) return
+      MdBoss.manager.findRequest = null
+      this.local.editor.openSearch()
     }
 
     /** A document arrived, or was reloaded from disk. */
@@ -59,6 +85,7 @@
           onCursor: (line, text, navigated) => MdBoss.manager.reportCursor(line, text, navigated),
           onContextMenu: (x, y, line) => this.contextMenu(x, y, line),
           onScroll: (line) => this.scrolled(line),
+          dropText: () => MdBoss.manager.linksFor(MdBoss.manager.draggedFile ? [MdBoss.manager.draggedFile] : []),
         })
       } else {
         if (switched) this.local.editor.setHighlight(highlight)
@@ -69,6 +96,36 @@
       // and they land together.
       const place = MdBoss.manager.scrollMemory.place(doc.path)
       if (switched) this.local.editor.scrollToLine(place.line ?? 1)
+    }
+
+    /** An OS file drag, in page coordinates. Only what is over the editor's own box is its
+     *  business: the caret tracks the pointer while the files are over the text, and the
+     *  drop becomes links relative to the open document. */
+    fileDrag(drag) {
+      const editor = this.local.editor
+      if (!editor) return
+      // What entered is remembered: the HTML5 dragend that clears draggedFile can land
+      // before the native drop does.
+      if (drag.kind === 'enter') {
+        const dragged = MdBoss.manager.draggedFile
+        this.local.nativeDrag = drag.paths.length ? drag.paths : dragged ? [dragged] : null
+      }
+      const paths = this.local.nativeDrag
+      if (!paths) return
+      const inside = drag.kind !== 'leave' && MdBoss.isInside(this.find('.host'), drag.x, drag.y)
+      if (drag.kind === 'drop') {
+        this.local.nativeDrag = null
+        if (!inside) {
+          editor.dragLeave()
+          return
+        }
+        const text = MdBoss.manager.linksFor(paths)
+        if (text !== null) editor.drop(drag.x, drag.y, text)
+        return
+      }
+      if (drag.kind === 'leave') this.local.nativeDrag = null
+      if (inside) editor.dragOver(drag.x, drag.y)
+      else editor.dragLeave()
     }
 
     /** The gutter dots for the open document. */

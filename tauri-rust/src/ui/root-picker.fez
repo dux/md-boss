@@ -6,6 +6,10 @@
   //
   // While the list is open it owns the keyboard - it is a modal choice, not a second list -
   // so keys are taken in the capture phase, before the tree behind it sees them.
+  //
+  // The box also stands for the root folder itself, which has no row in the tree: it is
+  // where a cut or dragged file goes to come back up to the top - right-click "Move Here",
+  // or a drop on the box.
   class {
     init() {
       this.state.active = null
@@ -13,10 +17,16 @@
       this.state.recent = []
       this.state.open = false
       this.state.cursor = 0
+      this.state.drop = false
     }
 
     onMount() {
-      this.local.unsubscribe = MdBoss.manager.onChange(() => this.pull())
+      this.local.nativeDragged = null
+      const unlisten = MdBoss.native().onFileDrag((drag) => this.nativeDrag(drag))
+      this.local.unsubscribe = [
+        MdBoss.manager.onChange(() => this.pull()),
+        () => unlisten.then((off) => off()),
+      ]
       this.on(document, 'click', (event) => {
         if (this.state.open && !this.root.contains(event.target)) this.state.open = false
       })
@@ -25,7 +35,7 @@
     }
 
     onDestroy() {
-      if (this.local.unsubscribe) this.local.unsubscribe()
+      for (const off of this.local.unsubscribe || []) off()
     }
 
     keyDown(event) {
@@ -80,6 +90,93 @@
       MdBoss.manager.selectRoot(path)
       this.state.open = false
     }
+
+    // MARK: Moving into the root
+
+    async menu(event) {
+      event.preventDefault()
+      event.stopPropagation()
+      const manager = MdBoss.manager
+      const active = manager.activeRoot
+      if (!active) return
+      const { clientX, clientY } = event
+      const items = []
+      const cut = manager.cutFile
+      if (cut && await manager.canMove(cut, active)) {
+        items.push({ label: `Move ${cut.slice(cut.lastIndexOf('/') + 1)} Here`, action: () => manager.moveCut(active) })
+        items.push({ separator: true })
+      }
+      items.push({ label: 'Copy Path', action: () => manager.copyText(active, 'Path copied') })
+      items.push({ label: 'Copy Name', action: () => manager.copyText(this.state.activeName, 'Name copied') })
+      items.push({ separator: true })
+      items.push({ label: MdBoss.revealLabel, action: () => manager.showInFileManager(active) })
+      items.push({ separator: true })
+      items.push({ label: 'Remove from Sidebar', action: () => manager.removeRoot(active) })
+      MdBoss.menus.open(clientX, clientY, items)
+    }
+
+    /** The same asking as the tree's folder rows: the move check, cached for one hover, and
+     *  the box lights up only once it has said yes. */
+    hover(dragged) {
+      const manager = MdBoss.manager
+      const active = manager.activeRoot
+      if (!dragged || !active) return false
+      let probe = this.local.dropProbe
+      if (!probe || probe.path !== active || probe.dragged !== dragged) {
+        probe = { path: active, dragged, ok: false }
+        this.local.dropProbe = probe
+        manager.canMove(dragged, active).then((ok) => {
+          if (this.local.dropProbe === probe) probe.ok = ok
+        })
+      }
+      if (!probe.ok) return false
+      this.state.drop = true
+      return true
+    }
+
+    dropHere(dragged) {
+      const probe = this.local.dropProbe
+      this.dragLeave()
+      if (!probe || !probe.ok) return false
+      MdBoss.manager.dropDragged(probe.path, dragged)
+      return true
+    }
+
+    dragOver(event) {
+      if (!this.hover(MdBoss.manager.draggedFile)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+    }
+
+    dragLeave() {
+      this.local.dropProbe = null
+      this.state.drop = false
+    }
+
+    drop(event) {
+      if (this.dropHere(MdBoss.manager.draggedFile)) event.preventDefault()
+    }
+
+    /** The native drag events the Tauri shell delivers instead of HTML5 drops (the sidebar
+     *  has the longer note). The box is the target while the pointer is over it. */
+    nativeDrag(drag) {
+      if (drag.kind === 'enter') this.local.nativeDragged = drag.paths.length ? null : MdBoss.manager.draggedFile
+      const dragged = this.local.nativeDragged
+      if (!dragged) return
+      const over = drag.kind !== 'leave' && MdBoss.isInside(this.find('.box'), drag.x, drag.y)
+      if (drag.kind === 'drop') {
+        this.local.nativeDragged = null
+        if (over) this.dropHere(dragged)
+        else this.dragLeave()
+      } else if (drag.kind === 'leave') {
+        this.local.nativeDragged = null
+        this.dragLeave()
+      } else if (over) {
+        this.hover(dragged)
+      } else {
+        this.dragLeave()
+      }
+    }
   }
 </script>
 
@@ -107,6 +204,12 @@
   .box:hover,
   .box.open {
     border-color: var(--border-strong);
+  }
+
+  /* A dragged file over the box: the border it already has does the work. */
+  .box.drop {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 0.5px var(--accent);
   }
 
   .box.empty {
@@ -192,7 +295,7 @@
   }
 </style>
 
-<div class={'box text-default pointer' + (state.active ? '' : ' empty') + (state.open ? ' open' : '')} title={state.active || 'Add a folder (⌘O)'} onclick="fez.boxClicked()">
+<div class={'box text-default pointer' + (state.active ? '' : ' empty') + (state.open ? ' open' : '') + (state.drop ? ' drop' : '')} title={state.active || 'Add a folder (⌘O)'} onclick="fez.boxClicked()" oncontextmenu="fez.menu(event)" ondragover="fez.dragOver(event)" ondragleave="fez.dragLeave()" ondrop="fez.drop(event)">
   <span class="glyph">▰</span>
   <span class="name">{state.active ? state.activeName : 'Add a folder…'}</span>
   <span class="updown">▲▼</span>

@@ -22,7 +22,9 @@ export type SyncOutcome = 'unchanged' | 'reloaded' | 'conflict' | 'detached'
 const sameStamp = (a: Stamp, b: Stamp) => a.mtime === b.mtime && a.size === b.size
 
 export class OpenDocument {
-  readonly path: string
+  /** Changes only through `relocate` - a rename in the sidebar is the same document one
+   *  path later. */
+  path: string
   text: string
   savedText: string
   /** Windows line endings are normalised in the buffer and restored on save. Otherwise
@@ -69,6 +71,24 @@ export class OpenDocument {
     this.externalChange = null
     this.lastKnownStamp = await stampOf(this.path)
     return true
+  }
+
+  /** The file was renamed or moved by the sidebar: same buffer, new path. The stamp is
+   *  re-read so the rename's own event is not mistaken for someone else's write. */
+  async relocate(to: string): Promise<void> {
+    if (to === this.path) return
+    this.path = to
+    this.externalChange = null
+    this.lastKnownStamp = await stampOf(to)
+  }
+
+  /** New text for the buffer from outside the editor - the link rewrite after a move
+   *  landing in an unsaved document. Stays dirty; the token bump is what pushes it into
+   *  the view. */
+  replaceBuffer(text: string): void {
+    if (text === this.text) return
+    this.text = text
+    this.reloadToken++
   }
 
   /** Takes the version on disk, discarding the buffer. */

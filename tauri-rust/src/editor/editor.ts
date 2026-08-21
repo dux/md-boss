@@ -3,10 +3,11 @@
 // markdown keymap and scroll sync land in the following P4 tasks.
 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { openSearchPanel, search, searchKeymap } from '@codemirror/search'
 import { Annotation, Compartment, EditorState, type Extension } from '@codemirror/state'
-import { drawSelection, EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
+import { drawSelection, dropCursor, EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
 import { markdownHighlight } from './highlight'
-import { markdownKeymap } from './markdownKeymap'
+import { applyFormat, type Format, markdownKeymap } from './markdownKeymap'
 import { notesExtension, setLandingLine, setNotes } from './notesGutter'
 import type { Edit } from '../models/noteShift'
 
@@ -30,6 +31,12 @@ export interface EditorOptions {
   /** The user scrolled: the source line at the top of the viewport, fractional within
    *  that line; one past the last line at the very end. Not fired while following. */
   onScroll(line: number): void
+  /** What an HTML5 drop at a document offset would insert - asked while the drag is over
+   *  the text, to accept it, and again on the drop, to insert. Null leaves the drag to
+   *  CodeMirror: the pane knows what the sidebar is dragging, the editor does not. A drop
+   *  carrying OS files is never CodeMirror's either way: it would paste their contents,
+   *  and the paths arrive through the native drag event instead. */
+  dropText(pos: number): string | null
 }
 
 export interface Editor {
@@ -46,6 +53,18 @@ export interface Editor {
   setNotes(notes: Map<number, string>): void
   /** The band on the line a jump landed on; null clears it. */
   setLandingLine(line: number | null): void
+  /** Cmd-F: the find panel, open and focused. */
+  openSearch(): void
+  /** Bold / Italic / Link from the menu bar; the keys go through the keymap directly. */
+  format(format: Format): void
+  /** A native (OS) file drag over the pane, in viewport coordinates: the caret follows the
+   *  pointer while it is over the text, as the NSTextView's did, and goes back where it
+   *  was if the drag leaves without dropping. */
+  dragOver(x: number, y: number): void
+  dragLeave(): void
+  /** The drop: `text` goes in under the pointer, the caret lands after it, the pane takes
+   *  focus - what a drop into a text view has always done. */
+  drop(x: number, y: number, text: string): void
   focus(): void
   destroy(): void
 }
@@ -107,6 +126,47 @@ const syntax = EditorView.theme({
   '.md-codeBlock, .md-codeSpan': { color: 'var(--hl-string)' },
 })
 
+/** The find panel, at the top of the pane where the NSTextView find bar was, in the
+ *  chrome's sans and sizes rather than the editor's mono. CodeMirror's own panel colours
+ *  are the `&light` / `&dark` greys, which match none of the eight palettes; every one
+ *  is replaced with a token. Matches are an accent wash, the current one a stronger one. */
+const searchPanel = EditorView.theme({
+  '.cm-panels': {
+    backgroundColor: 'var(--surface)',
+    color: 'var(--text)',
+    fontFamily: '-apple-system, system-ui, sans-serif',
+    fontSize: 'var(--font-buttons)',
+  },
+  '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--border)' },
+  '.cm-panel.cm-search': { padding: '5px 28px 5px 10px' },
+  '.cm-panel.cm-search .cm-textfield': {
+    padding: '3px 7px',
+    border: '1px solid var(--border-strong)',
+    borderRadius: '5px',
+    backgroundColor: 'var(--bg)',
+    color: 'var(--text)',
+    font: 'inherit',
+    outline: 'none',
+  },
+  '.cm-panel.cm-search .cm-textfield:focus': { borderColor: 'var(--accent)' },
+  '.cm-panel.cm-search .cm-button': {
+    padding: '3px 9px',
+    border: '1px solid var(--border-strong)',
+    borderRadius: '5px',
+    backgroundColor: 'var(--bg)',
+    backgroundImage: 'none',
+    color: 'var(--text)',
+    font: 'inherit',
+    cursor: 'pointer',
+  },
+  '.cm-panel.cm-search .cm-button:active': { backgroundColor: 'var(--selection)', backgroundImage: 'none' },
+  '.cm-panel.cm-search label': { color: 'var(--muted)', fontSize: 'var(--font-small)' },
+  '.cm-panel.cm-search input[type=checkbox]': { accentColor: 'var(--accent)' },
+  '.cm-panel.cm-search [name=close]': { top: '4px', right: '8px', color: 'var(--muted)', fontSize: '1.3em', cursor: 'pointer' },
+  '.cm-searchMatch': { backgroundColor: 'color-mix(in srgb, var(--accent) 22%, transparent)', borderRadius: '2px' },
+  '.cm-searchMatch.cm-searchMatch-selected': { backgroundColor: 'color-mix(in srgb, var(--accent) 45%, transparent)' },
+})
+
 const fontSizeTheme = (size: number): Extension =>
   EditorView.theme({ '&': { fontSize: `${size}px` } })
 
@@ -148,6 +208,17 @@ function scrollTopFor(view: EditorView, line: number): number {
   return Math.min(max, Math.max(0, block.top + block.height * progress + contentTop(view)))
 }
 
+/** A drop's text into the document, the caret after it, the editor focused. */
+function insertAt(view: EditorView, pos: number, text: string): void {
+  view.focus()
+  view.dispatch({
+    changes: { from: pos, insert: text },
+    selection: { anchor: pos + text.length },
+    scrollIntoView: true,
+    userEvent: 'input.drop',
+  })
+}
+
 export function createEditor(options: EditorOptions): Editor {
   const font = new Compartment()
   const highlight = new Compartment()
@@ -160,15 +231,18 @@ export function createEditor(options: EditorOptions): Editor {
         lineNumbers(),
         history(),
         drawSelection(),
+        dropCursor(),
         highlightActiveLine(),
         EditorView.lineWrapping,
         contentAttributes,
         chrome,
+        searchPanel,
+        search({ top: true }),
         font.of(fontSizeTheme(options.fontSize)),
         highlight.of(highlightExtension(options.highlight)),
         markdownKeymap,
         notesExtension(),
-        keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+        keymap.of([...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             let from = Infinity, to = -Infinity, fromB = Infinity, toB = -Infinity
@@ -195,10 +269,35 @@ export function createEditor(options: EditorOptions): Editor {
             options.onContextMenu(event.clientX, event.clientY, view.state.doc.lineAt(pos).number)
             return true
           },
+          // A drag the pane has text for is accepted here; the browser only delivers a drop
+          // where dragover was claimed, and a private data type is not one a contenteditable
+          // claims by itself.
+          dragover(event, view) {
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }, false) ?? view.state.doc.length
+            if (options.dropText(pos) === null) return false
+            event.preventDefault()
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+            return true
+          },
+          // Before CodeMirror's own drop handler: true here is "handled", and the event
+          // goes no further.
+          drop(event, view) {
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }, false) ?? view.state.doc.length
+            const text = options.dropText(pos)
+            if (text !== null) {
+              event.preventDefault()
+              insertAt(view, pos, text)
+              return true
+            }
+            return (event.dataTransfer?.files.length ?? 0) > 0
+          },
         }),
       ],
     }),
   })
+
+  // Where the caret was before a native drag moved it, put back if the drag leaves.
+  let selectionBeforeDrag: number | null = null
 
   let scrollFrame: number | null = null
   view.scrollDOM.addEventListener('scroll', () => {
@@ -233,6 +332,31 @@ export function createEditor(options: EditorOptions): Editor {
     },
     setLandingLine(line) {
       view.dispatch({ effects: setLandingLine.of(line) })
+    },
+    openSearch() {
+      openSearchPanel(view)
+    },
+    format(format) {
+      applyFormat(view, format)
+      view.focus()
+    },
+    dragOver(x, y) {
+      const pos = view.posAtCoords({ x, y }, false)
+      if (pos === null) return
+      if (selectionBeforeDrag === null) selectionBeforeDrag = view.state.selection.main.head
+      if (view.state.selection.main.head !== pos || !view.state.selection.main.empty) {
+        view.dispatch({ selection: { anchor: pos }, annotations: swapAnnotation.of(true) })
+      }
+    },
+    dragLeave() {
+      if (selectionBeforeDrag === null) return
+      const pos = Math.min(selectionBeforeDrag, view.state.doc.length)
+      selectionBeforeDrag = null
+      view.dispatch({ selection: { anchor: pos }, annotations: swapAnnotation.of(true) })
+    },
+    drop(x, y, text) {
+      selectionBeforeDrag = null
+      insertAt(view, view.posAtCoords({ x, y }, false) ?? view.state.doc.length, text)
     },
     getText: () => view.state.doc.toString(),
     setFontSize(size) {

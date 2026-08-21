@@ -7,6 +7,7 @@ import { insertNewline } from '@codemirror/commands'
 import { EditorSelection, type EditorState, type TransactionSpec } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { continuation } from '../models/markdownList'
+import type { Format } from '../models/manager'
 import { link, toggling, type Edit } from '../models/markdownWrap'
 import { native } from '../native/bridge'
 import { highlightPlugin } from './highlight'
@@ -37,7 +38,7 @@ export function continuationSpec(state: EditorState, insideFence: (line: number)
   }
 }
 
-export type Format = 'bold' | 'italic' | 'link'
+export type { Format }
 
 /** One Edit over the whole document becomes one transaction. */
 export function formatSpec(state: EditorState, format: Format, clipboard: string | null): TransactionSpec {
@@ -76,17 +77,21 @@ const continueList: Command = (view) => {
   return true
 }
 
-const formatCommand = (format: Format): Command => (view) => {
-  view.dispatch(formatSpec(view.state, format, null))
-  return true
-}
-
-/** The clipboard is read here and passed in, so the rule itself stays pure. Async, so the
- *  command answers true and the edit lands a tick later. */
-const linkCommand: Command = (view: EditorView) => {
+/** Bold, italic or link on the view - the keys below and the Format menu (Editor.format)
+ *  share it. The clipboard is read here and passed in, so the rule itself stays pure; a
+ *  link lands a tick later, once the clipboard has answered. */
+export function applyFormat(view: EditorView, format: Format): void {
+  if (format !== 'link') {
+    view.dispatch(formatSpec(view.state, format, null))
+    return
+  }
   void native().clipboard.readText().then((clipboard) => {
     view.dispatch(formatSpec(view.state, 'link', clipboard))
   })
+}
+
+const formatCommand = (format: Format): Command => (view) => {
+  applyFormat(view, format)
   return true
 }
 
@@ -99,5 +104,5 @@ export const markdownKeymap = keymap.of([
   { key: 'Alt-Enter', run: insertNewline },
   { key: 'Mod-b', run: formatCommand('bold') },
   { key: 'Mod-i', run: formatCommand('italic') },
-  { key: 'Mod-k', run: linkCommand },
+  { key: 'Mod-k', run: formatCommand('link') },
 ])

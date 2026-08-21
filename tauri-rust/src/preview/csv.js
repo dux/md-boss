@@ -1,10 +1,10 @@
-// The csv page's script. A real file rather than a Swift heredoc, for the same reason
-// preview.js is one. Inlined into the page by CSVPageBuilder.
+// The csv page's script, inlined into the table iframe by src/preview/csvPage.ts.
 //
-// Swift -> page: csvRender, csvSetTheme, csvSetFontSize, csvScrollTo.
-// Page -> Swift: window.webkit.messageHandlers.mdboss.postMessage({kind, ...}).
+// App -> page: csvRender, csvSetTheme, csvSetFontSize, csvScrollTo - called on the
+//              iframe's window.
+// Page -> app: window.parent.postMessage({kind, ...}) - the pane listens for "message".
 //
-// Parsing happens in Swift (CSVTable), so what arrives here is already rows of strings. The
+// Parsing happens in the app (csvTable.ts), so what arrives here is already rows of strings. The
 // page only draws them - and it draws them with textContent rather than innerHTML, so a cell
 // containing markup is a cell containing markup and never part of this page.
 
@@ -21,9 +21,8 @@
   var scrollFrame = null;
 
   function post(message) {
-    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mdboss) {
-      window.webkit.messageHandlers.mdboss.postMessage(message);
-    }
+    // srcdoc is same-origin with the pane, so the target origin is ours.
+    window.parent.postMessage(message, window.location.origin === 'null' ? '*' : window.location.origin);
   }
 
   // A page error would otherwise be invisible - the table would just not appear.
@@ -52,7 +51,7 @@
     return node;
   }
 
-  // MARK: Swift -> page
+  // MARK: app -> page
 
   // data = { header: [...], rows: [[...]], total: n, delimiter: "," }
   window.csvRender = function (data) {
@@ -158,7 +157,13 @@
     document.body.classList.remove('panning');
   });
 
-  // MARK: page -> Swift
+  // MARK: page -> app
+
+  // The pane draws the menu itself, at the click - so the page's own menu stays shut.
+  document.addEventListener('contextmenu', function (event) {
+    event.preventDefault();
+    post({ kind: 'context', x: event.clientX, y: event.clientY });
+  });
 
   document.addEventListener('scroll', function () {
     if (Date.now() < suppressUntil) { return; }

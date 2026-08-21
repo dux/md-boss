@@ -1,10 +1,14 @@
 <script>
-  // A one-field prompt - a note's body, a rename - answered in the window. Installs itself
-  // as the manager's prompt handler on mount; Escape cancels, Return confirms a single-line
-  // field, Cmd-Return a multi-line one.
+  // A one-field prompt - a note's body, a rename - answered in the window, and the yes/no
+  // for something the app cannot take back (Move to Trash). Installs itself as the
+  // manager's prompt handlers on mount; Escape cancels, Return confirms a single-line
+  // field, Cmd-Return a multi-line one. In the confirm shape Return cancels: the
+  // destructive button is never one keystroke away, which is the convention everywhere
+  // else on the system - Cancel holds the focus and Tab reaches the other button.
   class {
     init() {
       this.state.open = false
+      this.state.kind = 'text'
       this.state.title = ''
       this.state.message = ''
       this.state.confirm = 'Save'
@@ -13,14 +17,26 @@
     }
 
     onMount() {
-      MdBoss.manager.prompts.handler = (options) => this.ask(options)
+      this.local.handler = (options) => this.ask(options)
+      this.local.confirmHandler = (options) => this.askConfirm(options)
+      MdBoss.manager.prompts.handler = this.local.handler
+      MdBoss.manager.prompts.confirmHandler = this.local.confirmHandler
       this.on(document, 'keydown', (event) => {
         if (!this.state.open) return
         if (event.key === 'Escape') {
           event.preventDefault()
           event.stopPropagation()
-          this.finish(null)
-        } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey || !this.state.multiline)) {
+          this.finish(this.cancelValue())
+        } else if (event.key !== 'Enter') {
+          return
+        } else if (this.state.kind === 'confirm') {
+          // A focused button takes its own Return; anywhere else it is Cancel.
+          const focused = document.activeElement
+          if (focused && focused.tagName === 'BUTTON' && this.root.contains(focused)) return
+          event.preventDefault()
+          event.stopPropagation()
+          this.finish(false)
+        } else if (event.metaKey || event.ctrlKey || !this.state.multiline) {
           event.preventDefault()
           event.stopPropagation()
           this.finish(this.field().value)
@@ -29,7 +45,13 @@
     }
 
     onDestroy() {
-      if (MdBoss.manager.prompts.handler === this.local.handler) MdBoss.manager.prompts.handler = null
+      const prompts = MdBoss.manager.prompts
+      if (prompts.handler === this.local.handler) prompts.handler = null
+      if (prompts.confirmHandler === this.local.confirmHandler) prompts.confirmHandler = null
+    }
+
+    cancelValue() {
+      return this.state.kind === 'confirm' ? false : null
     }
 
     field() {
@@ -37,7 +59,8 @@
     }
 
     ask(options) {
-      if (this.local.resolve) this.finish(null)
+      if (this.local.resolve) this.finish(this.cancelValue())
+      this.state.kind = 'text'
       this.state.title = options.title
       this.state.message = options.message
       this.state.confirm = options.confirm || 'Save'
@@ -50,13 +73,34 @@
       })
     }
 
+    askConfirm(options) {
+      if (this.local.resolve) this.finish(this.cancelValue())
+      this.state.kind = 'confirm'
+      this.state.title = options.title
+      this.state.message = options.message
+      this.state.confirm = options.confirm
+      this.state.multiline = false
+      this.state.placeholder = ''
+      this.local.value = ''
+      this.state.open = true
+      return new Promise((resolve) => {
+        this.local.resolve = resolve
+      })
+    }
+
     afterRender() {
+      if (!this.state.open) return
       const field = this.field()
-      if (this.state.open && field && !field.dataset.primed) {
+      if (field && !field.dataset.primed) {
         field.dataset.primed = '1'
         field.value = this.local.value || ''
         field.focus()
         field.select()
+      }
+      const cancel = this.find('.cancel')
+      if (this.state.kind === 'confirm' && cancel && !cancel.dataset.primed) {
+        cancel.dataset.primed = '1'
+        cancel.focus()
       }
     }
 
@@ -68,11 +112,11 @@
     }
 
     confirm() {
-      this.finish(this.field().value)
+      this.finish(this.state.kind === 'confirm' ? true : this.field().value)
     }
 
     cancel() {
-      this.finish(null)
+      this.finish(this.cancelValue())
     }
   }
 </script>
@@ -151,21 +195,29 @@
     color: var(--bg);
     font-weight: 600;
   }
+
+  /* The button that cannot be taken back. Caution red, and not the one Return lands on. */
+  .buttons button.destructive {
+    border-color: var(--alert-caution);
+    background: var(--alert-caution);
+  }
 </style>
 
 <div class={'overlay' + (state.open ? '' : ' hidden')}>
   {#if state.open}
     <div class="panel">
       <div class="title text-default">{state.title}</div>
-      <div class="message text-small text-mono">{state.message}</div>
-      {#if state.multiline}
-        <textarea class="field text-default" spellcheck="false" placeholder={state.placeholder}></textarea>
-      {:else}
-        <input class="field text-default" type="text" spellcheck="false" placeholder={state.placeholder}>
+      <div class={'message text-small' + (state.kind === 'confirm' ? '' : ' text-mono')}>{state.message}</div>
+      {#if state.kind === 'text'}
+        {#if state.multiline}
+          <textarea class="field text-default" spellcheck="false" placeholder={state.placeholder}></textarea>
+        {:else}
+          <input class="field text-default" type="text" spellcheck="false" placeholder={state.placeholder}>
+        {/if}
       {/if}
       <div class="buttons">
-        <button class="text-buttons pointer" onclick="fez.cancel()">Cancel</button>
-        <button class="primary text-buttons pointer" onclick="fez.confirm()">{state.confirm}</button>
+        <button class="cancel text-buttons pointer" onclick="fez.cancel()">Cancel</button>
+        <button class={'primary text-buttons pointer' + (state.kind === 'confirm' ? ' destructive' : '')} onclick="fez.confirm()">{state.confirm}</button>
       </div>
     </div>
   {/if}

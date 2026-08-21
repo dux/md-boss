@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 import { documentName } from '../src/models/fileKinds'
-import { checkMove, checkRename, moveMessage, planRewrites, renameMessage } from '../src/models/fileMove'
+import { checkMove, checkRename, moveMessage, renameMessage } from '../src/models/fileMove'
 import { isUnder } from '../src/models/paths'
 import { installNative } from '../src/native/bridge'
 import { memoryNative } from '../src/native/memory'
@@ -80,61 +80,5 @@ describe('file rename checks', () => {
     expect(documentName('plan')).toBe('plan.md')
     expect(documentName('plan.txt')).toBe('plan.txt')
     expect(documentName('archive.tar.gz')).toBe('archive.tar.gz.md')
-  })
-})
-
-describe('file move plan', () => {
-  const moves = [{ old: at('a.md'), new: at('sub/a.md') }]
-  const plan = (buffers?: Record<string, string>, excluding?: Set<string>) =>
-    planRewrites(root, new Set(['node_modules']), moves, buffers, excluding)
-
-  test('only the documents that referenced the moved file are rewritten', async () => {
-    fixture({
-      'index.md': 'see [a](./a.md)',
-      'unrelated.md': 'see [b](./b.md)',
-      'deep/x.md': 'see [a](../a.md) twice [a](../a.md)',
-    })
-    const rewrites = (await plan()).sort((l, r) => l.path.localeCompare(r.path))
-    expect(rewrites.map((r) => r.path)).toEqual([at('deep/x.md'), at('index.md')])
-    expect(rewrites.map((r) => r.count)).toEqual([2, 1])
-    expect(rewrites.map((r) => r.text)).toEqual([
-      'see [a](../sub/a.md) twice [a](../sub/a.md)',
-      'see [a](./sub/a.md)',
-    ])
-  })
-
-  test('a rename repoints inbound links the way a move does, fences excepted', async () => {
-    fixture({
-      'a.md': '# a',
-      'index.md': 'see [a](./a.md)',
-      'deep/x.md': 'see [a](../a.md) and [a](../a.md)\n\n```\n[a](../a.md)\n```\n',
-    })
-    const rewrites = (await planRewrites(root, new Set(), [{ old: at('a.md'), new: at('b.md') }]))
-      .sort((l, r) => l.path.localeCompare(r.path))
-    expect(rewrites.map((r) => r.text)).toEqual([
-      'see [a](../b.md) and [a](../b.md)\n\n```\n[a](../a.md)\n```\n',
-      'see [a](./b.md)',
-    ])
-  })
-
-  test('skipped and hidden folders are never read', async () => {
-    fixture({ 'node_modules/vendored.md': 'see [a](../a.md)', '.git/x.md': 'see [a](../a.md)' })
-    expect(await plan()).toEqual([])
-  })
-
-  test('an unsaved buffer wins over what is on disk', async () => {
-    fixture({ 'index.md': 'nothing here' })
-    const rewrites = await plan({ [at('index.md')]: 'typed [a](./a.md) but not saved' })
-    expect(rewrites.map((r) => r.text)).toEqual(['typed [a](./sub/a.md) but not saved'])
-  })
-
-  test('an excluded file is never in the plan', async () => {
-    fixture({ 'index.md': 'see [a](./a.md)' })
-    expect(await plan({}, new Set([at('index.md')]))).toEqual([])
-  })
-
-  test('no moves is no plan', async () => {
-    fixture({ 'index.md': 'see [a](./a.md)' })
-    expect(await planRewrites(root, new Set(), [])).toEqual([])
   })
 })

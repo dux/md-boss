@@ -1,12 +1,10 @@
 // Moving or renaming one file in the sidebar: what has to be true before anything is
-// touched, and what has to be rewritten afterwards. A rename is a move that stays in the
-// folder it started in, so the two share everything past the validation - one
-// markdownLinks Move either way, and the rewrite pass is path arithmetic that never asks
-// the disk where the file went.
+// touched, said the way the user would read it. A rename is a move that stays in the
+// folder it started in, so the two share everything past the validation - the rewrite pass
+// that follows either is the Rust side's (src-tauri/src/links.rs), reached through
+// `native().commands.rewriteLinks`.
 
 import { native } from '../native/bridge'
-import { documentsUnder } from './documentWalk'
-import { rewriting, type Move } from './markdownLinks'
 import { basename, dirname, isUnder, joinPath, normalizePath } from './paths'
 
 export type Refusal =
@@ -107,45 +105,4 @@ async function isSameFile(
 ): Promise<boolean> {
   if (targetStat.ino !== null && sourceStat.ino !== null) return targetStat.ino === sourceStat.ino
   return normalizePath(target).toLowerCase() === normalizePath(source).toLowerCase()
-}
-
-// MARK: - The rewrite pass
-
-export interface Rewrite {
-  path: string
-  text: string
-  count: number
-}
-
-/** Every document under `root` whose text changes once `moves` have happened. `buffers`
- *  (unsaved editor text, by path) win over the disk; `excluding` are never read. The
- *  result is the same either side of the rename - resolution is path arithmetic and never
- *  asks the disk whether the file is there - so the move goes first and this follows it. */
-export async function planRewrites(
-  root: string,
-  skipFolders: ReadonlySet<string>,
-  moves: Move[],
-  buffers: Record<string, string> = {},
-  excluding: ReadonlySet<string> = new Set(),
-): Promise<Rewrite[]> {
-  if (moves.length === 0) return []
-  const { fs } = native()
-  const rewrites: Rewrite[] = []
-
-  for (const path of await documentsUnder(root, skipFolders)) {
-    const key = normalizePath(path)
-    if (excluding.has(key)) continue
-    let text = buffers[key]
-    if (text === undefined) {
-      try {
-        text = await fs.read(path)
-      } catch {
-        // A file we cannot read as text is shown but never written.
-        continue
-      }
-    }
-    const result = rewriting(text, dirname(path), moves)
-    if (result) rewrites.push({ path, text: result.text, count: result.count })
-  }
-  return rewrites
 }

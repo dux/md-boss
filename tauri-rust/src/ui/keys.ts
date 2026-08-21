@@ -1,63 +1,36 @@
-// App-wide keyboard shortcuts that have no menu yet (P9 brings native menus and wires them
-// to the same manager calls). Cmd on macOS, Ctrl elsewhere.
+// App-wide keys the page answers itself. The menu bar (src/ui/appMenu.ts) carries every
+// shortcut in the README table as a native accelerator; what is left to the page is Escape,
+// which is no menu item, and the same table routed from keydown where there is no menu bar
+// (the browser build) or the bar must not take the key (Move to Trash off macOS).
 
 import type { App } from '../app'
+import type { AppMenu } from './appMenu'
 
-export function installShortcuts(app: App): void {
+export function installShortcuts(app: App, menu: AppMenu): void {
   window.addEventListener('keydown', (event) => {
     const mod = event.metaKey || event.ctrlKey
-    if (!mod) return
-    // event.code rather than event.key: with Alt held, macOS turns the key into a symbol
-    // (Alt-R is "®"), and the pane toggles are Alt-Cmd-R / V / N.
-    if (event.altKey) {
-      const pane = { KeyR: 'raw', KeyV: 'preview', KeyN: 'notes' }[event.code]
-      if (pane && !event.shiftKey) {
-        event.preventDefault()
-        app.manager.togglePane(pane as 'raw' | 'preview' | 'notes')
-      } else if (event.code === 'Digit0' && !event.shiftKey) {
-        event.preventDefault()
-        app.manager.resetZoom()
-      }
+    // Escape with nothing else claiming it forgets a pending Cut, wherever the focus went
+    // after the menu that set it. Menus, prompts and the root list take theirs in the
+    // capture phase and stop it, so one that gets this far is free. Not from a text field:
+    // the name field's Escape is its own cancel.
+    if (event.key === 'Escape' && !mod && !event.altKey && !event.shiftKey) {
+      if (!isTextField(document.activeElement)) app.manager.cancelCut()
       return
     }
-    const key = event.key.toLowerCase()
-    // Cmd-+ arrives as "=" on most layouts without Shift, and as "+" with it.
-    if (key === '=' || key === '+') {
-      event.preventDefault()
-      app.manager.zoom(1)
-    } else if (key === '-' || key === '_') {
-      event.preventDefault()
-      app.manager.zoom(-1)
-    } else if (key === ',' && !event.shiftKey) {
-      event.preventDefault()
-      app.panels.toggle('settings')
-    } else if (key === 's' && !event.shiftKey) {
-      event.preventDefault()
-      void app.manager.saveDocument()
-    } else if (key === 'k' && event.shiftKey) {
-      event.preventDefault()
-      void app.manager.addNoteAtCursor()
-    } else if (key === 'backspace' && event.shiftKey) {
-      event.preventDefault()
-      void app.manager.deleteNoteAtCursor()
-    } else if (key === 'd' && event.shiftKey) {
-      event.preventDefault()
-      app.manager.toggleLightDark()
-    } else if (key === '[' && !event.shiftKey) {
-      event.preventDefault()
-      void app.manager.goBack()
-    } else if (key === '\\' && !event.shiftKey) {
-      event.preventDefault()
-      app.manager.toggleSideBySide()
-    } else if (key === 'o' && event.shiftKey) {
-      event.preventDefault()
-      void app.manager.openFilePanel()
-    } else if (key === 'o') {
-      event.preventDefault()
-      void app.manager.addFolders()
-    } else if (key === '0' && !event.shiftKey) {
-      event.preventDefault()
-      app.manager.toggleSidebar()
-    }
+    if (!mod) return
+    // Cmd-Backspace is every text field's delete-to-line-start, and the editor's: while
+    // the caret is in one the key stays with the field. Shift-Cmd-Backspace (Delete Note)
+    // has no editing meaning and goes through.
+    if (event.key === 'Backspace' && !event.shiftKey && isTextField(document.activeElement)) return
+    // The editor's own keymap answers first while it has the focus (Cmd-B, Cmd-F, Cmd-[);
+    // an event that arrives prevented is its and is left alone.
+    if (event.defaultPrevented) return
+    if (menu.handleKey(event)) event.preventDefault()
   })
+}
+
+function isTextField(element: Element | null): boolean {
+  if (!element) return false
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) return true
+  return element instanceof HTMLElement && element.isContentEditable
 }

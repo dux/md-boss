@@ -23,6 +23,9 @@
       this.state.dragging = false
       this.state.root = null
       this.state.file = null
+      // Which renderer the rendered pane shows: the file's own answer (documentKind), not a
+      // mode the viewer is in.
+      this.state.kind = null
       this.state.dirty = false
       this.state.error = null
       this.state.notice = null
@@ -57,6 +60,7 @@
       const manager = MdBoss.manager
       this.state.root = manager.activeRoot
       this.state.file = manager.document ? manager.abbreviateHome(manager.document.path) : null
+      this.state.kind = manager.document ? MdBoss.documentKind(manager.document.path) : null
       this.state.dirty = manager.isDirty
       this.state.error = manager.error
       this.notify(manager.notice)
@@ -201,6 +205,12 @@
     max-width: calc((100% - 355px) * 0.8);
   }
 
+  /* A table has no measure - it is as wide as its widest row and scrolls sideways for the
+     rest, so it asks for everything and takes the four-fifths ceiling above. */
+  main.split .pane.preview.table {
+    flex-basis: 100%;
+  }
+
   main .pane.hidden {
     display: none;
   }
@@ -288,6 +298,9 @@
 <aside style="width: {state.sidebarWidth}px">
   <div class="top">
     <pane-toggle-bar></pane-toggle-bar>
+    <!-- Always on screen. The field is how you search, so hiding it until a shortcut is
+         pressed is hiding the feature. -->
+    <search-field></search-field>
     <root-picker></root-picker>
   </div>
   <side-bar></side-bar>
@@ -298,9 +311,13 @@
     <div class="empty">Open a folder to begin</div>
   {/unless}
   <!-- Always mounted, hidden rather than removed: the iframe keeps its page and its
-       scroll, and the first render after a file opens has somewhere to land. -->
-  <div class={'pane preview' + (state.file && state.panes.includes('preview') ? '' : ' hidden')}>
+       scroll, and the first render after a file opens has somewhere to land. One toggle,
+       two renderers - a .csv shows the table pane in the preview's place. -->
+  <div class={'pane preview' + (state.file && state.panes.includes('preview') && state.kind === 'markdown' ? '' : ' hidden')}>
     <preview-pane></preview-pane>
+  </div>
+  <div class={'pane preview table' + (state.file && state.panes.includes('preview') && state.kind === 'csv' ? '' : ' hidden')}>
+    <csv-pane></csv-pane>
   </div>
   {#if state.file && state.panes.includes('raw')}
     {#if state.panes.includes('preview')}
