@@ -6,6 +6,7 @@
 
 import type { App } from '../app'
 import { type AboutInfo, buildAppMenu, diffMenu, flatItems, GITHUB_URL, matchesAccelerator, type MenuModel, type MenuState } from '../models/appMenu'
+import { Manager } from '../models/manager'
 import type { Platform } from '../models/platform'
 import { visiblePanes } from '../models/settings'
 import type { ThemeID } from '../theme/theme'
@@ -123,6 +124,8 @@ export class AppMenu {
       case 'toggle-raw': return manager.togglePane('raw')
       case 'toggle-notes': return manager.togglePane('notes')
       case 'side-by-side': return manager.toggleSideBySide()
+      case 'narrower': return manager.changeMeasure(-Manager.measureStep)
+      case 'wider': return manager.changeMeasure(Manager.measureStep)
       case 'toggle-sidebar': return manager.toggleSidebar()
       case 'bigger': return manager.zoom(1)
       case 'smaller': return manager.zoom(-1)

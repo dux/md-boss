@@ -5,7 +5,8 @@ import { SettingsStore } from './models/settingsStore'
 import { TypeAhead } from './models/typeAhead'
 import { Updater } from './models/updater'
 import { documentKind } from './models/fileKinds'
-import { FONT_SETTINGS, PANE_TITLE, PANES, paneShortTitle, visiblePanes } from './models/settings'
+import { FONT_SETTINGS, PANE_TITLE, PANES, visiblePanes } from './models/settings'
+import { panelShortcut } from './models/appMenu'
 import { Panels } from './ui/panels'
 import { ContextMenus } from './ui/menus'
 import { isInside } from './ui/dragPoint'
@@ -36,7 +37,8 @@ export async function createApp() {
     visiblePanes,
     PANES,
     PANE_TITLE,
-    paneShortTitle,
+    /** "⌘2" - what a panel label's tooltip says the key is. */
+    panelShortcut,
     FONT_SETTINGS,
     NOTE_SCOPES,
     SCOPE_TITLE,

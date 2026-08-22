@@ -3,7 +3,11 @@
 A markdown viewer and editor that looks like paper, for macOS, Windows and Linux.
 
 Folders and files on the left, the rendered document on the right.
-A stripe above the viewer toggles three panes - raw, preview, notes - which sit side by side.
+Four panels sit side by side - files, preview, raw, notes - each under its own label.
+Click a label and the panel folds down to a rail carrying the same label on its side; click
+the rail and it comes back, so a folded panel is always its own way back.
+The edges of the files and notes columns drag; preview and raw split what is left between
+them.
 Raw and preview scroll together, anchored on source lines rather than on percentages, so a
 tall fenced block or an image does not pull the two out of step.
 ⇧⌘D switches between light and dark, out of eight themes.
@@ -36,8 +40,8 @@ A `.csv` opens as a table rather than as prose: columns keep their natural width
 scrolls sideways to meet them, so nothing is squeezed to fit. The delimiter is read off the
 file, so a semicolon export lands in columns too.
 
-Every document reopens where you stopped reading. Go back with the arrow in the top-left
-corner or ⌘[, or just click the file again.
+Every document reopens where you stopped reading. Go back with the arrow in the Preview
+label, with ⌫ or ⌘[, or just click the file again.
 
 [Demo page](https://dux.github.io/md-boss/web-demo/)
 
@@ -203,7 +207,9 @@ On Windows and Linux read ⌘ as Ctrl and ⌥ as Alt; the shortcuts are the menu
 | ⇧⌘O | open a single file |
 | ⇧⌘R | reveal the selection in Finder |
 | ⌘⌫ | move the selected file to the Trash |
-| ⌥⌘R ⌥⌘V ⌥⌘N | toggle the raw, preview and notes panes |
+| ⌫ / ⌘[ | go back to the document you came from |
+| ⌘1 ⌘2 ⌘3 ⌘4 | fold the files, preview, raw and notes panels in or out |
+| ⌘← / ⌘→ | narrow and widen the reading column |
 | ⌘\ | raw and preview side by side |
 | ⇧⌘F | find in every document under the sidebar folder |
 | ⌘P | go to a file by name |
@@ -212,7 +218,6 @@ On Windows and Linux read ⌘ as Ctrl and ⌥ as Alt; the shortcuts are the menu
 | ⇧⌘K | add or edit a note on the current line |
 | ⇧⌘⌫ | delete the note on the current line |
 | ⇧⌘D | switch between light and dark |
-| ⌘0 | show or hide the sidebar |
 | ⎋ | cancel a pending Cut in the sidebar |
 | ⌘+ / ⌘- / ⌥⌘0 | text size (⌥⌘0 also resets the column width) |
 | ⌘S | save |

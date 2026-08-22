@@ -124,10 +124,6 @@
   min-height: 0;
   background: var(--sidebar-bg);
 
-  .head {
-    padding: 10px 12px 6px;
-  }
-
   .list {
     flex: 1;
     min-height: 0;
@@ -239,7 +235,6 @@
   }
 </style>
 
-<div class="head text-title">Notes</div>
 <div class="list">
   {#each state.sections as section}
     <div class="section">

@@ -1,8 +1,8 @@
 <script>
-  // Back to the document you were reading before this one. Pinned to the rendered pane's
-  // top-left corner: following a link is something you do in the rendered page, so the way
-  // back sits where you left. Hidden rather than disabled when there is no history - a
-  // permanently dead control on top of the text is just noise. Cmd-[ works either way.
+  // Back to the document you were reading before this one. It sits in the rendered panel's
+  // label strip: following a link is something you do in the rendered page, so the way back
+  // belongs to that panel. Hidden rather than disabled when there is no history - a
+  // permanently dead control is just noise. Cmd-[ works either way.
   class {
     init() {
       this.state.target = null
@@ -36,18 +36,25 @@
     display: none;
   }
 
+  /* Borderless and low: the label strip it sits in is already a surface, and a boxed
+     control on it would read as a second bar. */
   button {
     display: flex;
     align-items: center;
     gap: 4px;
-    height: max(22px, calc(var(--font-buttons) + 10px));
-    padding: 0 8px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--surface);
+    height: calc(var(--font-buttons) + 6px);
+    padding: 0 6px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
     color: var(--muted);
     font-family: inherit;
     white-space: nowrap;
+  }
+
+  button:hover {
+    background: var(--selection);
+    color: var(--text);
   }
 
   button .chevron {
@@ -58,6 +65,6 @@
 
 <div class={'back' + (state.target ? '' : ' hidden')}>
   {#if state.target}
-    <button class="text-buttons pointer" title={'Back to ' + state.target} onclick="fez.back()"><span class="chevron">‹</span> go back</button>
+    <button class="text-buttons pointer" title={'Back to ' + state.target + ' (⌫)'} onclick="fez.back()"><span class="chevron">‹</span> go back</button>
   {/if}
 </div>

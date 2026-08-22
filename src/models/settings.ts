@@ -14,6 +14,9 @@ export interface SettingsData {
   /** Which panes the viewer shows, left to right in PANES order. */
   visiblePanes: string[]
   sidebarWidth: number
+  /** The notes column's width. A list rather than a document, so it keeps a width of its
+   *  own instead of sharing what preview and raw split. */
+  notesWidth: number
   showSidebar: boolean
   previewFontSize: number
   /** Reading measure in em, so the column tracks the text size rather than fighting it.
@@ -40,6 +43,7 @@ export function defaultSettings(): SettingsData {
     darkThemeID: 'dark',
     visiblePanes: ['preview'],
     sidebarWidth: 260,
+    notesWidth: 350,
     showSidebar: true,
     previewFontSize: 17,
     previewMeasure: 48,
@@ -104,29 +108,18 @@ export function paneNamed(stored: string): Pane | null {
 }
 
 export const PANE_TITLE: Record<Pane, string> = { preview: 'Preview', raw: 'Raw', notes: 'Notes' }
-/** What the sidebar's segmented control says. Only preview differs: "Preview" does not fit
- *  three ways across a narrow sidebar, and the menu still says the long name. */
-export const paneShortTitle = (pane: Pane) => (pane === 'preview' ? 'View' : PANE_TITLE[pane])
-/** Notes are a list, so they get a fixed column. Raw and preview share whatever is left. */
-export const paneFixedWidth = (pane: Pane) => (pane === 'notes' ? 350 : null)
 
-/** Always in declaration order, and never empty - a viewer with nothing in it is a bug,
- *  not a state worth supporting. */
+/** Always in declaration order, and possibly empty: a pane that is off still holds its
+ *  header rail on screen, so "all collapsed" is a viewer state, not a dead end. */
 export function visiblePanes(data: SettingsData): Pane[] {
   const shown = new Set(data.visiblePanes.map(paneNamed).filter((p): p is Pane => p !== null))
-  const ordered = PANES.filter((p) => shown.has(p))
-  return ordered.length ? ordered : ['preview']
+  return PANES.filter((p) => shown.has(p))
 }
 
-/** Turning off the last remaining pane is ignored. */
 export function togglePane(data: SettingsData, pane: Pane): SettingsData {
   const shown = new Set<string>(visiblePanes(data))
-  if (shown.has(pane)) {
-    if (shown.size <= 1) return data
-    shown.delete(pane)
-  } else {
-    shown.add(pane)
-  }
+  if (shown.has(pane)) shown.delete(pane)
+  else shown.add(pane)
   return { ...data, visiblePanes: PANES.filter((p) => shown.has(p)) }
 }
 

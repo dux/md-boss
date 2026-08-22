@@ -83,12 +83,12 @@ describe('the menu carries the README keyboard table', () => {
     expect(items.get('add-note')!.accelerator).toBe('CmdOrCtrl+Shift+K')
     expect(items.get('delete-note')!.accelerator).toBe('CmdOrCtrl+Shift+Backspace')
     expect(items.get('back')!.accelerator).toBe('CmdOrCtrl+[')
-    expect(items.get('toggle-raw')!.accelerator).toBe('Alt+CmdOrCtrl+R')
-    expect(items.get('toggle-preview')!.accelerator).toBe('Alt+CmdOrCtrl+V')
-    expect(items.get('toggle-notes')!.accelerator).toBe('Alt+CmdOrCtrl+N')
+    expect(items.get('toggle-sidebar')!.accelerator).toBe('CmdOrCtrl+1')
+    expect(items.get('toggle-preview')!.accelerator).toBe('CmdOrCtrl+2')
+    expect(items.get('toggle-raw')!.accelerator).toBe('CmdOrCtrl+3')
+    expect(items.get('toggle-notes')!.accelerator).toBe('CmdOrCtrl+4')
     expect(items.get('side-by-side')!.accelerator).toBe('CmdOrCtrl+\\')
     expect(items.get('toggle-light-dark')!.accelerator).toBe('CmdOrCtrl+Shift+D')
-    expect(items.get('toggle-sidebar')!.accelerator).toBe('CmdOrCtrl+0')
     expect(items.get('bigger')!.accelerator).toBe('CmdOrCtrl+=')
     expect(items.get('smaller')!.accelerator).toBe('CmdOrCtrl+-')
     expect(items.get('actual-size')!.accelerator).toBe('Alt+CmdOrCtrl+0')
@@ -140,11 +140,21 @@ describe('menu structure', () => {
     expect(byId(state({ platform: 'linux' })).get('reveal')!.label).toBe('Show in File Manager')
   })
 
-  test('Move to Trash keeps Cmd-Backspace off the menu bar where it would take the key from text fields', () => {
+  test('the keys a text field would want are kept off the menu bar and routed by the page', () => {
+    // Cmd-Backspace is delete-to-line-start off macOS, Cmd-arrow is move-to-line-end
+    // everywhere: the bar must not register either, or a caret never sees them.
     expect(byId(state()).get('trash')!.native).toBe(true)
     expect(byId(state({ platform: 'windows' })).get('trash')!.native).toBe(false)
     expect(byId(state({ platform: 'linux' })).get('trash')!.native).toBe(false)
-    const others = flatItems(buildAppMenu(state({ platform: 'linux' }))).filter((i) => i.id !== 'trash')
+    for (const platform of ['macos', 'windows', 'linux'] as Platform[]) {
+      const items = byId(state({ platform }))
+      expect(items.get('narrower')!.native).toBe(false)
+      expect(items.get('wider')!.native).toBe(false)
+      expect(items.get('narrower')!.accelerator).toBe('CmdOrCtrl+ArrowLeft')
+      expect(items.get('wider')!.accelerator).toBe('CmdOrCtrl+ArrowRight')
+    }
+    const paged = new Set(['trash', 'narrower', 'wider'])
+    const others = flatItems(buildAppMenu(state({ platform: 'linux' }))).filter((i) => !paged.has(i.id))
     expect(others.every((i) => i.native)).toBe(true)
   })
 
@@ -166,16 +176,16 @@ describe('state in the menu', () => {
     expect(labels(theme.items).slice(-2)).toEqual(['-', 'Toggle Light/Dark'])
   })
 
-  test('pane, sidebar and note items say what they will do', () => {
+  test('panel and note items say what they will do', () => {
     const shown = byId(state({ visiblePanes: ['preview', 'raw'], showSidebar: true, hasNoteAtCursor: true }))
-    expect(shown.get('toggle-preview')!.label).toBe('Hide Preview')
-    expect(shown.get('toggle-raw')!.label).toBe('Hide Raw')
-    expect(shown.get('toggle-notes')!.label).toBe('Show Notes')
-    expect(shown.get('toggle-sidebar')!.label).toBe('Hide Sidebar')
+    expect(shown.get('toggle-preview')!.label).toBe('Collapse Preview')
+    expect(shown.get('toggle-raw')!.label).toBe('Collapse Raw')
+    expect(shown.get('toggle-notes')!.label).toBe('Expand Notes')
+    expect(shown.get('toggle-sidebar')!.label).toBe('Collapse Files')
     expect(shown.get('add-note')!.label).toBe('Edit Note…')
     const hidden = byId(state({ visiblePanes: ['notes'], showSidebar: false }))
-    expect(hidden.get('toggle-preview')!.label).toBe('Show Preview')
-    expect(hidden.get('toggle-sidebar')!.label).toBe('Show Sidebar')
+    expect(hidden.get('toggle-preview')!.label).toBe('Expand Preview')
+    expect(hidden.get('toggle-sidebar')!.label).toBe('Expand Files')
     expect(hidden.get('add-note')!.label).toBe('Add Note…')
   })
 
@@ -202,7 +212,7 @@ describe('diffMenu', () => {
     expect(diffMenu(before, after)).toEqual([
       { id: 'save', enabled: true },
       { id: 'revert', enabled: true },
-      { id: 'toggle-raw', label: 'Hide Raw' },
+      { id: 'toggle-raw', label: 'Collapse Raw' },
       { id: 'theme:paper', checked: false },
       { id: 'theme:dark', checked: true },
     ])

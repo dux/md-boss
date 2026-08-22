@@ -45,7 +45,7 @@ describe('AppMenu', () => {
     expect(items.get('theme:paper')!.checked).toBe(true)
 
     manager.toggleSidebar()
-    expect(twin.patches).toEqual([{ id: 'toggle-sidebar', label: 'Show Sidebar' }])
+    expect(twin.patches).toEqual([{ id: 'toggle-sidebar', label: 'Expand Files' }])
 
     twin.patches.length = 0
     manager.setTheme('dark')
@@ -152,15 +152,28 @@ describe('AppMenu', () => {
 
   test('without a menu bar the page routes every shortcut; a disabled one is still taken', async () => {
     const { manager, menu } = await setup({ [at('a.md')]: '# a' })
-    expect(menu.handleKey(press('Digit0', { metaKey: true }))).toBe(true)
+    expect(menu.handleKey(press('Digit1', { metaKey: true }))).toBe(true)
     expect(manager.settings.data.showSidebar).toBe(false)
     // Ctrl on macOS is not the modifier.
-    expect(menu.handleKey(press('Digit0', { ctrlKey: true }))).toBe(false)
+    expect(menu.handleKey(press('Digit1', { ctrlKey: true }))).toBe(false)
     expect(menu.handleKey(press('KeyX', { metaKey: true }))).toBe(false)
     // Save is disabled with nothing dirty: the key is ours, nothing happens.
     expect(menu.handleKey(press('KeyS', { metaKey: true }))).toBe(true)
-    expect(menu.handleKey(press('KeyR', { key: '®', metaKey: true, altKey: true }))).toBe(true)
+    expect(menu.handleKey(press('Digit3', { metaKey: true }))).toBe(true)
     expect(manager.settings.data.visiblePanes).toEqual(['preview', 'raw'])
+  })
+
+  test('Cmd-arrow narrows and widens the column through the page, on every platform', async () => {
+    for (const platform of ['macos', 'linux'] as const) {
+      const { manager, menu } = await setup({ [at('a.md')]: '# a' }, platform)
+      const mod = platform === 'macos' ? { metaKey: true } : { ctrlKey: true }
+      const start = manager.settings.data.previewMeasure
+      expect(menu.handleKey(press('ArrowLeft', mod))).toBe(true)
+      expect(manager.settings.data.previewMeasure).toBe(start - Manager.measureStep)
+      expect(menu.handleKey(press('ArrowRight', mod))).toBe(true)
+      expect(menu.handleKey(press('ArrowRight', mod))).toBe(true)
+      expect(manager.settings.data.previewMeasure).toBe(start + Manager.measureStep)
+    }
   })
 
   test('Ctrl-Backspace off macOS reaches Move to Trash through the page', async () => {

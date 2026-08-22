@@ -30,6 +30,22 @@
     post({ kind: 'error', message: String(event.message || event.type) });
   });
 
+  // The app's shortcuts, pressed while the reader's focus is in the page. Key events do not
+  // leave an iframe, so the ones the app could answer are handed to the pane, which replays
+  // them on its own window. Nothing is prevented here - Copy and the like stay the page's.
+  window.addEventListener('keydown', function (event) {
+    if (!event.metaKey && !event.ctrlKey && event.key !== 'Backspace') { return; }
+    post({
+      kind: 'key',
+      code: event.code,
+      key: event.key,
+      metaKey: event.metaKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      shiftKey: event.shiftKey
+    });
+  });
+
   function cell(tag, text) {
     var node = document.createElement(tag);
     node.textContent = text;

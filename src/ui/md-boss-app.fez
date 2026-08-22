@@ -1,41 +1,50 @@
 <script>
-  // 190 rather than 160: the top row grows a Back button and three toggle segments (P4),
-  // and a segment narrow enough to truncate "Notes" no longer says what it does.
+  // 190 rather than 160: the sidebar carries the search field and the folder box, and a
+  // sidebar narrow enough to truncate a folder name no longer says where you are.
   const MIN_SIDEBAR = 190
   const MAX_SIDEBAR = 520
+  // A note is a line number, a title and a wrapped body; under 240 the titles all truncate.
+  const MIN_NOTES = 240
+  const MAX_NOTES = 640
 
   // Root layout: sidebar | divider | document, status bar across the bottom - the shape of
-  // the Swift ContentView. The sidebar holds the root picker and the tree; Cmd-0 hides it
-  // and the divider drags its width, both persisted through settings. The document side
-  // shows whichever panes are switched on, left to right: preview, raw (notes with P6).
-  // Side by side, preview and raw split the width evenly; the preview's reading column
-  // keeps its measure while the half fits it and narrows with the pane when it does not.
+  // the Swift ContentView. Every column is a panel with a label above it: click the label
+  // and the panel collapses to a rail carrying the same label turned on its side, click the
+  // rail and it comes back. That rail is why there are no toggle buttons anywhere - a
+  // collapsed panel says its own name and is its own way back, the sidebar included.
+  // Panels sit left to right in PANES order: preview, raw, notes. Side by side, preview and
+  // raw split the width evenly; the preview's reading column keeps its measure while the
+  // half fits it and narrows with the pane when it does not.
   class {
     init() {
       const data = MdBoss.manager.settings.data
       this.state.sidebarWidth = data.sidebarWidth
+      this.state.notesWidth = data.notesWidth
       this.state.showSidebar = data.showSidebar
       this.state.panes = MdBoss.visiblePanes(data)
-      this.state.dragging = false
+      // Which edge is under the pointer, or null - only the one being dragged lights up.
+      this.state.dragging = null
       this.state.root = null
       this.state.file = null
       // Which renderer the rendered pane shows: the file's own answer (documentKind), not a
       // mode the viewer is in.
       this.state.kind = null
       this.state.dirty = false
+      // The open file's count, on the label of the panel that would list them.
+      this.state.noteCount = 0
     }
 
     onMount() {
       this.local.unsubscribe = [
         MdBoss.manager.onChange(() => this.pull()),
+        MdBoss.manager.notes.onChange(() => this.pull()),
         MdBoss.manager.settings.onChange((data) => {
           this.state.sidebarWidth = data.sidebarWidth
+          this.state.notesWidth = data.notesWidth
           this.state.showSidebar = data.showSidebar
           this.state.panes = MdBoss.visiblePanes(data)
-          this.toggleClass('no-sidebar', !data.showSidebar)
         }),
       ]
-      this.toggleClass('no-sidebar', !this.state.showSidebar)
       this.pull()
     }
 
@@ -49,38 +58,74 @@
       this.state.file = manager.document ? manager.abbreviateHome(manager.document.path) : null
       this.state.kind = manager.document ? MdBoss.documentKind(manager.document.path) : null
       this.state.dirty = manager.isDirty
+      this.state.noteCount = manager.notes.noteCount(manager.document ? manager.document.path : null)
     }
 
     save() {
       MdBoss.manager.saveDocument()
     }
 
-    // MARK: Divider
+    // MARK: Panels
+
+    isOpen(pane) {
+      return this.state.panes.includes(pane)
+    }
+
+    // The label is the whole control, so it says what the click will do rather than what the
+    // panel is - the panel's name is already the label's text.
+    hint(pane) {
+      const title = pane === 'files' ? 'Files' : MdBoss.PANE_TITLE[pane]
+      const open = pane === 'files' ? this.state.showSidebar : this.isOpen(pane)
+      return (open ? 'Collapse ' : 'Expand ') + title + ' (' + MdBoss.panelShortcut(pane) + ')'
+    }
+
+    // A control in the label strip is the panel's, not a click on the label: without this
+    // every Back would fold the panel it just navigated.
+    stop(event) {
+      event.stopPropagation()
+    }
+
+    toggle(pane) {
+      MdBoss.manager.togglePane(pane)
+    }
+
+    toggleSidebar() {
+      MdBoss.manager.toggleSidebar()
+    }
+
+    // MARK: Dividers
 
     // The width the drag started from plus the pointer's travel, so the pane tracks the
     // cursor exactly instead of accumulating rounding drift across move events. Pointer
-    // capture keeps the moves coming while the pointer is over the preview iframe.
-    dragStart(event) {
+    // capture keeps the moves coming while the pointer is over the preview iframe. Both
+    // edges are the same drag; the notes column just grows the other way, being the pane
+    // to the divider's right.
+    dragStart(event, edge) {
       if (event.button !== 0) return
+      const notes = edge === 'notes'
+      const key = notes ? 'notesWidth' : 'sidebarWidth'
+      const min = notes ? MIN_NOTES : MIN_SIDEBAR
+      const max = notes ? MAX_NOTES : MAX_SIDEBAR
       const divider = event.currentTarget
       const startX = event.clientX
-      const startWidth = MdBoss.manager.settings.data.sidebarWidth
+      const startWidth = MdBoss.manager.settings.data[key]
       const move = (e) => {
-        const width = Math.min(MAX_SIDEBAR, Math.max(MIN_SIDEBAR, startWidth + e.clientX - startX))
-        MdBoss.manager.settings.patch({ sidebarWidth: Math.round(width) })
+        const travel = notes ? startX - e.clientX : e.clientX - startX
+        const width = Math.min(max, Math.max(min, startWidth + travel))
+        MdBoss.manager.settings.patch({ [key]: Math.round(width) })
       }
       const end = () => {
         divider.removeEventListener('pointermove', move)
         divider.removeEventListener('pointerup', end)
         divider.removeEventListener('pointercancel', end)
-        this.state.dragging = false
+        this.state.dragging = null
         this.toggleClass('dragging', false)
       }
       divider.setPointerCapture(event.pointerId)
       divider.addEventListener('pointermove', move)
       divider.addEventListener('pointerup', end)
       divider.addEventListener('pointercancel', end)
-      this.state.dragging = true
+      this.state.dragging = edge
       this.toggleClass('dragging', true)
       event.preventDefault()
     }
@@ -94,15 +139,79 @@
      the whitespace between area names and the value turns invalid. */
   grid-template-columns: auto auto 1fr;
   grid-template-rows: 1fr auto;
+  /* A collapsed panel is exactly its own label turned sideways, so the rail is the caption
+     line's height read as a width. */
+  --rail: max(calc(var(--font-small) + 15px), calc(var(--font-buttons) + 12px));
 
-  /* Hidden, not unmounted: the tree keeps its scroll and the picker its state while the
-     sidebar is away, and Cmd-0 back costs no relisting. The class sits on the wrapper node,
-     outside the template, so it is toggled by hand when the setting changes - a render
-     whose HTML has not changed is skipped by fez, afterRender included. */
-  &.no-sidebar aside,
-  &.no-sidebar .divider {
+  /* MARK: Panel labels */
+
+  /* The label above a panel and, once the panel is collapsed, the whole of it. Both states
+     are the same element: only the writing direction changes, so the text stays put while
+     the panel around it goes. */
+  .panel-head {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: var(--rail);
+    padding: 0 10px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    white-space: nowrap;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .panel-head:hover .label {
+    color: var(--text);
+  }
+
+  .panel-head .count {
+    color: var(--muted);
+  }
+
+  /* The panel's own controls, right of its label - Back and the measure arrows rather than
+     floating over the page they act on. Borderless: the strip is already a surface, so a
+     boxed control on it reads as a second bar. */
+  .panel-head .tools {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .collapsed > .panel-head {
+    width: var(--rail);
+    height: 100%;
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 10px 0;
+    border-bottom: 0;
+  }
+
+  /* Turned rather than rotated: a rail label reads down the column the way a book's spine
+     does, and the count follows it instead of stacking sideways. */
+  .collapsed > .panel-head .label,
+  .collapsed > .panel-head .count {
+    writing-mode: vertical-rl;
+  }
+
+  .panel-body {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* The rendered panel keeps its body mounted while collapsed - the iframe would lose its
+     page and its scroll otherwise - so the rail hides it rather than dropping it. */
+  .collapsed > .panel-body {
     display: none;
   }
+
+  /* MARK: Sidebar */
 
   aside {
     grid-column: 1;
@@ -112,30 +221,48 @@
     min-height: 0;
     background: var(--sidebar-bg);
     box-sizing: border-box;
+  }
 
-    .top {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      padding: 8px;
-    }
+  /* Collapsed rather than unmounted: the tree keeps its scroll and the picker its state
+     while the sidebar is a rail, and Cmd-0 back costs no relisting. The rail draws its own
+     edge - the divider it would otherwise lean on is gone with the width to drag. */
+  aside.collapsed {
+    width: var(--rail);
+    border-right: 1px solid var(--border);
+  }
 
-    .fez-side-bar {
-      flex: 1;
-      min-height: 0;
-    }
+  aside .top {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  aside .fez-side-bar {
+    flex: 1;
+    min-height: 0;
   }
 
   /* A hairline that widens and takes the accent while it is being dragged; the padding
-     either side is the grab area. */
+     either side is the grab area. One rule for both edges - the sidebar's, which is a cell
+     of the app grid, and the notes column's, which is a flex item inside main. */
   .divider {
-    grid-column: 2;
-    grid-row: 1;
+    flex: none;
     width: 5px;
     cursor: col-resize;
     touch-action: none;
     display: flex;
     justify-content: center;
+  }
+
+  .divider.sidebar {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  /* Nothing to drag while the sidebar is a rail. */
+  .divider.gone {
+    display: none;
   }
 
   .divider span {
@@ -150,6 +277,8 @@
     background: var(--accent);
   }
 
+  /* MARK: Document */
+
   main {
     grid-column: 3;
     grid-row: 1;
@@ -162,34 +291,42 @@
     flex: 1 1 0;
     min-width: 0;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
-  main .pane.hidden {
+  main .pane.collapsed {
+    flex: 0 0 var(--rail);
+  }
+
+  /* Nothing to show and nothing to collapse: without a file open the rendered and raw
+     panels have no rail either. */
+  main .pane.gone {
     display: none;
   }
 
-  /* Notes are a list, so they get a fixed column (paneFixedWidth). */
+  main .pane + .pane {
+    border-left: 1px solid var(--border);
+  }
+
+  /* Notes are a list, not a document: the column keeps the width the divider left it at
+     rather than sharing what preview and raw split. */
   main .pane.notes {
-    flex: 0 0 350px;
-    border-left: 0;
-  }
-
-  main .separator {
     flex: none;
-    width: 1px;
-    margin: 0 2px;
-    background: var(--border);
   }
 
-  .pane-empty {
-    height: 100%;
-    display: grid;
-    place-items: center;
-    color: var(--muted);
+  main .pane.notes.collapsed {
+    flex: 0 0 var(--rail);
+    width: auto;
   }
 
-  .empty {
-    font-size: var(--font-default);
+  main .renderer {
+    flex: 1;
+    min-height: 0;
+  }
+
+  main .renderer.hidden {
+    display: none;
   }
 
   /* The preview iframe would swallow the pointer mid-drag. */
@@ -198,10 +335,12 @@
   }
 
   .empty {
+    flex: 1;
     height: 100%;
     display: grid;
     place-items: center;
     color: var(--muted);
+    font-size: var(--font-default);
   }
 
   footer {
@@ -248,44 +387,72 @@
   }
 </style>
 
-<aside style="width: {state.sidebarWidth}px">
-  <div class="top">
-    <pane-toggle-bar></pane-toggle-bar>
-    <!-- Always on screen. The field is how you search, so hiding it until a shortcut is
-         pressed is hiding the feature. -->
-    <search-field></search-field>
-    <root-picker></root-picker>
+<aside class={state.showSidebar ? '' : 'collapsed'} style={state.showSidebar ? 'width: ' + state.sidebarWidth + 'px' : ''}>
+  <div class="panel-head pointer" title={fez.hint('files')} onclick="fez.toggleSidebar()">
+    <span class="label text-title">Files</span>
   </div>
-  <side-bar></side-bar>
+  {#if state.showSidebar}
+    <div class="panel-body">
+      <div class="top">
+        <!-- Always on screen. The field is how you search, so hiding it until a shortcut is
+             pressed is hiding the feature. -->
+        <search-field></search-field>
+        <root-picker></root-picker>
+      </div>
+      <side-bar></side-bar>
+    </div>
+  {/if}
 </aside>
-<div class={'divider' + (state.dragging ? ' dragging' : '')} role="separator" aria-orientation="vertical" aria-label="Sidebar width" aria-valuenow={state.sidebarWidth} title="Drag to resize the sidebar" onpointerdown="fez.dragStart(event)"><span></span></div>
+<div class={'divider sidebar' + (state.showSidebar ? '' : ' gone') + (state.dragging === 'sidebar' ? ' dragging' : '')} role="separator" aria-orientation="vertical" aria-label="Sidebar width" aria-valuenow={state.sidebarWidth} title="Drag to resize the sidebar" onpointerdown="fez.dragStart(event, 'sidebar')"><span></span></div>
 <main>
   {#unless state.file}
     <div class="empty">Open a folder to begin</div>
   {/unless}
   <!-- Always mounted, hidden rather than removed: the iframe keeps its page and its
-       scroll, and the first render after a file opens has somewhere to land. One toggle,
-       two renderers - a .csv shows the table pane in the preview's place. -->
-  <div class={'pane preview' + (state.file && state.panes.includes('preview') && state.kind === 'markdown' ? '' : ' hidden')}>
-    <preview-pane></preview-pane>
-  </div>
-  <div class={'pane preview table' + (state.file && state.panes.includes('preview') && state.kind === 'csv' ? '' : ' hidden')}>
-    <csv-pane></csv-pane>
-  </div>
-  {#if state.file && state.panes.includes('raw')}
-    {#if state.panes.includes('preview')}
-      <div class="separator"></div>
-    {/if}
-    <div class="pane raw">
-      <editor-pane></editor-pane>
+       scroll, and the first render after a file opens has somewhere to land. One panel,
+       two renderers - a .csv shows the table in the preview's place. -->
+  <div class={'pane preview' + (state.file ? '' : ' gone') + (state.panes.includes('preview') ? '' : ' collapsed')}>
+    <div class="panel-head pointer" title={fez.hint('preview')} onclick="fez.toggle('preview')">
+      <span class="label text-title">Preview</span>
+      {#if state.file && state.panes.includes('preview')}
+        <div class="tools" onclick="fez.stop(event)">
+          <back-button></back-button>
+          <!-- The measure is the rendered column's, so a table has no use for it. -->
+          {#if state.kind === 'markdown'}
+            <measure-controls></measure-controls>
+          {/if}
+        </div>
+      {/if}
     </div>
-  {/if}
-  {#if state.panes.includes('notes')}
-    {#if state.file && (state.panes.includes('preview') || state.panes.includes('raw'))}
-      <div class="separator"></div>
+    <div class="panel-body">
+      <div class={'renderer' + (state.kind === 'csv' ? ' hidden' : '')}><preview-pane></preview-pane></div>
+      <div class={'renderer' + (state.kind === 'csv' ? '' : ' hidden')}><csv-pane></csv-pane></div>
+    </div>
+  </div>
+  <div class={'pane raw' + (state.file ? '' : ' gone') + (state.panes.includes('raw') ? '' : ' collapsed')}>
+    <div class="panel-head pointer" title={fez.hint('raw')} onclick="fez.toggle('raw')">
+      <span class="label text-title">Raw</span>
+    </div>
+    <!-- The editor is built on mount, so it is mounted only while the panel is open. -->
+    {#if state.file && state.panes.includes('raw')}
+      <div class="panel-body"><editor-pane></editor-pane></div>
     {/if}
-    <div class="pane notes"><notes-pane></notes-pane></div>
+  </div>
+  <!-- The notes column's own edge. Only while it is open: a rail has no width to drag. -->
+  {#if state.panes.includes('notes')}
+    <div class={'divider' + (state.dragging === 'notes' ? ' dragging' : '')} role="separator" aria-orientation="vertical" aria-label="Notes width" aria-valuenow={state.notesWidth} title="Drag to resize the notes column" onpointerdown="fez.dragStart(event, 'notes')"><span></span></div>
   {/if}
+  <div class={'pane notes' + (state.panes.includes('notes') ? '' : ' collapsed')} style={state.panes.includes('notes') ? 'width: ' + state.notesWidth + 'px' : ''}>
+    <div class="panel-head pointer" title={fez.hint('notes')} onclick="fez.toggle('notes')">
+      <span class="label text-title">Notes</span>
+      {#if state.noteCount > 0}
+        <span class="count text-small text-mono">{state.noteCount}</span>
+      {/if}
+    </div>
+    {#if state.panes.includes('notes')}
+      <div class="panel-body"><notes-pane></notes-pane></div>
+    {/if}
+  </div>
 </main>
 <settings-panel></settings-panel>
 <prompt-panel></prompt-panel>

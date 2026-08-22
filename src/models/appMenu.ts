@@ -44,6 +44,7 @@ export type MenuAction =
   | 'new-file' | 'open-folder' | 'open-file' | 'save' | 'revert' | 'rename' | 'trash' | 'reveal' | 'settings'
   | 'find' | 'find-in-project' | 'go-to-file' | 'bold' | 'italic' | 'link' | 'add-note' | 'delete-note'
   | 'back' | 'toggle-preview' | 'toggle-raw' | 'toggle-notes' | 'side-by-side' | 'toggle-sidebar'
+  | 'narrower' | 'wider'
   | 'bigger' | 'smaller' | 'actual-size' | 'toggle-light-dark' | `theme:${ThemeID}` | 'check-updates' | 'github' | 'quit'
 
 export interface MenuItemModel {
@@ -105,12 +106,19 @@ export interface MenuPatch {
   checked?: boolean
 }
 
-/** Option-Command, because plain Command would take Paste and New off the app. */
+/** Cmd-1 to Cmd-4, in the order the panels stand on screen: files, preview, raw, notes.
+ *  The number is the position, so the keys are read off the window rather than remembered. */
+export const SIDEBAR_ACCELERATOR = 'CmdOrCtrl+1'
 export const PANE_ACCELERATOR: Record<Pane, string> = {
-  preview: 'Alt+CmdOrCtrl+V',
-  raw: 'Alt+CmdOrCtrl+R',
-  notes: 'Alt+CmdOrCtrl+N',
+  preview: 'CmdOrCtrl+2',
+  raw: 'CmdOrCtrl+3',
+  notes: 'CmdOrCtrl+4',
 }
+
+/** What a panel label's tooltip says. ⌘ for CmdOrCtrl, the way the rest of the tooltips
+ *  write it, and from the accelerator itself so the two cannot drift apart. */
+export const panelShortcut = (panel: 'files' | Pane): string =>
+  (panel === 'files' ? SIDEBAR_ACCELERATOR : PANE_ACCELERATOR[panel]).replace('CmdOrCtrl+', '⌘')
 
 const PANE_ACTION: Record<Pane, MenuAction> = { preview: 'toggle-preview', raw: 'toggle-raw', notes: 'toggle-notes' }
 
@@ -203,13 +211,23 @@ export function buildAppMenu(s: MenuState): MenuModel[] {
   menus.push({
     id: 'view', label: 'View', role: null,
     items: [
-      // Cmd-[ is what every browser and editor on the platform means by Back.
+      // Cmd-[ is what every browser and editor on the platform means by Back. Backspace is
+      // the other half of that habit and keys.ts carries it - a bare key the bar must not
+      // register, or it would take the editor's delete.
       item('back', 'Back', 'CmdOrCtrl+[', s.canGoBack),
       separator,
-      ...PANES.map((pane) => item(PANE_ACTION[pane], `${s.visiblePanes.includes(pane) ? 'Hide' : 'Show'} ${PANE_TITLE[pane]}`, PANE_ACCELERATOR[pane])),
+      // The four panels in screen order, so the menu reads like the window and Cmd-1 to
+      // Cmd-4 land where the labels are.
+      item('toggle-sidebar', `${s.showSidebar ? 'Collapse' : 'Expand'} Files`, SIDEBAR_ACCELERATOR),
+      ...PANES.map((pane) => item(PANE_ACTION[pane], `${s.visiblePanes.includes(pane) ? 'Collapse' : 'Expand'} ${PANE_TITLE[pane]}`, PANE_ACCELERATOR[pane])),
+      separator,
       item('side-by-side', 'Preview & Raw', 'CmdOrCtrl+\\'),
       separator,
-      item('toggle-sidebar', s.showSidebar ? 'Hide Sidebar' : 'Show Sidebar', 'CmdOrCtrl+0'),
+      // The reading column, the same step the arrows beside the Preview label take. Not
+      // registered on the bar: Cmd-arrow is every text field's move-to-line-end, so the
+      // page routes these and keeps them off a caret (keys.ts).
+      item('narrower', 'Narrower Column', 'CmdOrCtrl+ArrowLeft', true, { native: false }),
+      item('wider', 'Wider Column', 'CmdOrCtrl+ArrowRight', true, { native: false }),
       separator,
       // "=" rather than "+": the key is the same and the accelerator has to name a key, not
       // a character that needs Shift on most layouts.

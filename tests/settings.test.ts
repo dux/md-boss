@@ -73,6 +73,13 @@ describe('loading settings.json', () => {
     expect(data.showSidebar).toBe(false)
   })
 
+  test('both dragged widths are stored, and each keeps its own default', () => {
+    const data = parseSettings('{"notesWidth": 420}')
+    expect(data.notesWidth).toBe(420)
+    expect(data.sidebarWidth).toBe(260)
+    expect(defaultSettings().notesWidth).toBe(350)
+  })
+
   test('optionals accept a value or null', () => {
     expect(parseSettings('{"lastOpenedFile": "/a.md"}').lastOpenedFile).toBe('/a.md')
     expect(parseSettings('{"lastOpenedFile": null}').lastOpenedFile).toBeNull()
@@ -96,18 +103,17 @@ describe('panes', () => {
     expect(paneNamed('nope')).toBeNull()
   })
 
-  test('visible panes are in declaration order and never empty', () => {
+  test('visible panes are in declaration order, unknown names dropped', () => {
     expect(visiblePanes({ ...defaultSettings(), visiblePanes: ['notes', 'raw'] })).toEqual(['raw', 'notes'])
-    expect(visiblePanes({ ...defaultSettings(), visiblePanes: [] })).toEqual(['preview'])
-    expect(visiblePanes({ ...defaultSettings(), visiblePanes: ['junk'] })).toEqual(['preview'])
+    expect(visiblePanes({ ...defaultSettings(), visiblePanes: ['junk'] })).toEqual([])
   })
 
-  test('toggling off the last pane is ignored', () => {
+  test('the last pane collapses like any other - its label rail is the way back', () => {
     const data = defaultSettings()
-    expect(togglePane(data, 'preview')).toBe(data)
     const two = togglePane(data, 'raw')
     expect(visiblePanes(two)).toEqual(['preview', 'raw'])
     expect(visiblePanes(togglePane(two, 'preview'))).toEqual(['raw'])
+    expect(visiblePanes(togglePane(data, 'preview'))).toEqual([])
   })
 
   test('show is idempotent', () => {

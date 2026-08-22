@@ -35,6 +35,7 @@
           MdBoss.manager.scrollMemory.recordTable(this.local.path, { x: msg.x, y: msg.y })
         }
         if (msg.kind === 'context') this.contextMenu(msg)
+        if (msg.kind === 'key') this.replayKey(msg)
       }
       window.addEventListener('message', this.local.onMessage)
       this.local.unsubscribe = [
@@ -68,6 +69,23 @@
 
     /** A table hangs no notes - it has no source lines to anchor them to - so the menu is
      *  the file's own: copy its path, show it in the file manager. */
+    // A shortcut pressed while the reader's focus was in the page. Replayed on our own
+    // window, so keys.ts and the menu see it exactly as they would have with the app in
+    // focus. In the shell the bar has already answered whatever it registered natively,
+    // and handleKey skips those, so nothing is done twice.
+    replayKey(msg) {
+      window.dispatchEvent(new KeyboardEvent('keydown', {
+        code: msg.code,
+        key: msg.key,
+        metaKey: msg.metaKey,
+        ctrlKey: msg.ctrlKey,
+        altKey: msg.altKey,
+        shiftKey: msg.shiftKey,
+        bubbles: true,
+        cancelable: true,
+      }))
+    }
+
     contextMenu(msg) {
       const manager = MdBoss.manager
       const doc = manager.document
@@ -141,8 +159,8 @@
   flex-direction: column;
   height: 100%;
 
-  /* Outside the page's scroll, so the Back button stays in its corner while the table
-     moves under it - and below the banner, so it is pushed down rather than covered. */
+  /* Below the banner, so the table is pushed down by it rather than covered. Back lives in
+     the panel's label strip, the same one the rendered markdown gets. */
   .page {
     position: relative;
     flex: 1;
@@ -156,18 +174,9 @@
     border: 0;
     background: var(--bg);
   }
-
-  /* This is the rendered pane while a CSV is open, so it carries the same corner control -
-     otherwise following a link into one is a dead end. */
-  .back {
-    position: absolute;
-    top: 5px;
-    left: 12px;
-  }
 </style>
 
 <change-banner></change-banner>
 <div class="page">
   <iframe fez:this="frame" title="table" sandbox="allow-scripts allow-same-origin"></iframe>
-  <div class="back"><back-button></back-button></div>
 </div>
