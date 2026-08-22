@@ -1,6 +1,6 @@
 # MD-BOSS
 
-A macOS markdown viewer and editor that looks like paper.
+A markdown viewer and editor that looks like paper, for macOS, Windows and Linux.
 
 Folders and files on the left, the rendered document on the right.
 A stripe above the viewer toggles three panes - raw, preview, notes - which sit side by side.
@@ -43,12 +43,27 @@ corner or ⌘[, or just click the file again.
 
 ## Install
 
+macOS:
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh?v=43a3415 | bash
 ```
 
-Downloads the latest build, unpacks it into `/Applications` and opens it.
-macOS 14 or newer, and nothing else to install.
+Downloads the latest universal dmg, copies `MdBoss.app` into `/Applications`, puts the
+`md-boss` command in `~/bin` (`PREFIX=/usr/local` for `/usr/local/bin`) and opens the app.
+macOS 10.15 or newer, and nothing else to install.
+Or take `MdBoss_<version>_universal.dmg` from the
+[releases page](https://github.com/dux/md-boss/releases/latest) and drag it to Applications.
+
+Windows: `MdBoss_<version>_x64-setup.exe` or the `.msi` from the releases page.
+Windows 10 or newer; the installer puts `md-boss.exe` in `%LOCALAPPDATA%\MdBoss`.
+
+Linux (x86_64): the same `install.sh` line installs the `.deb` where there is `apt`, the
+AppImage into `~/.local/bin` otherwise; or pick either from the releases page.
+Needs webkit2gtk 4.1, which is Ubuntu 22.04 and newer.
+
+Installed copies check the release on launch and offer "Restart to update" when a newer one
+is signed.
 
 | Paper | Raw and preview |
 |---|---|
@@ -63,13 +78,42 @@ Click any of them for the full-size image.
 ```sh
 git clone https://github.com/dux/md-boss
 cd md-boss
-hammer dev
+hammer tauri:dev
 ```
 
-Requires macOS 14, a Swift 6.2 toolchain, [hammer](https://github.com/dux/hammer) and
-`swiftlint`.
+Requires [Bun](https://bun.sh), a stable Rust toolchain (`rustup`), the
+[Tauri v2 system dependencies](https://v2.tauri.app/start/prerequisites/) for your OS
+(Xcode command line tools on macOS; the WebView2 runtime and MSVC build tools on Windows;
+`libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf` on Debian/Ubuntu) and
+[hammer](https://github.com/dux/hammer).
+`hammer tauri:dev` runs `bun install` and the app against the Vite dev server.
 
 ## Tasks
+
+The cross-platform app lives in [tauri-rust/](tauri-rust/); its tasks sit under the
+`tauri:` namespace.
+
+| command | what it does |
+|---|---|
+| `hammer tauri:dev` | install, then run the app against the vite dev server - the inner loop |
+| `hammer tauri:build` | lint, test, then build - debug and unbundled; `--release` for an optimised build with the platform bundles (dmg / msi / nsis / appimage / deb) and the signed updater packages |
+| `hammer tauri:test` | `bun test` and `cargo test` |
+| `hammer tauri:lint` | `tsc --noEmit` and `cargo clippy` |
+| `hammer tauri:icon` | regenerate `src-tauri/icons` from `app/Resources/AppIcon.svg` |
+| `hammer tauri:link` | put the `md-boss` command on PATH (`tauri-rust/bin/md-boss` copied to `~/bin`) |
+| `hammer tauri:probe` | launch the dev app against a scratch config and capture its window to `tmp/probe.png` |
+| `hammer tauri:clean` | remove the tauri build artifacts (dist, cargo target) |
+
+Releases are built by [.github/workflows/release.yml](.github/workflows/release.yml) on a
+`v*` tag: one GitHub release per tag carrying the dmg, msi, nsis, deb and AppImage plus the
+`latest.json` the in-app updater reads.
+
+### The Swift app
+
+The original macOS app in [app/](app/) stays alongside the port; it builds with SwiftPM and
+the same `Hammerfile`.
+`hammer dev` lints, tests, builds, installs `MdBoss.app` to `/Applications` and launches it.
+Requires macOS 14, a Swift 6.2 toolchain and `swiftlint`.
 
 | command | what it does |
 |---|---|
@@ -116,7 +160,7 @@ note with a title and a body.
 
 Eight of them: Paper and Dark, plus Solarized light and dark, GitHub, Nord, Dracula and
 Gruvbox.
-Pick one from the grid in Settings or from View > Theme.
+Pick one from the grid in Settings or from the Theme menu.
 
 ⇧⌘D stays a light/dark switch rather than a cycle through all eight: it remembers the last
 theme you used on each side of the line, so Nord to Paper and back lands on Nord again.
@@ -159,20 +203,25 @@ link if it is an image.
 
 ## Command line
 
-On launch the app writes a shim at `~/bin/md-boss` naming its own bundle, so a copy of
-`MdBoss.app` installed by hand gets the command too, and moving the app repairs it:
+`md-boss` is a small launcher that execs the installed app, so paths resolve against the
+shell's current directory and a second call reaches the running window:
 
 ```sh
 md-boss .              # add the current folder to the sidebar, at the top
 md-boss notes/x.md     # open a file, adding its folder if it is not already listed
+md-boss --help         # the flags, printed here rather than in a window
 ```
 
-Dropping a folder or a file on the Dock icon does the same thing.
+`install.sh` puts it in `~/bin`; from a checkout, `hammer tauri:link` does the same.
+On Windows the install folder (`%LOCALAPPDATA%\MdBoss`) on PATH gives `md-boss file.md`
+the same behaviour.
 
-A script at that path the app did not write is never overwritten, and `"installCLI": false`
-in `settings.json` turns the whole thing off.
+Opening a `.md` file from Finder or Explorer, or dropping a folder on the Dock icon, does
+the same thing.
 
 ## Keyboard
+
+On Windows and Linux read ⌘ as Ctrl and ⌥ as Alt; the shortcuts are the menu bar's.
 
 | | |
 |---|---|
@@ -194,17 +243,22 @@ in `settings.json` turns the whole thing off.
 | ⎋ | cancel a pending Cut in the sidebar |
 | ⌘+ / ⌘- / ⌥⌘0 | text size (⌥⌘0 also resets the column width) |
 | ⌘S | save |
+| ⌘, | settings |
+| ⌘Q | quit - asks about unsaved edits first, as does the window's close button |
 | ⌘F | find in the open document |
 | ↑ ↓ ← → | move through the sidebar; type a name to jump to it |
 
 ## Configuration
 
 Settings live in `~/.config/md-boss/settings.json` and the sidebar's root folders in
-`~/.config/md-boss/roots.txt`, one absolute path per line.
+`~/.config/md-boss/roots.txt`, one absolute path per line - the same path on every OS.
 Both are plain text and meant to be edited by hand.
+The window's position and size are not a setting: they are kept by the OS shell in the app's
+data folder (`~/Library/Application Support/com.dux.md-boss/.window-state.json` on macOS).
 
 ## Docs
 
-* [doc/CODE_STRUCTURE.md](doc/CODE_STRUCTURE.md) - architecture
+* [doc/CODE_STRUCTURE.md](doc/CODE_STRUCTURE.md) - architecture of both apps
+* [doc/feature/port-tauri.md](doc/feature/port-tauri.md) - the port plan and the decisions made along the way
 * [doc/THEMES.md](doc/THEMES.md) - the palettes and the rules around them
 * [web-demo/](web-demo/) - the demo page, its sample documents and `hammer demo`
