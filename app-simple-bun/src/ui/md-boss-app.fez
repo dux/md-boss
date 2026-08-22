@@ -4,22 +4,18 @@
   const MIN_SIDEBAR = 190
   const MAX_SIDEBAR = 520
 
-  // Free space either side of the preview's reading column when raw sits next to it.
-  const PREVIEW_GUTTER = 40
-
   // Root layout: sidebar | divider | document, status bar across the bottom - the shape of
   // the Swift ContentView. The sidebar holds the root picker and the tree; Cmd-0 hides it
   // and the divider drags its width, both persisted through settings. The document side
   // shows whichever panes are switched on, left to right: preview, raw (notes with P6).
-  // Side by side, the preview is sized to its own reading measure plus a gutter and raw
-  // takes what is left - the column the measure asks for is the width worth showing.
+  // Side by side, preview and raw split the width evenly; the preview's reading column
+  // keeps its measure while the half fits it and narrows with the pane when it does not.
   class {
     init() {
       const data = MdBoss.manager.settings.data
       this.state.sidebarWidth = data.sidebarWidth
       this.state.showSidebar = data.showSidebar
       this.state.panes = MdBoss.visiblePanes(data)
-      this.state.previewWidth = this.previewWidth(data)
       this.state.dragging = false
       this.state.root = null
       this.state.file = null
@@ -29,12 +25,6 @@
       this.state.dirty = false
     }
 
-    /** What the preview asks for next to raw: the measure in em of the body size, which
-     *  the page builder writes as whole pixels, so the em is rounded the same way here. */
-    previewWidth(data) {
-      return data.previewMeasure * Math.trunc(data.previewFontSize) + 2 * PREVIEW_GUTTER
-    }
-
     onMount() {
       this.local.unsubscribe = [
         MdBoss.manager.onChange(() => this.pull()),
@@ -42,7 +32,6 @@
           this.state.sidebarWidth = data.sidebarWidth
           this.state.showSidebar = data.showSidebar
           this.state.panes = MdBoss.visiblePanes(data)
-          this.state.previewWidth = this.previewWidth(data)
           this.toggleClass('no-sidebar', !data.showSidebar)
         }),
       ]
@@ -175,24 +164,6 @@
     min-height: 0;
   }
 
-  /* Next to raw the preview takes its reading column, capped at four fifths of what is
-     left once the fixed notes column is taken, so a narrow window still leaves raw a
-     usable strip rather than a sliver. */
-  main.split .pane.preview {
-    flex: 0 1 var(--preview-width);
-    max-width: 80%;
-  }
-
-  main.split.with-notes .pane.preview {
-    max-width: calc((100% - 355px) * 0.8);
-  }
-
-  /* A table has no measure - it is as wide as its widest row and scrolls sideways for the
-     rest, so it asks for everything and takes the four-fifths ceiling above. */
-  main.split .pane.preview.table {
-    flex-basis: 100%;
-  }
-
   main .pane.hidden {
     display: none;
   }
@@ -288,7 +259,7 @@
   <side-bar></side-bar>
 </aside>
 <div class={'divider' + (state.dragging ? ' dragging' : '')} role="separator" aria-orientation="vertical" aria-label="Sidebar width" aria-valuenow={state.sidebarWidth} title="Drag to resize the sidebar" onpointerdown="fez.dragStart(event)"><span></span></div>
-<main class={(state.panes.includes('preview') && state.panes.includes('raw') ? 'split' : '') + (state.panes.includes('notes') ? ' with-notes' : '')} style="--preview-width: {state.previewWidth}px">
+<main>
   {#unless state.file}
     <div class="empty">Open a folder to begin</div>
   {/unless}
