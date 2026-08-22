@@ -31,12 +31,14 @@ body {
 }
 
 /* The measure is adjustable from the toggle bar; --measure is injected by Swift.
-   The tall bottom padding lets the last paragraph scroll to mid-viewport instead of
-   sticking to the bottom edge. */
+   The bottom padding lets the last paragraph clear the bottom edge instead of sticking to
+   it. --tail is fitted to the document by the script - a page shorter than the window gets
+   the full half-viewport, a long one only what it needs - and 45vh is what stands until the
+   first fit lands. */
 #content {
   max-width: var(--measure);
   margin: 0 auto;
-  padding: 40px 32px 45vh;
+  padding: 40px 32px var(--tail, 45vh);
 }
 
 /* Headings - spacing does the work, no underline rules. */

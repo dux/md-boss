@@ -376,7 +376,28 @@
     });
   }
 
+  // How much blank paper is left under the last block, as a fraction of the window. A page
+  // shorter than the window is padded out to about a windowful, so the last paragraph does
+  // not sit on the bottom edge; past that the tail shrinks to a hand's width, because half a
+  // viewport of nothing at the end of a long document reads as a bug rather than as room.
+  var TAIL_MIN = 0.12;
+  var TAIL_MAX = 0.45;
+
+  function fitTail() {
+    var view = document.documentElement.clientHeight;
+    if (!view) { return; }
+    // The paper without its current tail - measured rather than remembered, so the CSS
+    // default and every later fit are read the same way.
+    var tail = parseFloat(window.getComputedStyle(content).paddingBottom) || 0;
+    var paper = content.scrollHeight - tail;
+    var fitted = Math.min(view * TAIL_MAX, Math.max(view * TAIL_MIN, view - paper));
+    document.documentElement.style.setProperty('--tail', Math.round(fitted) + 'px');
+  }
+
   function invalidate() {
+    // Before the anchors go: refitting the tail is itself a layout change, and every caller
+    // here is one of the moments the document could have grown or shrunk.
+    fitTail();
     anchors = null;
   }
 
