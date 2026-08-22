@@ -3,6 +3,7 @@ import { Manager } from './models/manager'
 import { RootFolders } from './models/rootFolders'
 import { SettingsStore } from './models/settingsStore'
 import { TypeAhead } from './models/typeAhead'
+import { Updater } from './models/updater'
 import { documentKind } from './models/fileKinds'
 import { FONT_SETTINGS, PANE_TITLE, PANES, paneShortTitle, visiblePanes } from './models/settings'
 import { Panels } from './ui/panels'
@@ -25,6 +26,7 @@ export async function createApp() {
   const folders = await RootFolders.load()
   const home = await native().paths.home()
   const configDir = await native().paths.config()
+  const manager = new Manager(settings, folders, home, configDir)
   return {
     native,
     TypeAhead,
@@ -54,7 +56,9 @@ export async function createApp() {
     THEMES,
     themeNamed,
     settings,
-    manager: new Manager(settings, folders, home, configDir),
+    manager,
+    /** Self-update: the launch check and the Help item. Restart runs quit's guard first. */
+    updater: new Updater(native().updater, manager.toast, () => manager.prepareToExit()),
   }
 }
 

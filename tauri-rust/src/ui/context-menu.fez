@@ -97,7 +97,7 @@
       {#if item.separator}
         <div class="separator"></div>
       {:else}
-        <button class="item text-default pointer" disabled={item.disabled} onclick="fez.pick({item.index})">{item.label}</button>
+        <button class="item text-default pointer" disabled={!!item.disabled} onclick="fez.pick({item.index})">{item.label}</button>
       {/if}
     {/each}
   {/if}

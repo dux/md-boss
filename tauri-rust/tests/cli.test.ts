@@ -74,14 +74,14 @@ describe('openFromCLI', () => {
   test('what is not there is reported by name, and the rest still opens', async () => {
     const { manager } = await setup({ [at('a.md')]: '# a' })
     await manager.openFromCLI({ paths: ['a.md', 'missing.md'], cwd: ROOT })
-    expect(manager.notice).toBe('Not found: missing.md')
+    expect(manager.toast.text).toBe('Not found: missing.md')
     expect(manager.document?.path).toBe(at('a.md'))
   })
 
   test('a second launch arrives through the cli twin the same way', async () => {
     const { manager, folders } = await setup({ [at('a.md')]: '# a', '/work/site/index.md': '# site' })
     const cli = native().cli as MemoryCli
-    expect(await cli.launch()).toEqual({ paths: [], cwd: HOME })
+    expect(await cli.launch()).toEqual([{ paths: [], cwd: HOME }])
     let pending: Promise<void> = Promise.resolve()
     await cli.onOpen((request) => {
       pending = manager.openFromCLI(request)

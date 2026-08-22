@@ -23,6 +23,7 @@ import { ScrollSync } from './scrollSync'
 import { canChangeFontSize, defaultSettings, FONT_SETTINGS, fontDefault, type FontSetting, fontSize, type Pane, resetFontSizes, setFontSize, showPane, togglePane, visiblePanes, ZOOMABLE, fontSetting } from './settings'
 import { SettingsStore } from './settingsStore'
 import { SidebarSearch } from './sidebarSearch'
+import { Toast } from './toast'
 import { flippedTheme, selectingTheme, type Theme, type ThemeChoice, type ThemeID, themeChoice, themeNamed } from '../theme/theme'
 
 export type Format = 'bold' | 'italic' | 'link'
@@ -39,6 +40,8 @@ export class Manager {
   /** Every loaded `.md-boss`. Its own change event - the pane and the gutter listen. */
   readonly notes: AnnotationStore
   readonly prompts = new Prompts()
+  /** What the app has to say in passing - "Saved a.md", a refusal. Toast.shared's place. */
+  readonly toast = new Toast()
   /** Find in project and Go to File - the sidebar's field and what it found. */
   readonly search: SidebarSearch
   /** Cmd-F: a request for the raw pane to open its find panel. Carries an id so asking
@@ -67,9 +70,6 @@ export class Manager {
   highlightedLine: number | null = null
   private scrollRequestCount = 0
   document: OpenDocument | null = null
-  error: string | null = null
-  /** One-line notices - "Saved x", "Reloaded x" - until the toast overlay (P9) draws them. */
-  notice: string | null = null
   /** The documents opened before this one, oldest first. The Back button walks it from the
    *  end. Paths rather than documents: a buffer per visited file would hold every file you
    *  have ever looked at in memory, and where you were is what ScrollMemory keeps. */
@@ -155,7 +155,7 @@ export class Manager {
       const before = doc.externalChange
       const outcome = await doc.syncWithDisk()
       if (doc !== this.document) return
-      if (outcome === 'reloaded') this.notice = `Reloaded ${doc.name}`
+      if (outcome === 'reloaded') this.flash(`Reloaded ${doc.name}`)
       if (outcome !== 'unchanged' || before !== doc.externalChange) this.emit()
     } catch {
       // unreadable for the moment - the next poll tries again
@@ -180,7 +180,7 @@ export class Manager {
     const doc = this.document
     if (!doc) return
     await doc.reloadFromDisk()
-    this.notice = `Reloaded ${doc.name}`
+    this.flash(`Reloaded ${doc.name}`)
     this.emit()
   }
 
@@ -303,7 +303,7 @@ export class Manager {
     if (body === null) return
     const title = existing?.title ?? suggestedTitle(this.currentLineText)
     await this.notes.setNote(doc.path, line, title, body)
-    this.notice = `Note saved on line ${line}`
+    this.toast.success(`Note saved on line ${line}`)
     this.emit()
   }
 
@@ -311,7 +311,7 @@ export class Manager {
     const body = await this.prompts.text({ title: 'Edit Note', message: `${note.path}:${note.line}`, value: note.body, multiline: true })
     if (body === null) return
     await this.notes.setNote(this.notes.expand(note.path), note.line, note.title, body)
-    this.notice = `Note saved on line ${note.line}`
+    this.toast.success(`Note saved on line ${note.line}`)
     this.emit()
   }
 
@@ -321,7 +321,7 @@ export class Manager {
     const title = await this.prompts.text({ title: 'Rename Note', message: `${note.path}:${note.line}`, value: note.title, placeholder: 'Title' })
     if (title === null) return
     await this.notes.setNote(this.notes.expand(note.path), note.line, title, note.body)
-    this.notice = 'Note renamed'
+    this.toast.success('Note renamed')
     this.emit()
   }
 
@@ -332,14 +332,13 @@ export class Manager {
     const note = doc ? this.notes.noteAt(doc.path, this.currentLine) : null
     if (!note) return
     await this.notes.remove(note)
-    this.notice = 'Note removed'
+    this.toast.success('Note removed')
     this.emit()
   }
 
   async copyText(text: string, label = 'Copied'): Promise<void> {
     await native().clipboard.writeText(text)
-    this.notice = label
-    this.emit()
+    this.toast.success(label)
   }
 
   /** Cmd-S and the Save button. */
@@ -347,12 +346,9 @@ export class Manager {
     const doc = this.document
     if (!doc) return
     try {
-      if (await doc.save()) {
-        this.error = null
-        this.notice = `Saved ${doc.name}`
-      }
+      if (await doc.save()) this.toast.success(`Saved ${doc.name}`)
     } catch (err) {
-      this.error = `Could not save: ${String(err)}`
+      this.showError(`Could not save: ${String(err)}`)
     }
     this.emit()
   }
@@ -534,7 +530,7 @@ export class Manager {
 
   private applyTheme(choice: ThemeChoice): void {
     this.settings.patch({ themeID: choice.active, lightThemeID: choice.light, darkThemeID: choice.dark })
-    this.notice = `${themeNamed(choice.active).title} theme`
+    this.flash(`${themeNamed(choice.active).title} theme`)
     this.emit()
   }
 
@@ -690,18 +686,20 @@ export class Manager {
   }
 
   /** `pushingHistory` is false for exactly one caller - `goBack` - so walking back does not
-   *  leave the file you just came from sitting on the stack you are walking. */
-  async open(path: string, pushingHistory = true): Promise<void> {
-    if (this.document?.path === path) return
-    if (!(await this.confirmDiscardingChanges())) return
+   *  leave the file you just came from sitting on the stack you are walking. Answers whether
+   *  the document changed: a cancelled prompt and a file that would not read both leave
+   *  the one that was open. */
+  async open(path: string, pushingHistory = true): Promise<boolean> {
+    if (this.document?.path === path) return true
+    if (!(await this.confirmDiscardingChanges())) return false
     // After the guard: a switch the user cancelled never happened, and pushing here would
     // have Back returning to a file that was never left.
     const leaving = this.document?.path ?? null
+    let opened = false
     try {
       this.document = await OpenDocument.load(path)
+      opened = true
       if (pushingHistory && leaving !== null) this.push(leaving)
-      this.error = null
-      this.notice = null
       this.scrollSync.reset()
       this.highlightedLine = null
       this.scrollRequest = null
@@ -710,19 +708,42 @@ export class Manager {
       this.documentWatcher.sync(new Set([dirname(path)]))
       if (this.folders.rootContaining(path) === null) this.addRoot(dirname(path))
     } catch (err) {
-      this.error = String(err)
+      this.showError(`Could not open ${basename(path)}: ${String(err)}`)
     }
     this.emit()
+    return opened
   }
 
-  /** Save is explicit in md-boss, so switching away from unsaved work has to ask. Two
-   *  answers for now - Save, or Don't Save - through the native question dialog; the
-   *  in-window three-way prompt with Cancel is its own task. */
+  /** Quit, from the menu, Cmd-Q or the window's close button - one road, so the guard the
+   *  Swift delegate ran in applicationShouldTerminate runs for all of them. A cancelled save
+   *  keeps the app up; otherwise the settings are flushed (the debounce would lose the last
+   *  change) and the process ends, the window state saved by the shell on the way out. */
+  async quit(): Promise<void> {
+    if (!(await this.prepareToExit())) return
+    await native().app.exit()
+  }
+
+  /** Everything quit does before the process ends, for the restart an update asks for too:
+   *  the unsaved-edits prompt, then the settings flushed. False keeps the app up. */
+  async prepareToExit(): Promise<boolean> {
+    if (!(await this.confirmDiscardingChanges())) return false
+    // A config dir that cannot be written is not a reason to keep the app up.
+    await this.settings.flush().catch((err) => console.error('settings not saved on quit:', err))
+    return true
+  }
+
+  /** Save is explicit in md-boss, so switching away from unsaved work has to ask. Returns
+   *  false when the user cancels - and when Save did not land, since a switch that lost the
+   *  edits it promised to keep is the one thing the prompt exists to prevent. */
   async confirmDiscardingChanges(): Promise<boolean> {
     const doc = this.document
     if (!doc || !doc.isDirty) return true
-    const save = await native().dialog.confirm(`Save changes to ${doc.name}?`, 'Save', "Don't Save")
-    if (!save) return true
+    const answer = await this.prompts.discard({
+      title: `Save changes to ${doc.name}?`,
+      message: "Your changes will be lost if you don't save them.",
+    })
+    if (answer === 'cancel') return false
+    if (answer === 'discard') return true
     await this.saveDocument()
     return !doc.isDirty
   }
@@ -1040,16 +1061,14 @@ export class Manager {
 
   // MARK: Messages
 
-  /** A transient line in the footer. The toast overlay (P9) takes both of these over;
-   *  until then an error is said the same way, since a refusal that stuck in the footer
-   *  until the next open would outlive the mistake. */
+  /** Something that happened, in passing. */
   flash(message: string): void {
-    this.notice = message
-    this.emit()
+    this.toast.info(message)
   }
 
+  /** Something that did not. Stays up longer. */
   showError(message: string): void {
-    this.flash(message)
+    this.toast.error(message)
   }
 
   // MARK: History
@@ -1069,12 +1088,17 @@ export class Manager {
    *  is what "back" meant anyway. */
   async goBack(): Promise<void> {
     while (this.history.length) {
-      const previous = this.history.pop()!
-      if (!(await native().fs.exists(previous))) continue
-      await this.open(previous, false)
-      this.emit()
-      return
+      const previous = this.history[this.history.length - 1]
+      if (await native().fs.exists(previous)) {
+        // Popped only once the switch happened: a Back answered with Cancel in the save
+        // prompt must still have somewhere to go back to.
+        if (!(await this.open(previous, false))) return
+        this.history.pop()
+        break
+      }
+      this.history.pop()
     }
+    this.emit()
   }
 
   private push(path: string): void {

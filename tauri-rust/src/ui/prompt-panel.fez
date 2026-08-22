@@ -1,10 +1,12 @@
 <script>
-  // A one-field prompt - a note's body, a rename - answered in the window, and the yes/no
-  // for something the app cannot take back (Move to Trash). Installs itself as the
-  // manager's prompt handlers on mount; Escape cancels, Return confirms a single-line
-  // field, Cmd-Return a multi-line one. In the confirm shape Return cancels: the
-  // destructive button is never one keystroke away, which is the convention everywhere
-  // else on the system - Cancel holds the focus and Tab reaches the other button.
+  // A one-field prompt - a note's body, a rename - answered in the window, the yes/no
+  // for something the app cannot take back (Move to Trash), and the Save / Don't Save /
+  // Cancel before unsaved edits would go. Installs itself as the manager's prompt handlers
+  // on mount; Escape cancels, Return confirms a single-line field, Cmd-Return a multi-line
+  // one. In the confirm shape Return cancels: the destructive button is never one keystroke
+  // away, which is the convention everywhere else on the system - Cancel holds the focus
+  // and Tab reaches the other button. In the discard shape Return is Save, the answer that
+  // loses nothing; Don't Save sits alone on the left, where the NSAlert put it.
   class {
     init() {
       this.state.open = false
@@ -19,8 +21,10 @@
     onMount() {
       this.local.handler = (options) => this.ask(options)
       this.local.confirmHandler = (options) => this.askConfirm(options)
+      this.local.discardHandler = (options) => this.askDiscard(options)
       MdBoss.manager.prompts.handler = this.local.handler
       MdBoss.manager.prompts.confirmHandler = this.local.confirmHandler
+      MdBoss.manager.prompts.discardHandler = this.local.discardHandler
       this.on(document, 'keydown', (event) => {
         if (!this.state.open) return
         if (event.key === 'Escape') {
@@ -29,13 +33,14 @@
           this.finish(this.cancelValue())
         } else if (event.key !== 'Enter') {
           return
-        } else if (this.state.kind === 'confirm') {
-          // A focused button takes its own Return; anywhere else it is Cancel.
+        } else if (this.state.kind !== 'text') {
+          // A focused button takes its own Return; anywhere else it is the shape's default -
+          // Cancel for a confirm, Save for a discard.
           const focused = document.activeElement
           if (focused && focused.tagName === 'BUTTON' && this.root.contains(focused)) return
           event.preventDefault()
           event.stopPropagation()
-          this.finish(false)
+          this.finish(this.state.kind === 'confirm' ? false : 'save')
         } else if (event.metaKey || event.ctrlKey || !this.state.multiline) {
           event.preventDefault()
           event.stopPropagation()
@@ -48,10 +53,13 @@
       const prompts = MdBoss.manager.prompts
       if (prompts.handler === this.local.handler) prompts.handler = null
       if (prompts.confirmHandler === this.local.confirmHandler) prompts.confirmHandler = null
+      if (prompts.discardHandler === this.local.discardHandler) prompts.discardHandler = null
     }
 
     cancelValue() {
-      return this.state.kind === 'confirm' ? false : null
+      if (this.state.kind === 'confirm') return false
+      if (this.state.kind === 'discard') return 'cancel'
+      return null
     }
 
     field() {
@@ -74,11 +82,19 @@
     }
 
     askConfirm(options) {
+      return this.askButtons('confirm', options, options.confirm)
+    }
+
+    askDiscard(options) {
+      return this.askButtons('discard', options, 'Save')
+    }
+
+    askButtons(kind, options, confirm) {
       if (this.local.resolve) this.finish(this.cancelValue())
-      this.state.kind = 'confirm'
+      this.state.kind = kind
       this.state.title = options.title
       this.state.message = options.message
-      this.state.confirm = options.confirm
+      this.state.confirm = confirm
       this.state.multiline = false
       this.state.placeholder = ''
       this.local.value = ''
@@ -97,10 +113,11 @@
         field.focus()
         field.select()
       }
-      const cancel = this.find('.cancel')
-      if (this.state.kind === 'confirm' && cancel && !cancel.dataset.primed) {
-        cancel.dataset.primed = '1'
-        cancel.focus()
+      // The button Return lands on holds the focus: Cancel for a confirm, Save for a discard.
+      const focus = this.find(this.state.kind === 'confirm' ? '.cancel' : '.primary')
+      if (this.state.kind !== 'text' && focus && !focus.dataset.primed) {
+        focus.dataset.primed = '1'
+        focus.focus()
       }
     }
 
@@ -112,7 +129,13 @@
     }
 
     confirm() {
-      this.finish(this.state.kind === 'confirm' ? true : this.field().value)
+      if (this.state.kind === 'confirm') return this.finish(true)
+      if (this.state.kind === 'discard') return this.finish('save')
+      this.finish(this.field().value)
+    }
+
+    discard() {
+      this.finish('discard')
     }
 
     cancel() {
@@ -201,13 +224,21 @@
     border-color: var(--alert-caution);
     background: var(--alert-caution);
   }
+
+  /* Don't Save: the edits go, but the file stays - caution in outline rather than filled,
+     and pushed to the far side from Save so the two are never neighbours. */
+  .buttons button.discard {
+    margin-right: auto;
+    border-color: var(--alert-caution);
+    color: var(--alert-caution);
+  }
 </style>
 
 <div class={'overlay' + (state.open ? '' : ' hidden')}>
   {#if state.open}
     <div class="panel">
       <div class="title text-default">{state.title}</div>
-      <div class={'message text-small' + (state.kind === 'confirm' ? '' : ' text-mono')}>{state.message}</div>
+      <div class={'message text-small' + (state.kind === 'text' ? ' text-mono' : '')}>{state.message}</div>
       {#if state.kind === 'text'}
         {#if state.multiline}
           <textarea class="field text-default" spellcheck="false" placeholder={state.placeholder}></textarea>
@@ -216,6 +247,9 @@
         {/if}
       {/if}
       <div class="buttons">
+        {#if state.kind === 'discard'}
+          <button class="discard text-buttons pointer" onclick="fez.discard()">Don't Save</button>
+        {/if}
         <button class="cancel text-buttons pointer" onclick="fez.cancel()">Cancel</button>
         <button class={'primary text-buttons pointer' + (state.kind === 'confirm' ? ' destructive' : '')} onclick="fez.confirm()">{state.confirm}</button>
       </div>

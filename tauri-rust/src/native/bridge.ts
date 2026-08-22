@@ -45,8 +45,6 @@ export interface NativeFs {
 }
 
 export interface NativeDialog {
-  /** A two-way question. True for `okLabel`. Closing the dialog counts as cancel. */
-  confirm(message: string, okLabel: string, cancelLabel: string): Promise<boolean>
   /** Folder picker, several at once, starting where the last one ended. Empty when cancelled. */
   openFolders(startIn: string | null): Promise<string[]>
   /** Single document picker. Null when cancelled. */
@@ -184,6 +182,12 @@ export interface NativeMenu {
 export interface NativeApp {
   /** The version from tauri.conf.json - what the About panel shows. */
   version(): Promise<string>
+  /** Ends the process. Asked by `Manager.quit` once unsaved edits are settled - the menu's
+   *  Quit and the window's close button both go through it, so the guard runs for both. */
+  exit(): Promise<void>
+  /** The window's close button, Cmd-W. The shell holds the close; `listener` decides what
+   *  happens (quit, after the guard) - the window itself is never closed, the app exits. */
+  onCloseRequested(listener: () => void): Promise<Unwatch>
 }
 
 /** `md-boss <paths...>`: the positional arguments as typed and the directory they were
@@ -193,20 +197,45 @@ export interface OpenRequest {
   cwd: string
 }
 
-/** The command line (src-tauri/src/cli.rs). One process serves every launch: the first
- *  one's arguments are read at boot, a later `md-boss …` hands its own to the running
- *  window and exits. */
+/** The command line and the file associations (src-tauri/src/cli.rs). One process serves
+ *  every launch: the first one's arguments are read at boot, a later `md-boss …` or a
+ *  Finder double-click hands its own to the running window. */
 export interface NativeCli {
-  /** What this process was started with. No paths from the Dock, a double-click or a bare
-   *  `md-boss`, and the session is restored instead. */
-  launch(): Promise<OpenRequest>
-  /** A second launch while this one runs; the shell has already brought the window forward. */
+  /** Every request that arrived before this was asked - the first launch's own, plus any
+   *  file opened from Finder while the page was still loading. One entry with no paths
+   *  from a bare `md-boss` or a Dock click, and the session is restored instead. Asked
+   *  once, after `onOpen` is listening, so nothing falls between the two. */
+  launch(): Promise<OpenRequest[]>
+  /** A later launch or open while this one runs; the shell has already brought the window
+   *  forward. */
   onOpen(listener: (request: OpenRequest) => void): Promise<Unwatch>
+}
+
+/** A newer signed build the update endpoint lists for this platform. */
+export interface AvailableUpdate {
+  version: string
+  /** Fetches the package and checks its signature against the key in tauri.conf.json. */
+  download(): Promise<void>
+  /** Puts the downloaded package in place of the running build, so the next launch is the
+   *  new version. On Windows the installer ends this process itself. */
+  install(): Promise<void>
+}
+
+/** Self-update over the GitHub release's latest.json (src/models/updater.ts is the flow). */
+export interface NativeUpdater {
+  /** False where there is nothing signed to update: dev builds and the browser build. */
+  enabled: boolean
+  /** Null when the running version is the newest listed. Rejects when the endpoint cannot
+   *  be read - offline, or before the first release. */
+  check(): Promise<AvailableUpdate | null>
+  /** Ends this process and starts the installed build. */
+  relaunch(): Promise<void>
 }
 
 export interface Native {
   platform: Platform
   app: NativeApp
+  updater: NativeUpdater
   fs: NativeFs
   dialog: NativeDialog
   clipboard: NativeClipboard

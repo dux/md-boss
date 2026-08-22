@@ -165,7 +165,7 @@ describe('external changes', () => {
     await tick()
     await tick()
     expect(manager.document?.text).toBe('two')
-    expect(manager.notice).toBe('Reloaded a.md')
+    expect(manager.toast.text).toBe('Reloaded a.md')
     expect(changes).toBe(1)
     manager.setDocumentText('mine')
     await native().fs.write('/w/a.md', 'three')
@@ -200,16 +200,15 @@ describe('history', () => {
 
   test('a dirty document asks; Save keeps the edit, Don\'t Save drops it', async () => {
     const files: Record<string, string> = { '/w/a.md': 'a', '/w/b.md': 'b' }
-    const nat = memoryNative(files)
-    installNative(nat)
+    installNative(memoryNative(files))
     const manager = new Manager(await SettingsStore.load(), await RootFolders.load(), '/home/dev')
     await manager.open('/w/a.md')
     manager.setDocumentText('a edited')
-    nat.dialog.confirm = async () => true
+    manager.prompts.discardHandler = async () => 'save'
     await manager.open('/w/b.md')
     expect(files['/w/a.md']).toBe('a edited')
     manager.setDocumentText('b edited')
-    nat.dialog.confirm = async () => false
+    manager.prompts.discardHandler = async () => 'discard'
     await manager.open('/w/a.md')
     expect(files['/w/b.md']).toBe('b')
     expect(manager.document?.path).toBe('/w/a.md')
@@ -236,7 +235,7 @@ describe('theme switching', () => {
     expect(manager.theme.id).toBe('paper')
     manager.setTheme('nord')
     expect(manager.theme.id).toBe('nord')
-    expect(manager.notice).toBe('Nord theme')
+    expect(manager.toast.text).toBe('Nord theme')
     manager.toggleLightDark()
     expect(manager.theme.id).toBe('paper')
     manager.setTheme('github')

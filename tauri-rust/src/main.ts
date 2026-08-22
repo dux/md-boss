@@ -22,12 +22,24 @@ const menu = new AppMenu(globalThis.MdBoss, native().platform, aboutInfo(await n
 await menu.install()
 installShortcuts(globalThis.MdBoss, menu)
 globalThis.MdBoss.manager.startPolling()
-// `md-boss <paths>` opens those instead of the last session; a later launch while this one
-// runs arrives on onOpen, its window already brought forward by the Rust side.
-const launch = await native().cli.launch()
-if (launch.paths.length > 0) void globalThis.MdBoss.manager.openFromCLI(launch)
-else void globalThis.MdBoss.manager.restoreSession()
+// Packaged builds only (the Native says): a newer release is downloaded in the background
+// and offered as "Restart to update"; nothing is said when there is none.
+void globalThis.MdBoss.updater.checkOnLaunch()
+// `md-boss <paths>` and a file opened from Finder open those instead of the last session; a
+// later launch or open while this one runs arrives on onOpen, its window already brought
+// forward by the Rust side. Listening first, then asking: what arrived in between the two
+// would otherwise be lost.
 await native().cli.onOpen((request) => void globalThis.MdBoss.manager.openFromCLI(request))
+const launches = await native().cli.launch()
+if (launches.some((l) => l.paths.length > 0)) {
+  void (async () => {
+    for (const launch of launches) await globalThis.MdBoss.manager.openFromCLI(launch)
+  })()
+} else {
+  void globalThis.MdBoss.manager.restoreSession()
+}
+// The close button is a quit, through the same guard as the menu's.
+await native().app.onCloseRequested(() => void globalThis.MdBoss.manager.quit())
 installThemeSync(globalThis.MdBoss.settings, document.getElementById('theme')!)
 
 // Fez after the app object: components reach MdBoss from init().
@@ -47,4 +59,5 @@ await import('./ui/settings-panel.fez')
 await import('./ui/prompt-panel.fez')
 await import('./ui/context-menu.fez')
 await import('./ui/notes-pane.fez')
+await import('./ui/toast-overlay.fez')
 await import('./ui/md-boss-app.fez')

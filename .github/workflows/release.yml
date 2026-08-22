@@ -1,0 +1,97 @@
+# Tag push (v0.1.0) -> one GitHub release carrying every platform bundle plus latest.json
+# for the in-app updater. tauri-action finds or creates the release named after the tag,
+# so the three matrix jobs land their assets on the same one.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  # The tauri crate links webkit2gtk / gtk even for cargo test, so the test job needs the
+  # same packages as the Linux build.
+  LINUX_DEPS: build-essential curl wget file libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: tauri-rust/src-tauri
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y $LINUX_DEPS
+      - name: bun install
+        working-directory: tauri-rust
+        run: bun install --frozen-lockfile
+      - name: bun test
+        working-directory: tauri-rust
+        run: bun test
+      - name: cargo test
+        working-directory: tauri-rust/src-tauri
+        run: cargo test --quiet
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target universal-apple-darwin
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - platform: windows-latest
+            args: ''
+            targets: ''
+          - platform: ubuntu-22.04
+            args: ''
+            targets: ''
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: tauri-rust/src-tauri
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y $LINUX_DEPS
+      - name: bun install
+        working-directory: tauri-rust
+        run: bun install --frozen-lockfile
+      # tauri-action picks bun from tauri-rust/bun.lock and runs `bun tauri build`, which
+      # runs beforeBuildCommand (tsc + vite build) before cargo. The signing key makes the
+      # updater packages (.app.tar.gz / .nsis.zip / .msi.zip / .AppImage + .sig) that
+      # latest.json points at; without it tauri-cli refuses to bundle.
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: tauri-rust
+          tagName: ${{ github.ref_name }}
+          releaseName: MdBoss ${{ github.ref_name }}
+          releaseBody: |
+            macOS: `MdBoss_<version>_universal.dmg`, or `curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh | bash`.
+            Windows: `MdBoss_<version>_x64-setup.exe` or the `.msi`.
+            Linux: `MdBoss_<version>_amd64.deb` or `.AppImage`; the same install.sh installs either.
+            Installed copies update themselves from this release.
+          releaseDraft: false
+          prerelease: false
+          uploadUpdaterJson: true
+          args: ${{ matrix.args }}

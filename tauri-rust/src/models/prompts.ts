@@ -25,10 +25,22 @@ export interface ConfirmOptions {
 
 export type ConfirmHandler = (options: ConfirmOptions) => Promise<boolean>
 
+/** The three-way question before unsaved edits would be lost - switching document, quitting.
+ *  Save is the default, the one Return lands on; Don't Save is a click away; Escape cancels. */
+export interface DiscardOptions {
+  title: string
+  message: string
+}
+
+export type DiscardAnswer = 'save' | 'discard' | 'cancel'
+
+export type DiscardHandler = (options: DiscardOptions) => Promise<DiscardAnswer>
+
 export class Prompts {
   /** Null until a panel mounts; a prompt with nobody to answer it is cancelled. */
   handler: TextPromptHandler | null = null
   confirmHandler: ConfirmHandler | null = null
+  discardHandler: DiscardHandler | null = null
 
   /** The text entered, or null when cancelled. Single-line answers are trimmed and an empty
    *  one reads as cancel - a blank title is not a title. */
@@ -45,5 +57,12 @@ export class Prompts {
   async confirm(options: ConfirmOptions): Promise<boolean> {
     if (!this.confirmHandler) return false
     return this.confirmHandler(options)
+  }
+
+  /** Save, Don't Save or Cancel; nobody to ask is cancel - unsaved edits are never dropped
+   *  by default. */
+  async discard(options: DiscardOptions): Promise<DiscardAnswer> {
+    if (!this.discardHandler) return 'cancel'
+    return this.discardHandler(options)
   }
 }

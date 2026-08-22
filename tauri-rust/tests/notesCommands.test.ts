@@ -28,7 +28,7 @@ describe('note commands', () => {
     const note = manager.notes.noteAt('/home/dev/notes/a.md', 1)
     expect(note).toEqual({ path: '~/notes/a.md', line: 1, title: 'The plan', body: 'remember this' })
     expect(files['/home/dev/notes/.md-boss']).toContain('remember this')
-    expect(manager.notice).toBe('Note saved on line 1')
+    expect(manager.toast.text).toBe('Note saved on line 1')
     expect(manager.hasNoteAtCursor).toBe(true)
 
     manager.prompts.handler = async (o) => {

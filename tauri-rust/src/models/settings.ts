@@ -31,10 +31,6 @@ export interface SettingsData {
   lastOpenedFolder: string | null
   /** Never listed in the tree. Editable by hand in settings.json. */
   skipFolders: string[]
-  windowX: number | null
-  windowY: number | null
-  windowWidth: number | null
-  windowHeight: number | null
 }
 
 export function defaultSettings(): SettingsData {
@@ -58,10 +54,6 @@ export function defaultSettings(): SettingsData {
       'node_modules', '.build', '.git', 'DerivedData',
       'Pods', '__pycache__', '.next', 'vendor', 'dist', 'coverage',
     ],
-    windowX: null,
-    windowY: null,
-    windowWidth: null,
-    windowHeight: null,
   }
 }
 

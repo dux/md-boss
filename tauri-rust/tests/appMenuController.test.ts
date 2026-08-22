@@ -3,8 +3,9 @@ import { Manager } from '../src/models/manager'
 import { aboutInfo, flatItems } from '../src/models/appMenu'
 import { RootFolders } from '../src/models/rootFolders'
 import { SettingsStore } from '../src/models/settingsStore'
+import { Updater } from '../src/models/updater'
 import { installNative, native } from '../src/native/bridge'
-import { type MemoryMenu, memoryNative } from '../src/native/memory'
+import { type MemoryApp, type MemoryMenu, type MemoryUpdater, memoryNative } from '../src/native/memory'
 import { AppMenu } from '../src/ui/appMenu'
 import { Panels } from '../src/ui/panels'
 
@@ -23,11 +24,12 @@ async function setup(files: Record<string, string>, platform: 'macos' | 'linux' 
   await manager.notes.reload()
   await manager.tree.refreshAll()
   const panels = new Panels()
-  const menu = new AppMenu({ manager, panels }, platform, aboutInfo('1.0.0'))
+  const updater = new Updater(native().updater, manager.toast, () => manager.prepareToExit())
+  const menu = new AppMenu({ manager, panels, updater }, platform, aboutInfo('1.0.0'))
   await menu.install()
   const twin = native().menu as MemoryMenu
   twin.patches.length = 0
-  return { manager, panels, menu, twin, files }
+  return { manager, panels, updater, menu, twin, files }
 }
 
 const press = (code: string, over: Partial<KeyboardEvent> = {}) =>
@@ -77,6 +79,61 @@ describe('AppMenu', () => {
     await tick()
     expect(manager.document?.text).toBe('# a')
     expect(manager.isDirty).toBe(false)
+  })
+
+  test('the Help item checks for updates, and is the restart once one is downloaded', async () => {
+    const { manager, updater, twin } = await setup({ [at('a.md')]: '# a' })
+    const nat = native().updater as MemoryUpdater
+    twin.click('check-updates')
+    await tick()
+    expect(manager.toast.text).toBe('md-boss is up to date')
+
+    nat.offer('9.9.9')
+    twin.click('check-updates')
+    await tick()
+    await tick()
+    expect(updater.ready).toBe(true)
+    expect(twin.patches).toContainEqual({ id: 'check-updates', label: 'Restart to Update' })
+
+    twin.click('check-updates')
+    await tick()
+    await tick()
+    expect(nat.installed).toEqual(['9.9.9'])
+    expect(nat.relaunches).toBe(1)
+  })
+
+  test('Quit and the close button run the unsaved-edits guard before the process ends', async () => {
+    const { manager, twin } = await setup({ [at('a.md')]: '# a' })
+    const app = native().app as MemoryApp
+    await manager.open(at('a.md'))
+    manager.setDocumentText('changed')
+    // Save fails to stick: the quit is refused and the app stays up.
+    manager.prompts.discardHandler = async () => 'save'
+    const write = native().fs.write
+    native().fs.write = async () => { throw new Error('disk full') }
+    twin.click('quit')
+    await tick()
+    await tick()
+    expect(app.exits).toBe(0)
+    expect(manager.isDirty).toBe(true)
+    expect(manager.toast.text).toBe('Could not save: Error: disk full')
+
+    // Don't Save: the edits go, and so does the process - settings flushed on the way.
+    native().fs.write = write
+    manager.prompts.discardHandler = async () => 'discard'
+    manager.settings.patch({ showSidebar: false })
+    twin.click('quit')
+    await tick()
+    await tick()
+    expect(app.exits).toBe(1)
+    expect(JSON.parse(await native().fs.read(`${HOME}/.config/md-boss/settings.json`)).showSidebar).toBe(false)
+
+    // The close button is the same road (main.ts installs it).
+    await app.onCloseRequested(() => void manager.quit())
+    app.closeWindow()
+    await tick()
+    await tick()
+    expect(app.exits).toBe(2)
   })
 
   test('Bold / Italic / Link go to the raw pane as one-shot requests, only while it is up', async () => {

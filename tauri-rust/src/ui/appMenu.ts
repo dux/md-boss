@@ -16,7 +16,7 @@ export class AppMenu {
   private nativeAccelerators = false
 
   constructor(
-    private readonly app: Pick<App, 'manager' | 'panels'>,
+    private readonly app: Pick<App, 'manager' | 'panels' | 'updater'>,
     private readonly platform: Platform,
     private readonly about: AboutInfo,
   ) {}
@@ -34,6 +34,7 @@ export class AppMenu {
     manager.notes.onChange(sync)
     manager.tree.onChange(sync)
     manager.onCursorChange(sync)
+    this.app.updater.onChange(sync)
     this.sync()
   }
 
@@ -63,6 +64,8 @@ export class AppMenu {
       visiblePanes: visiblePanes(data),
       showSidebar: data.showSidebar,
       themeID: manager.theme.id,
+      canCheckUpdates: this.app.updater.enabled,
+      updateReady: this.app.updater.ready,
     }
   }
 
@@ -125,7 +128,9 @@ export class AppMenu {
       case 'smaller': return manager.zoom(-1)
       case 'actual-size': return manager.resetZoom()
       case 'toggle-light-dark': return manager.toggleLightDark()
+      case 'check-updates': return void this.app.updater.fromMenu()
       case 'github': return void native().shell.openURL(GITHUB_URL)
+      case 'quit': return void manager.quit()
       default: console.error(`menu action without a handler: ${id}`)
     }
   }

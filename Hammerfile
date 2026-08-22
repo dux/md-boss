@@ -311,9 +311,8 @@ task :watch do
   end
 end
 
-# The Tauri port in tauri-rust/ (doc/feature/port-tauri.md). Namespaced while the Swift
-# app is still the one that ships; the last phase of the port promotes these to the
-# top-level names.
+# The Tauri app in tauri-rust/ (doc/feature/port-tauri.md). Namespaced because the Swift
+# app in app/ ships alongside it and keeps the top-level names.
 TAURI_DIR ||= 'tauri-rust'
 
 namespace :tauri do
@@ -354,17 +353,44 @@ namespace :tauri do
     end
   end
 
+  # The release dmg is universal when both Apple targets are installed (rustup); a
+  # Homebrew rust has only the host target, and the build falls back to it rather than
+  # failing on a missing x86_64 std.
+  def universal_target
+    return nil unless RUBY_PLATFORM.include?('darwin')
+    installed = `rustup target list --installed 2>/dev/null`.split
+    return '--target universal-apple-darwin' if %w[aarch64-apple-darwin x86_64-apple-darwin].all? { |t| installed.include?(t) }
+    say.yellow 'universal dmg needs rustup with aarch64-apple-darwin and x86_64-apple-darwin - building the host arch only'
+    nil
+  end
+
+  # bundle.createUpdaterArtifacts makes a release build sign its update packages, and
+  # tauri-cli refuses to build without the key. CI has it as TAURI_SIGNING_PRIVATE_KEY; a
+  # local release build reads the generated key file from tmp/ when it is there.
+  UPDATER_KEY ||= 'tmp/md-boss-updater.key'
+
+  def signing_env
+    return {} if ENV['TAURI_SIGNING_PRIVATE_KEY'] || ENV['TAURI_SIGNING_PRIVATE_KEY_PATH']
+    return { 'TAURI_SIGNING_PRIVATE_KEY_PATH' => File.expand_path(UPDATER_KEY) } if File.exist?(UPDATER_KEY)
+    say.yellow "no updater signing key: set TAURI_SIGNING_PRIVATE_KEY or put the key at ./#{UPDATER_KEY} - the release build will stop at the updater artifacts"
+    {}
+  end
+
   task :build do
     desc 'Lint, test, then build the app - debug and unbundled unless --release'
-    opt :release, type: :boolean, desc: 'Optimised build with the platform bundles (dmg / msi / deb ...)'
+    opt :release, type: :boolean, desc: 'Optimised build with the platform bundles (dmg / msi / nsis / appimage / deb) and the signed updater packages'
     proc do |opts|
       hammer 'tauri:install'
       hammer 'tauri:lint'
       hammer 'tauri:test'
-      flags = opts[:release] ? '' : '--debug --no-bundle'
+      flags = opts[:release] ? universal_target : '--debug --no-bundle'
+      env = opts[:release] ? signing_env.map { |k, v| "#{k}=#{v}" }.join(' ') : ''
       say "building #{APP_NAME} (tauri, #{opts[:release] ? 'release' : 'debug'})", :cyan
-      tauri_sh "bun tauri build #{flags}".strip
+      tauri_sh "#{env} bun tauri build #{flags}".strip
       say.green 'built'
+      if opts[:release]
+        Dir.glob("#{TAURI_DIR}/src-tauri/target/**/release/bundle/{dmg,msi,nsis,appimage,deb}/*.{dmg,msi,exe,AppImage,deb}").each { |path| say.green "bundle: ./#{path}" }
+      end
     end
   end
 

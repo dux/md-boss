@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use tauri::Manager;
 use tauri_plugin_cli::CliExt;
+use tauri_plugin_window_state::StateFlags;
 
 /// `~/.config/md-boss` on every OS - plain text, meant to be edited by hand. `MD_BOSS_CONFIG`
 /// points a dev build or a test at a scratch folder instead of the real one.
@@ -55,20 +56,42 @@ fn allow_asset_roots_cmd(app: tauri::AppHandle, roots: Vec<String>) -> Result<()
     Ok(())
 }
 
+/// Quit, asked by the page once it has settled unsaved edits (Manager.quit). The menu's Quit
+/// is a plain item routed there rather than the predefined one: on macOS that one is
+/// `terminate:` and on Windows `PostQuitMessage`, neither of which asks anybody first.
+#[tauri::command]
+fn quit_cmd(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 fn main() {
     // Single-instance first: a second launch is answered (cli::forward) and exits inside
     // the build, before any other plugin runs or a window exists.
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(cli::forward))
         .plugin(tauri_plugin_cli::init())
+        // Frame persistence, the WindowAccessor's job in the Swift app: position and size
+        // back on the next launch, maximized too. Not fullscreen or visibility - a window
+        // restored into a space-filling fullscreen is not how anyone wants to arrive.
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        // Self-update over plugins.updater in tauri.conf.json (the release's latest.json and
+        // the public key); the process plugin is the relaunch once a package is in place.
+        // The page decides when to check and asks before restarting (src/models/updater.ts).
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(Arc::new(walk::Scanner::default()))
         .manage(Arc::new(search::Generation::default()))
         .invoke_handler(tauri::generate_handler![
             config_dir,
             trash_cmd,
+            quit_cmd,
             allow_asset_roots_cmd,
             cli::launch_cmd,
             walk::list_dir_cmd,
@@ -108,7 +131,18 @@ fn main() {
         }
         _ => {}
     }
-    app.manage(cli::launch_request(app.handle()));
+    app.manage(cli::inbox(cli::launch_request(app.handle())));
 
-    app.run(|_, _| {});
+    // macOS hands Finder's double-click, Open With and a drop on the Dock icon to the running
+    // process as URLs rather than argv - on Windows and Linux an association launches
+    // `md-boss <file>` and the cli plugin already reads it. The first of these can arrive
+    // before the page is up; the inbox keeps it.
+    app.run(|app, event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Opened { urls } = event {
+            cli::opened(app, urls);
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = (app, event);
+    });
 }

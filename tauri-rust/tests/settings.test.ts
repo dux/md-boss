@@ -76,7 +76,7 @@ describe('loading settings.json', () => {
   test('optionals accept a value or null', () => {
     expect(parseSettings('{"lastOpenedFile": "/a.md"}').lastOpenedFile).toBe('/a.md')
     expect(parseSettings('{"lastOpenedFile": null}').lastOpenedFile).toBeNull()
-    expect(parseSettings('{"windowX": 12.5}').windowX).toBe(12.5)
+    expect(parseSettings('{"lastOpenedFolder": "/w"}').lastOpenedFolder).toBe('/w')
   })
 
   test('serialize is pretty, sorted, and round-trips', () => {

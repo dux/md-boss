@@ -1,18 +1,28 @@
-//! `md-boss <paths...>` - what the command line asks the window to do.
+//! `md-boss <paths...>` - what the command line, Finder and the Dock ask the window to do.
 //!
 //! The arguments are parsed by tauri-plugin-cli's clap config (`plugins.cli` in
 //! tauri.conf.json): the first launch reads its own, and a second launch hands its argv and
 //! cwd to the running process through tauri-plugin-single-instance, where the same parser
 //! runs over them - so the two launches cannot disagree about what is a flag and what is a
 //! path. Relative paths are resolved by the page against `cwd` (src/models/cli.ts), which
-//! is why bin/md-boss execs the binary rather than going through `open -a`.
+//! is why bin/md-boss execs the binary rather than going through `open -a`. On macOS a
+//! double-click in Finder or a drop on the Dock icon arrives as `RunEvent::Opened` instead
+//! of argv (main.rs) and takes the same road in.
+//!
+//! Every request goes through the `Inbox`: what arrives before the page has asked for its
+//! launch is kept and answered by `launch_cmd` in one go, what arrives after is emitted -
+//! so a file opened by Finder while the webview is still loading is not lost, and the page
+//! never sees the same request twice.
+
+use std::sync::Mutex;
 
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tauri_plugin_cli::{CliExt, Matches};
 
-/// A second launch arrives on this event, with the same payload `launch_cmd` answers.
+/// A request that arrived after the page asked `launch_cmd` is emitted on this event, with
+/// one `OpenRequest` as payload.
 pub const OPEN_EVENT: &str = "cli-open";
 
 /// The positional paths as typed, and the directory they were typed in.
@@ -50,7 +60,36 @@ pub fn launch(matches: &Matches) -> Launch {
     Launch::Open(paths)
 }
 
-/// The first launch's request, asked once by the page at boot. Arguments that do not parse
+/// The requests waiting for the page, and whether it has asked for them yet. Managed state
+/// behind a mutex: `Opened` and the single-instance callback land on the main thread, the
+/// command on Tauri's pool.
+#[derive(Debug, Default)]
+pub struct Inbox {
+    pending: Vec<OpenRequest>,
+    listening: bool,
+}
+
+impl Inbox {
+    /// A request arrived. Back comes the request to emit, or nothing when it was kept for
+    /// `take` because the page has not asked yet.
+    pub fn push(&mut self, request: OpenRequest) -> Option<OpenRequest> {
+        if self.listening {
+            Some(request)
+        } else {
+            self.pending.push(request);
+            None
+        }
+    }
+
+    /// The page's one ask: everything kept so far, in arrival order; from here on `push`
+    /// hands requests back for emitting.
+    pub fn take(&mut self) -> Vec<OpenRequest> {
+        self.listening = true;
+        std::mem::take(&mut self.pending)
+    }
+}
+
+/// The first launch's request, read before the window exists. Arguments that do not parse
 /// (an unknown flag, the `-psn_…` an older macOS passes on a Dock launch) count as none,
 /// since a launch is not the place to refuse.
 pub fn launch_request<R: Runtime>(app: &AppHandle<R>) -> OpenRequest {
@@ -61,15 +100,24 @@ pub fn launch_request<R: Runtime>(app: &AppHandle<R>) -> OpenRequest {
     OpenRequest { paths, cwd: current_dir() }
 }
 
+/// The inbox as managed state, seeded with the first launch's request. An empty one is kept
+/// too: the page tells a launch with no paths (restore the session) from one that had some.
+pub fn inbox(first: OpenRequest) -> Mutex<Inbox> {
+    let mut inbox = Inbox::default();
+    inbox.pending.push(first);
+    Mutex::new(inbox)
+}
+
 fn current_dir() -> String {
     std::env::current_dir()
         .map(|d| d.to_string_lossy().into_owned())
         .unwrap_or_default()
 }
 
+/// Every request that arrived before the page asked, the first launch's first.
 #[tauri::command]
-pub fn launch_cmd(request: tauri::State<'_, OpenRequest>) -> OpenRequest {
-    request.inner().clone()
+pub fn launch_cmd(inbox: tauri::State<'_, Mutex<Inbox>>) -> Vec<OpenRequest> {
+    inbox.lock().expect("cli inbox poisoned").take()
 }
 
 /// The single-instance callback: a second `md-boss …` has exited and left its arguments
@@ -80,13 +128,39 @@ pub fn forward<R: Runtime>(app: &AppHandle<R>, argv: Vec<String>, cwd: String) {
         Ok(Launch::Open(paths)) => paths,
         _ => Vec::new(),
     };
+    deliver(app, OpenRequest { paths, cwd });
+}
+
+/// macOS: files and folders from Finder (double-click, Open With) and the Dock icon. They
+/// come as `file:` URLs, absolute already, so the cwd carries nothing the page needs.
+pub fn opened<R: Runtime>(app: &AppHandle<R>, urls: Vec<tauri::Url>) {
+    let paths = urls
+        .into_iter()
+        .filter_map(|url| url.to_file_path().ok())
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    if paths.is_empty() {
+        return;
+    }
+    deliver(app, OpenRequest { paths, cwd: current_dir() });
+}
+
+fn deliver<R: Runtime>(app: &AppHandle<R>, request: OpenRequest) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
     }
-    if let Err(err) = app.emit(OPEN_EVENT, OpenRequest { paths, cwd }) {
-        log::warn!("cli: could not forward the open request: {err}");
+    let emit = match app.try_state::<Mutex<Inbox>>() {
+        Some(inbox) => inbox.lock().expect("cli inbox poisoned").push(request),
+        // Before the inbox is managed (main.rs, right after build) nothing can ask yet, and
+        // nothing can arrive either: the window does not exist.
+        None => Some(request),
+    };
+    if let Some(request) = emit {
+        if let Err(err) = app.emit(OPEN_EVENT, request) {
+            log::warn!("cli: could not forward the open request: {err}");
+        }
     }
 }
 
@@ -120,6 +194,27 @@ mod tests {
     fn no_paths_is_an_empty_open() {
         assert_eq!(launch(&matches(&[("paths", Value::Null)])), Launch::Open(vec![]));
         assert_eq!(launch(&matches(&[])), Launch::Open(vec![]));
+    }
+
+    fn request(paths: &[&str], cwd: &str) -> OpenRequest {
+        OpenRequest { paths: paths.iter().map(|p| p.to_string()).collect(), cwd: cwd.into() }
+    }
+
+    #[test]
+    fn the_inbox_keeps_what_arrives_before_the_page_asks_and_hands_back_the_rest() {
+        let mut inbox = Inbox::default();
+        assert_eq!(inbox.push(request(&["a.md"], "/w")), None);
+        assert_eq!(inbox.push(request(&["/tmp/b.md"], "/")), None);
+        assert_eq!(inbox.take(), vec![request(&["a.md"], "/w"), request(&["/tmp/b.md"], "/")]);
+        // Asked: from now on nothing is kept, and asking again finds nothing.
+        assert_eq!(inbox.push(request(&["c.md"], "/w")), Some(request(&["c.md"], "/w")));
+        assert_eq!(inbox.take(), vec![]);
+    }
+
+    #[test]
+    fn the_first_launch_is_answered_even_with_no_paths() {
+        let mut inbox = inbox(request(&[], "/w")).into_inner().unwrap();
+        assert_eq!(inbox.take(), vec![request(&[], "/w")]);
     }
 
     #[test]

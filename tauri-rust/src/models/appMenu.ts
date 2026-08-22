@@ -38,13 +38,13 @@ export function aboutInfo(version: string): AboutInfo {
 export type PredefinedKind =
   | 'Undo' | 'Redo' | 'Cut' | 'Copy' | 'Paste' | 'SelectAll'
   | 'Minimize' | 'Maximize' | 'Fullscreen' | 'CloseWindow' | 'BringAllToFront'
-  | 'Hide' | 'HideOthers' | 'ShowAll' | 'Services' | 'Quit'
+  | 'Hide' | 'HideOthers' | 'ShowAll' | 'Services'
 
 export type MenuAction =
   | 'new-file' | 'open-folder' | 'open-file' | 'save' | 'revert' | 'rename' | 'trash' | 'reveal' | 'settings'
   | 'find' | 'find-in-project' | 'go-to-file' | 'bold' | 'italic' | 'link' | 'add-note' | 'delete-note'
   | 'back' | 'toggle-preview' | 'toggle-raw' | 'toggle-notes' | 'side-by-side' | 'toggle-sidebar'
-  | 'bigger' | 'smaller' | 'actual-size' | 'toggle-light-dark' | `theme:${ThemeID}` | 'github'
+  | 'bigger' | 'smaller' | 'actual-size' | 'toggle-light-dark' | `theme:${ThemeID}` | 'check-updates' | 'github' | 'quit'
 
 export interface MenuItemModel {
   kind: 'item'
@@ -91,6 +91,10 @@ export interface MenuState {
   visiblePanes: Pane[]
   showSidebar: boolean
   themeID: ThemeID
+  /** False in dev and browser builds, where nothing signed can be checked. */
+  canCheckUpdates: boolean
+  /** An update is downloaded: the Help item becomes "Restart to Update". */
+  updateReady: boolean
 }
 
 /** A patch the controller pushes when the model changes under a live menu. */
@@ -120,6 +124,10 @@ function item(id: MenuAction, label: string, accelerator: string | null = null, 
 export function buildAppMenu(s: MenuState): MenuModel[] {
   const mac = s.platform === 'macos'
   const menus: MenuModel[] = []
+  // Not the predefined Quit: that one is `terminate:` on macOS and PostQuitMessage on
+  // Windows, and neither asks about unsaved edits. Our item runs Manager.quit, which does.
+  // The labels are what the predefined one would have shown on each desktop.
+  const quit = item('quit', mac ? `Quit ${s.about.name}` : s.platform === 'windows' ? 'Exit' : 'Quit', 'CmdOrCtrl+Q')
 
   if (mac) {
     menus.push({
@@ -135,7 +143,7 @@ export function buildAppMenu(s: MenuState): MenuModel[] {
         predefined('HideOthers'),
         predefined('ShowAll'),
         separator,
-        predefined('Quit'),
+        quit,
       ],
     })
   }
@@ -162,7 +170,7 @@ export function buildAppMenu(s: MenuState): MenuModel[] {
       item('reveal', revealLabel(s.platform), 'CmdOrCtrl+Shift+R', s.hasTarget),
       ...(mac
         ? [separator, predefined('CloseWindow')]
-        : [separator, item('settings', 'Settings…', 'CmdOrCtrl+,'), separator, predefined('Quit')]),
+        : [separator, item('settings', 'Settings…', 'CmdOrCtrl+,'), separator, quit]),
     ],
   })
 
@@ -231,6 +239,10 @@ export function buildAppMenu(s: MenuState): MenuModel[] {
   menus.push({
     id: 'help', label: 'Help', role: 'help',
     items: [
+      // One item for the whole update flow (src/models/updater.ts): a check, and once the
+      // package is downloaded the restart that applies it.
+      item('check-updates', s.updateReady ? 'Restart to Update' : 'Check for Updates…', null, s.canCheckUpdates),
+      separator,
       item('github', `${s.about.name} on GitHub`),
       ...(mac ? [] : [separator, { kind: 'about', label: `About ${s.about.name}`, info: s.about } as MenuEntry]),
     ],

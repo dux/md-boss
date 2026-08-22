@@ -4,10 +4,13 @@ import { listen } from '@tauri-apps/api/event'
 import { CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu } from '@tauri-apps/api/menu'
 import { homeDir, join } from '@tauri-apps/api/path'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
-import { ask, open } from '@tauri-apps/plugin-dialog'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { open } from '@tauri-apps/plugin-dialog'
 import { exists, mkdir, readDir, readTextFile, rename, stat, watch, writeTextFile } from '@tauri-apps/plugin-fs'
 import { error as logError, info as logInfo, warn as logWarn } from '@tauri-apps/plugin-log'
 import { openPath, openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
+import { relaunch } from '@tauri-apps/plugin-process'
+import { check as checkForUpdate } from '@tauri-apps/plugin-updater'
 import type { MenuEntry } from '../models/appMenu'
 import { platformFromUserAgent } from '../models/platform'
 import type { Native, NotesFile, OpenRequest, RewriteOutcome, SearchResult } from './bridge'
@@ -48,7 +51,33 @@ export const tauriNative: Native = {
   platform,
   app: {
     version: () => getVersion(),
+    exit: () => invoke<void>('quit_cmd'),
+    // A JS listener on the close request makes the Rust side hold the close and leave the
+    // decision here; preventDefault keeps the window, and the listener exits the app or not.
+    onCloseRequested: (listener) =>
+      getCurrentWindow().onCloseRequested((event) => {
+        event.preventDefault()
+        listener()
+      }),
   },
+
+  // The updater plugin over plugins.updater in tauri.conf.json: the release's latest.json
+  // and the public key the packages are checked against. Off under `tauri dev` - nothing
+  // there is signed, and a dev build replacing itself with the release is not an update.
+  updater: {
+    enabled: !import.meta.env.DEV,
+    check: async () => {
+      const update = await checkForUpdate()
+      if (!update) return null
+      return {
+        version: update.version,
+        download: () => update.download(),
+        install: () => update.install(),
+      }
+    },
+    relaunch: () => relaunch(),
+  },
+
   fs: {
     read: (path) => readTextFile(path),
     write: (path, text) => writeTextFile(path, text),
@@ -105,7 +134,6 @@ export const tauriNative: Native = {
   },
 
   dialog: {
-    confirm: (message, okLabel, cancelLabel) => ask(message, { kind: 'warning', okLabel, cancelLabel }),
     openFolders: async (startIn) => {
       const picked = await open({ directory: true, multiple: true, defaultPath: startIn ?? undefined, title: 'Choose folders to show in the sidebar' })
       return picked ?? []
@@ -169,10 +197,10 @@ export const tauriNative: Native = {
     },
   },
 
-  // Both answered by src-tauri/src/cli.rs: the launch from the state it parsed before the
-  // window existed, a second launch as the event the single-instance callback emits.
+  // Both answered by src-tauri/src/cli.rs: the launches from the inbox it filled before
+  // the page asked, anything later as the event the inbox emits.
   cli: {
-    launch: () => invoke<OpenRequest>('launch_cmd'),
+    launch: () => invoke<OpenRequest[]>('launch_cmd'),
     onOpen: (listener) => listen<OpenRequest>('cli-open', (event) => listener(event.payload)),
   },
 

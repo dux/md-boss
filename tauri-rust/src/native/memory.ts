@@ -3,7 +3,7 @@ import { rewriting } from '../models/markdownLinks'
 import { parseAnnotationFile, serializeAnnotationFile } from '../models/notes'
 import { dirname } from '../models/paths'
 import type { MenuModel, MenuPatch } from '../models/appMenu'
-import type { Entry, Listing, Native, NativeCli, NativeMenu, OpenRequest, RewriteOutcome, Stat, Unwatch } from './bridge'
+import type { Entry, Listing, Native, NativeApp, NativeCli, NativeMenu, NativeUpdater, OpenRequest, RewriteOutcome, Stat, Unwatch } from './bridge'
 
 /** The menu twin keeps what it was given, so a test can read the installed model, the
  *  patches that followed, and click an item the way the menu bar would. */
@@ -33,6 +33,76 @@ function memoryMenu(): MemoryMenu {
   }
 }
 
+/** The app twin: no process to end, so `exits` counts the asks; `closeWindow` plays the
+ *  close button. */
+export interface MemoryApp extends NativeApp {
+  exits: number
+  closeWindow(): void
+}
+
+function memoryApp(): MemoryApp {
+  const listeners = new Set<() => void>()
+  return {
+    exits: 0,
+    version: async () => '0.0.0-dev',
+    async exit() {
+      this.exits++
+    },
+    async onCloseRequested(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    closeWindow() {
+      for (const listener of listeners) listener()
+    },
+  }
+}
+
+/** The updater twin: nothing to download in a browser tab or a test, so `check` answers
+ *  none until a test stages a version with `offer`; what was installed and how many
+ *  relaunches were asked are kept for the test to read. `failing` makes the check reject,
+ *  the way an unreachable endpoint does. */
+export interface MemoryUpdater extends NativeUpdater {
+  offer(version: string, steps?: { download?: () => Promise<void>; install?: () => Promise<void> }): void
+  failing: Error | null
+  downloaded: string[]
+  installed: string[]
+  relaunches: number
+}
+
+function memoryUpdater(): MemoryUpdater {
+  let offered: { version: string; download: () => Promise<void>; install: () => Promise<void> } | null = null
+  return {
+    enabled: true,
+    failing: null,
+    downloaded: [],
+    installed: [],
+    relaunches: 0,
+    offer(version, steps = {}) {
+      offered = { version, download: steps.download ?? (async () => {}), install: steps.install ?? (async () => {}) }
+    },
+    async check() {
+      if (this.failing) throw this.failing
+      const update = offered
+      if (!update) return null
+      return {
+        version: update.version,
+        download: async () => {
+          await update.download()
+          this.downloaded.push(update.version)
+        },
+        install: async () => {
+          await update.install()
+          this.installed.push(update.version)
+        },
+      }
+    },
+    async relaunch() {
+      this.relaunches++
+    },
+  }
+}
+
 /** The cli twin: no arguments in a browser tab or a test, and `open` plays a second launch. */
 export interface MemoryCli extends NativeCli {
   open(request: OpenRequest): void
@@ -41,7 +111,7 @@ export interface MemoryCli extends NativeCli {
 function memoryCli(cwd: string): MemoryCli {
   const listeners = new Set<(request: OpenRequest) => void>()
   return {
-    launch: async () => ({ paths: [], cwd }),
+    launch: async () => [{ paths: [], cwd }],
     async onOpen(listener) {
       listeners.add(listener)
       return () => listeners.delete(listener)
@@ -98,9 +168,8 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
 
   return {
     platform: 'macos',
-    app: {
-      version: async () => '0.0.0-dev',
-    },
+    app: memoryApp(),
+    updater: memoryUpdater(),
     fs: {
       read: async (p) => {
         if (!(p in files)) throw new Error(`no such file: ${p}`)
@@ -157,7 +226,6 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
       assetBase: () => '',
     },
     dialog: {
-      confirm: async () => true,
       openFolders: async () => roots.slice(0, 1),
       openFile: async () => paths().find((p) => p.endsWith('.md')) ?? null,
     },

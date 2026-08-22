@@ -27,8 +27,6 @@
       // mode the viewer is in.
       this.state.kind = null
       this.state.dirty = false
-      this.state.error = null
-      this.state.notice = null
     }
 
     /** What the preview asks for next to raw: the measure in em of the body size, which
@@ -62,22 +60,6 @@
       this.state.file = manager.document ? manager.abbreviateHome(manager.document.path) : null
       this.state.kind = manager.document ? MdBoss.documentKind(manager.document.path) : null
       this.state.dirty = manager.isDirty
-      this.state.error = manager.error
-      this.notify(manager.notice)
-    }
-
-    /** A one-line notice shows for a few seconds and then gives the footer back to the
-     *  path - the toast overlay (P9) takes this over. */
-    notify(notice) {
-      if (!notice || notice === this.local.lastNotice) return
-      this.local.lastNotice = notice
-      this.state.notice = notice
-      if (this.local.noticeTimer) clearTimeout(this.local.noticeTimer)
-      this.local.noticeTimer = setTimeout(() => {
-        this.state.notice = null
-        this.local.lastNotice = null
-        MdBoss.manager.notice = null
-      }, 3000)
     }
 
     save() {
@@ -337,15 +319,13 @@
 <settings-panel></settings-panel>
 <prompt-panel></prompt-panel>
 <context-menu></context-menu>
+<toast-overlay></toast-overlay>
+<!-- The footer holds only the open file's path: what the app has to say goes to the toast,
+     as StatusBarView.swift put it - a markdown reader should not push the text around to
+     say something. -->
 <footer class="text-small">
   {#if state.dirty}
     <button class="save text-small pointer" title="Save (⌘S)" onclick="fez.save()">Save</button>
   {/if}
-  {#if state.error}
-    <span class="path">{state.error}</span>
-  {:else if state.notice}
-    <span class="path">{state.notice}</span>
-  {:else}
-    <span class="path"><bdi>{state.file || 'No file open'}</bdi></span>
-  {/if}
+  <span class="path"><bdi>{state.file || 'No file open'}</bdi></span>
 </footer>

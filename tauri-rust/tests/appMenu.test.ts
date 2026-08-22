@@ -19,6 +19,8 @@ function state(over: Partial<MenuState> = {}): MenuState {
     visiblePanes: ['preview'],
     showSidebar: true,
     themeID: 'paper',
+    canCheckUpdates: true,
+    updateReady: false,
     ...over,
   }
 }
@@ -107,7 +109,7 @@ describe('menu structure', () => {
     const menus = buildAppMenu(state())
     const app = menus[0]
     expect(app.role).toBe('app')
-    expect(labels(app.items)).toEqual(['About md-boss', '-', 'Settings…', '-', 'Services', '-', 'Hide', 'HideOthers', 'ShowAll', '-', 'Quit'])
+    expect(labels(app.items)).toEqual(['About md-boss', '-', 'Settings…', '-', 'Services', '-', 'Hide', 'HideOthers', 'ShowAll', '-', 'Quit md-boss'])
     expect(menus.find((m) => m.id === 'window')!.role).toBe('window')
     expect(menus.find((m) => m.id === 'help')!.role).toBe('help')
     const about = app.items[0]
@@ -118,11 +120,18 @@ describe('menu structure', () => {
     for (const platform of ['windows', 'linux'] as Platform[]) {
       const menus = buildAppMenu(state({ platform }))
       const file = labels(menus.find((m) => m.id === 'file')!.items)
-      expect(file.slice(-4)).toEqual(['-', 'Settings…', '-', 'Quit'])
-      expect(labels(menus.find((m) => m.id === 'help')!.items)).toEqual(['md-boss on GitHub', '-', 'About md-boss'])
+      expect(file.slice(-4)).toEqual(['-', 'Settings…', '-', platform === 'windows' ? 'Exit' : 'Quit'])
+      expect(labels(menus.find((m) => m.id === 'help')!.items)).toEqual(['Check for Updates…', '-', 'md-boss on GitHub', '-', 'About md-boss'])
       expect(labels(menus.find((m) => m.id === 'window')!.items)).toEqual(['Minimize', 'Maximize', '-', 'CloseWindow'])
     }
-    expect(labels(buildAppMenu(state()).find((m) => m.id === 'help')!.items)).toEqual(['md-boss on GitHub'])
+    expect(labels(buildAppMenu(state()).find((m) => m.id === 'help')!.items)).toEqual(['Check for Updates…', '-', 'md-boss on GitHub'])
+  })
+
+  test('the Help item is the update flow: a check, then the restart once one is downloaded, off where nothing is signed', () => {
+    expect(byId(state()).get('check-updates')!).toMatchObject({ label: 'Check for Updates…', enabled: true, accelerator: null })
+    expect(byId(state({ updateReady: true })).get('check-updates')!.label).toBe('Restart to Update')
+    expect(byId(state({ canCheckUpdates: false })).get('check-updates')!.enabled).toBe(false)
+    expect(diffMenu(buildAppMenu(state()), buildAppMenu(state({ updateReady: true })))).toEqual([{ id: 'check-updates', label: 'Restart to Update' }])
   })
 
   test('the reveal item is named for the platform', () => {
@@ -175,7 +184,7 @@ describe('state in the menu', () => {
     for (const id of ['new-file', 'save', 'revert', 'rename', 'trash', 'reveal', 'find', 'find-in-project', 'go-to-file', 'bold', 'italic', 'link', 'add-note', 'delete-note', 'back']) {
       expect(off.get(id as never)!.enabled).toBe(false)
     }
-    for (const id of ['open-folder', 'open-file', 'settings', 'toggle-raw', 'side-by-side', 'toggle-sidebar', 'bigger', 'smaller', 'actual-size', 'toggle-light-dark', 'github']) {
+    for (const id of ['open-folder', 'open-file', 'settings', 'toggle-raw', 'side-by-side', 'toggle-sidebar', 'bigger', 'smaller', 'actual-size', 'toggle-light-dark', 'check-updates', 'github']) {
       expect(off.get(id as never)!.enabled).toBe(true)
     }
     const on = byId(state({ isDirty: true, canGoBack: true, hasNoteAtCursor: true }))

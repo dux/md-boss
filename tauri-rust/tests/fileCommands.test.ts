@@ -42,7 +42,7 @@ describe('new file', () => {
     manager.prompts.handler = async () => 'a.md'
     await manager.newFile()
     expect(files[at('a.md')]).toBe('# a')
-    expect(manager.notice).toBe('a.md already exists')
+    expect(manager.toast.text).toBe('a.md already exists')
     expect(manager.document).toBeNull()
 
     manager.prompts.handler = async () => null
@@ -71,7 +71,7 @@ describe('rename', () => {
     expect(files[at('a.md')]).toBe('# a')
 
     await manager.rename(at('a.md'), 'a.md')
-    expect(manager.notice).toBeNull()
+    expect(manager.toast.text).toBeNull()
     expect(files[at('a.md')]).toBe('# a')
 
     await manager.startRename(at('a.md'))
@@ -82,11 +82,11 @@ describe('rename', () => {
   test('validation refuses before anything is touched, with the rename wording', async () => {
     const { manager, files } = await fixture()
     await manager.rename(at('a.md'), 'b.md')
-    expect(manager.notice).toBe('notes already has a b.md')
+    expect(manager.toast.text).toBe('notes already has a b.md')
     await manager.rename(at('a.md'), '.hidden')
-    expect(manager.notice).toBe('.hidden.md is not a file name')
+    expect(manager.toast.text).toBe('.hidden.md is not a file name')
     await manager.rename(at('deep'), 'other')
-    expect(manager.notice).toBe('Only files can be renamed')
+    expect(manager.toast.text).toBe('Only files can be renamed')
     expect(documents(files)).toEqual([at('.md-boss'), at('a.md'), at('b.md'), at('deep/x.md'), at('index.md')])
   })
 
@@ -111,7 +111,7 @@ describe('rename', () => {
     expect(files[at('.md-boss')]).toContain('~/notes/plan.md')
     expect(files[at('index.md')]).toBe('see [a](./plan.md)')
     expect(files[at('deep/x.md')]).toBe('see [a](../plan.md) and [b](../b.md)')
-    expect(manager.notice).toBe('Updated 2 links in 2 files')
+    expect(manager.toast.text).toBe('Updated 2 links in 2 files')
     expect(rowPaths(manager)).toEqual([at('deep'), at('b.md'), at('index.md'), at('plan.md')])
     expect(manager.tree.cursorRow?.node.path).toBe(at('plan.md'))
   })
@@ -124,7 +124,7 @@ describe('rename', () => {
     expect(manager.document?.text).toBe('typed [a](./z.md) but not saved')
     expect(manager.document?.isDirty).toBe(true)
     expect(files[at('index.md')]).toBe('see [a](./a.md)')
-    expect(manager.notice).toBe('Updated 2 links in 2 files - 1 unsaved')
+    expect(manager.toast.text).toBe('Updated 2 links in 2 files - 1 unsaved')
   })
 
   test('changing only the case of the name is a rename', async () => {
@@ -176,7 +176,7 @@ describe('move to trash', () => {
     expect(manager.notes.noteCount(at('a.md'))).toBe(0)
     expect(manager.notes.noteCount(at('index.md'))).toBe(1)
     expect(manager.history).toEqual([])
-    expect(manager.notice).toBe('Moved a.md to the Trash - 2 notes removed')
+    expect(manager.toast.text).toBe('Moved a.md to the Trash - 2 notes removed')
     expect(rowPaths(manager)).toEqual([at('deep'), at('index.md')])
   })
 
@@ -193,7 +193,7 @@ describe('move to trash', () => {
       'Links to it in other documents are left as they are. Its note goes with it.',
       'Links to it in other documents are left as they are.',
     ])
-    expect(manager.notice).toBe('Moved x.md to the Trash')
+    expect(manager.toast.text).toBe('Moved x.md to the Trash')
   })
 
   test('folders and files that are gone are refused without asking', async () => {
@@ -202,9 +202,9 @@ describe('move to trash', () => {
       throw new Error('should not ask')
     }
     await manager.trash(at('deep'))
-    expect(manager.notice).toBe('Only files can be moved to the Trash')
+    expect(manager.toast.text).toBe('Only files can be moved to the Trash')
     await manager.trash(at('gone.md'))
-    expect(manager.notice).toBe('gone.md is no longer there')
+    expect(manager.toast.text).toBe('gone.md is no longer there')
   })
 
   test('Cmd-Backspace acts on the open document, else on the cursor row', async () => {
@@ -250,7 +250,7 @@ describe('move', () => {
     expect(files[at('other/y.md')]).toBe('see ![a](./a.md "t") and [a](./a.md)')
     // The moved file's own outbound link is left as it was - out of scope, by design.
     expect(files[at('other/a.md')]).toContain('[x](./deep/x.md)')
-    expect(manager.notice).toBe('Updated 4 links in 3 files')
+    expect(manager.toast.text).toBe('Updated 4 links in 3 files')
     expect(manager.tree.cursorRow?.node.path).toBe(at('other/a.md'))
     expect(rowPaths(manager)).toContain(at('other/a.md'))
   })
@@ -259,7 +259,7 @@ describe('move', () => {
     const { manager, files } = await fixture()
     manager.cut(at('a.md'))
     await manager.moveCut(at('deep'))
-    expect(manager.notice).toBe('deep already has a a.md')
+    expect(manager.toast.text).toBe('deep already has a a.md')
     expect(files[at('a.md')]).toBe('# a\nsee [x](./deep/x.md)')
     expect(files[at('deep/a.md')]).toBe('# the other a')
     expect(files[at('index.md')]).toBe('see [a](./a.md) and [b](./b.md)')
@@ -271,21 +271,21 @@ describe('move', () => {
     const { manager } = await fixture()
     manager.cut(at('a.md'))
     await manager.moveCut(ROOT)
-    expect(manager.notice).toBeNull()
+    expect(manager.toast.text).toBeNull()
     expect(manager.cutFile).toBeNull()
 
     manager.cut(at('gone.md'))
     await manager.moveCut(at('deep'))
-    expect(manager.notice).toBe('gone.md is no longer there')
+    expect(manager.toast.text).toBe('gone.md is no longer there')
     expect(manager.cutFile).toBeNull()
   })
 
   test('folders are refused, as is a destination that is not a folder', async () => {
     const { manager, files } = await fixture()
     await manager.move(at('deep'), at('other'))
-    expect(manager.notice).toBe('Only files can be moved')
+    expect(manager.toast.text).toBe('Only files can be moved')
     await manager.move(at('b.md'), at('index.md'))
-    expect(manager.notice).toBe('index.md is not a folder')
+    expect(manager.toast.text).toBe('index.md is not a folder')
     expect(documents(files).length).toBe(7)
   })
 
@@ -307,7 +307,7 @@ describe('move', () => {
     expect(manager.draggedFile).toBeNull()
     expect(files[at('other/b.md')]).toBe('# b')
     expect(files[at('index.md')]).toBe('see [a](./a.md) and [b](./other/b.md)')
-    expect(manager.notice).toBe('Updated 1 link in 1 file')
+    expect(manager.toast.text).toBe('Updated 1 link in 1 file')
   })
 
   test('an unsaved buffer that links to the moved file is rewritten in place, a clean open one is reloaded', async () => {
@@ -318,8 +318,9 @@ describe('move', () => {
     expect(manager.document?.text).toBe('typed [a](./other/a.md) but not saved')
     expect(manager.document?.isDirty).toBe(true)
     expect(files[at('index.md')]).toBe('see [a](./a.md) and [b](./b.md)')
-    expect(manager.notice).toBe('Updated 4 links in 3 files - 1 unsaved')
+    expect(manager.toast.text).toBe('Updated 4 links in 3 files - 1 unsaved')
 
+    manager.prompts.discardHandler = async () => 'discard'
     await manager.open(at('deep/x.md'))
     expect(manager.document?.text).toBe('see [a](../other/a.md)')
     await manager.move(at('other/a.md'), ROOT)
@@ -409,7 +410,7 @@ describe('links from the preview', () => {
   test('a missing target is reported by name', async () => {
     const { manager } = await linkFixture()
     await manager.followLink(`file://${at('gone.md')}`)
-    expect(manager.notice).toBe('Not found: gone.md')
+    expect(manager.toast.text).toBe('Not found: gone.md')
     expect(manager.document).toBeNull()
   })
 

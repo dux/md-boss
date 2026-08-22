@@ -31,6 +31,12 @@
     }
   },
   "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/dux/md-boss/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJGRThENDNGNkMyNENDMjcKUldRbnpDUnNQOVRvdnh2aWFIR1ZabndMVkpRZ3NRMUdXN3REUVhYS1JKQzMydmIyOUVVRHgxOUMK"
+    },
     "cli": {
       "description": "Opens folders and files in md-boss: a folder is added to the top of the sidebar, a file is opened and its folder listed. Relative paths resolve against the current directory; while the app runs, a second launch hands them to its window.",
       "args": [
@@ -46,13 +52,81 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "targets": [
+      "app",
+      "dmg",
+      "msi",
+      "nsis",
+      "appimage",
+      "deb"
+    ],
+    "category": "Productivity",
+    "copyright": "Copyright (c) 2026 dux",
+    "publisher": "dux",
+    "homepage": "https://github.com/dux/md-boss",
+    "shortDescription": "A markdown viewer and editor that looks like paper",
+    "longDescription": "Folders and files on the left, the rendered document on the right. Edit raw markdown side by side with the preview, keep notes anchored to lines, search across a project, and move files with their links rewritten.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "resources": {
+      "../bin/md-boss": "bin/md-boss"
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown",
+          "mdown",
+          "mkd",
+          "mkdn",
+          "mdwn",
+          "qmd",
+          "rmd"
+        ],
+        "name": "Markdown Document",
+        "description": "Markdown Document",
+        "mimeType": "text/markdown",
+        "role": "Editor",
+        "rank": "Default"
+      },
+      {
+        "ext": [
+          "txt"
+        ],
+        "name": "Plain Text",
+        "description": "Plain Text",
+        "mimeType": "text/plain",
+        "role": "Editor",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "csv"
+        ],
+        "name": "Comma-Separated Values",
+        "description": "Comma-Separated Values",
+        "mimeType": "text/csv",
+        "role": "Viewer",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [],
+        "contentTypes": [
+          "public.folder"
+        ],
+        "name": "Folder",
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
     ]
   }
 }
