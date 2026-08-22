@@ -9,6 +9,7 @@ import { FONT_SETTINGS, PANE_TITLE, PANES, paneShortTitle, visiblePanes } from '
 import { Panels } from './ui/panels'
 import { ContextMenus } from './ui/menus'
 import { isInside } from './ui/dragPoint'
+import { refreshIcon, rowIcon } from './ui/icons'
 import { NOTE_SCOPES, SCOPE_TITLE, noteLabel, partitionNotes, scopeIsCollapsible } from './models/notes'
 import { SEARCH_PLACEHOLDER } from './models/sidebarSearch'
 import { documentBaseURL } from './models/linkTarget'
@@ -50,6 +51,10 @@ export async function createApp() {
     parseCSV,
     documentBaseURL,
     isInside,
+    /** The sidebar row's glyph - folder, page, table, image - as an inline SVG string. */
+    rowIcon,
+    /** The root row's re-read button glyph, same inline-SVG shape as the row icons. */
+    refreshIcon,
     /** "Reveal in Finder" / "Show in Explorer" / "Show in File Manager" - the menus' item. */
     revealLabel: revealLabel(native().platform),
     rootCSS,

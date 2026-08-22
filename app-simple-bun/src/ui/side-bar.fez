@@ -98,6 +98,7 @@
         depth: row.depth,
         isDenied: row.isDenied,
         isExpanded: tree.isExpanded(row.node),
+        icon: MdBoss.rowIcon(row.node.name, row.node.isDir, tree.isExpanded(row.node)),
       }))
       this.state.cursor = tree.cursor
       this.state.selected = manager.document ? manager.document.path : null
@@ -443,6 +444,23 @@
     transform: rotate(90deg);
   }
 
+  /* The kind glyph: folders in the accent so the tree's structure reads at a glance, files
+     in the muted ink so the names stay the loudest thing in the row. */
+  .icon {
+    flex: none;
+    display: flex;
+    color: var(--muted);
+  }
+
+  .row.dir .icon {
+    color: var(--accent);
+  }
+
+  .icon svg {
+    width: 15px;
+    height: 15px;
+  }
+
   /* Rows are keyed by path, so an expand only inserts the children: those fade and slide
      in; everything already on screen stays put. */
   .row {
@@ -505,6 +523,7 @@
       ondragend="fez.dragEnd()"
     >
       <span class="chevron" onclick!="fez.toggle({index})">{row.isDir ? '▶' : ''}</span>
+      <span class="icon">{@html row.icon}</span>
       {#if row.path === state.renaming}
         <input fez:keep="rename-{index}" class="rename text-default" type="text" spellcheck="false" data-name={row.name} onclick="event.stopPropagation()" onkeydown="fez.renameKey(event, {index})" onblur="fez.renameBlur(event, {index})">
       {:else}

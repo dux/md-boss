@@ -10,6 +10,10 @@
   // The box also stands for the root folder itself, which has no row in the tree: it is
   // where a cut or dragged file goes to come back up to the top - right-click "Move Here",
   // or a drop on the box.
+  //
+  // Alongside it, at the right edge of the row, the re-read button: the tree is watched and
+  // polled, so this is for the times you already know something changed and do not want to
+  // wait to be told - a network volume, a checkout in another window.
   class {
     init() {
       this.state.active = null
@@ -18,6 +22,7 @@
       this.state.open = false
       this.state.cursor = 0
       this.state.drop = false
+      this.state.spinning = false
     }
 
     onMount() {
@@ -89,6 +94,21 @@
     pick(path) {
       MdBoss.manager.selectRoot(path)
       this.state.open = false
+    }
+
+    /** The whole tree from disk again. A local root comes back before the glyph has turned
+     *  once, so the turn is held for one full revolution - a control that flickers reads as
+     *  a control that did nothing. */
+    async refresh() {
+      if (this.state.spinning) return
+      this.state.spinning = true
+      const turn = new Promise((done) => setTimeout(done, 550))
+      try {
+        await MdBoss.manager.tree.refreshAll()
+      } finally {
+        await turn
+        this.state.spinning = false
+      }
     }
 
     // MARK: Moving into the root
@@ -181,10 +201,14 @@
 </script>
 
 <style>
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   position: relative;
 
   .box {
+    flex: 1;
+    min-width: 0;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -235,6 +259,42 @@
 
   .box .updown {
     font-size: 0.7em;
+  }
+
+  /* Icon only, no border until it is under the pointer: it sits beside a bordered box and
+     two outlines side by side would read as two equals. */
+  .refresh {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(var(--font-buttons) + 14px);
+    height: calc(var(--font-buttons) + 14px);
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: none;
+    color: var(--muted);
+  }
+
+  .refresh:hover {
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  .refresh svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .refresh.spinning svg {
+    animation: refresh-turn 0.55s linear infinite;
+  }
+
+  @keyframes refresh-turn {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .list {
@@ -300,6 +360,7 @@
   <span class="name">{state.active ? state.activeName : 'Add a folder…'}</span>
   <span class="updown">▲▼</span>
 </div>
+<button class={'refresh pointer' + (state.spinning ? ' spinning' : '')} title="Refresh the folder list" aria-label="Refresh the folder list" onclick="fez.refresh()">{@html MdBoss.refreshIcon}</button>
 {#if state.open}
   <div class="list">
     {#each state.recent as item, index}
