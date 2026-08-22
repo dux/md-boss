@@ -1,175 +1,160 @@
-# Hammerfile - build / install / run helpers for md-boss.
+# Hammerfile - build / run helpers for md-boss.
 # Run with: hammer <command>   (https://github.com/dux/hammer)
 
+require 'json'
+
 APP_NAME    ||= 'MdBoss'
-BINARY_NAME ||= 'MdBoss'
+BINARY_NAME ||= 'md-boss'
 BUNDLE_DIR  ||= "#{APP_NAME}.app"
 INSTALL_DIR ||= '/Applications'
-RES_BUNDLE  ||= "#{BINARY_NAME}_#{BINARY_NAME}.bundle"
-STAMP_FILE  ||= 'app/Resources/build-commit.txt'
+VERSION     ||= JSON.parse(File.read('package.json'))['version']
+DEV_URL     ||= 'http://localhost:1430'
+MIN_BUN     ||= '1.2.0'
 
-# Package.swift declares build-commit.txt as a resource but it is gitignored, so every
-# task that touches SwiftPM has to write it first.
-STAMP_CMD   ||= "(git rev-parse HEAD 2>/dev/null || echo unknown) > #{STAMP_FILE}"
+# What the payload and the bundle carry besides the shell binary. The server runs from
+# source - bun runs TypeScript - so there is nothing to compile on that side.
+PAYLOAD_DIRS ||= %w[server dist].freeze
 
-# The web-demo screenshots. Everything a shot needs - theme, panes, open file, window
-# frame - is persisted state, so each one is a settings.json and a relaunch rather than
-# a window driven by hand.
-SHOTS ||= [
-  { name: 'paper', theme: 'paper',           panes: %w[preview],       file: 'README.md' },
-  { name: 'split', theme: 'paper',           panes: %w[raw preview],   file: 'README.md' },
-  { name: 'notes', theme: 'paper',           panes: %w[preview notes], file: 'release-plan.md', scopes: %w[thisProject] },
-  { name: 'tasks', theme: 'solarized-light', panes: %w[preview],       file: 'release-plan.md' },
-  { name: 'dark',  theme: 'dark',            panes: %w[preview],       file: 'themes.md' },
-  { name: 'nord',  theme: 'nord',            panes: %w[raw preview],   file: 'doc/code.md' }
-].freeze
-
-# The demo notes are anchored by looking their line up, so editing the sample document
-# cannot silently move a note off the line it talks about.
-LINE_OF ||= lambda do |path, needle|
-  index = File.readlines(path).index { |line| line.include?(needle) }
-  raise "#{needle.inspect} not found in #{path}" unless index
-  index + 1
-end
-
-task :clean do
-  desc 'Remove build artifacts'
+task :install do
+  desc 'bun install and cargo fetch - both sides of the toolchain'
   proc do
-    say 'cleaning build artifacts', :cyan
-    sh 'swift package clean'
-    sh 'rm -rf .build'
-    sh "rm -rf #{BUNDLE_DIR}"
-    say.green 'clean complete'
+    sh 'bun install'
+    sh 'cd shell && cargo fetch'
   end
 end
 
 task :lint do
-  desc 'Run SwiftLint'
-  proc { sh 'swiftlint lint --quiet' }
-end
-
-task :test do
-  desc 'Run swift test'
+  desc 'tsc --noEmit and cargo clippy'
   proc do
-    sh STAMP_CMD
-    sh 'swift test'
+    sh 'bun x tsc --noEmit'
+    sh 'cd shell && cargo clippy --quiet -- -D warnings'
   end
 end
 
-task :bench do
-  desc 'Measure the search path over a real tree (walk, decode, cold vs warm)'
-  opt :root, type: :string, desc: 'Folder to search (default ~/dev)'
-  opt :query, type: :string, desc: 'What to search for (default kqueue)'
-  proc do |opts|
-    sh STAMP_CMD
-    # Release, because the walk and the byte scan are both loops the optimiser matters to,
-    # and a debug number would understate every one of them.
-    env = "BENCH_ROOT=#{opts[:root] || '~/dev'} BENCH_QUERY=#{opts[:query] || 'kqueue'}"
-    sh "#{env} swift test -c release --filter SearchBenchTests"
+task :test do
+  desc 'bun test and cargo test'
+  proc do
+    sh 'bun test --pass-with-no-tests'
+    sh 'cd shell && cargo test --quiet'
+  end
+end
+
+task :server do
+  desc 'Run the Bun server alone, on a fixed port, for poking at it with a WebSocket client'
+  opt :port, type: :integer, default: 4800, desc: 'Port to listen on'
+  proc { |opts| sh "bun server/main.ts --port #{opts[:port]} --token dev" }
+end
+
+task :dev do
+  desc 'vite on 1430 plus the shell (cargo run) pointed at it - the inner loop'
+  proc do
+    vite = spawn('bun x vite', out: $stdout, err: $stderr)
+    begin
+      sh "cd shell && MDBOSS_DEV_URL=#{DEV_URL} MDBOSS_APP_DIR=#{Dir.pwd} cargo run --quiet"
+    ensure
+      Process.kill('TERM', vite) rescue nil
+      Process.wait(vite) rescue nil
+    end
   end
 end
 
 task :build do
-  desc 'Lint, test, build, assemble .app bundle and install to /Applications'
-  opt :release, type: :boolean, desc: 'Build optimised, the way gh_pub ships it'
+  desc 'Lint, test, build the frontend and the shell, assemble the app bundle (macOS) or a plain layout (elsewhere)'
+  opt :release, type: :boolean, desc: 'Optimised shell, and the payload tarball next to it'
   proc do |opts|
-    cfg = opts[:release] ? 'release' : 'debug'
-
-    sh STAMP_CMD
+    hammer :install
     hammer :lint
     hammer :test
-
-    say "building #{APP_NAME} (#{cfg})", :cyan
-    sh "swift build -c #{cfg}"
-
-    say 'creating app bundle', :cyan
-    sh "mkdir -p #{BUNDLE_DIR}/Contents/MacOS"
-    sh "mkdir -p #{BUNDLE_DIR}/Contents/Resources"
-    sh "cp app/Info.plist #{BUNDLE_DIR}/Contents/"
-    sh "cp .build/#{cfg}/#{BINARY_NAME} #{BUNDLE_DIR}/Contents/MacOS/#{BINARY_NAME}"
-    sh "cp app/Resources/AppIcon.icns #{BUNDLE_DIR}/Contents/Resources/"
-    # Bundle.module looks next to the executable AND at the .app root - it needs both copies.
-    sh "cp -R .build/#{cfg}/#{RES_BUNDLE} #{BUNDLE_DIR}/Contents/Resources/"
-    sh "cp -R .build/#{cfg}/#{RES_BUNDLE} #{BUNDLE_DIR}/"
-    `codesign --force --sign - --entitlements #{APP_NAME}.entitlements #{BUNDLE_DIR}/Contents/MacOS/#{BINARY_NAME} 2>/dev/null`
-
-    # Ask nicely, then insist. A running instance with unsaved edits puts up a save
-    # prompt on SIGTERM, which would stall the build waiting for a click.
-    `pkill -x "#{BINARY_NAME}" 2>/dev/null`
-    sleep 0.5
-    `pkill -9 -x "#{BINARY_NAME}" 2>/dev/null`
-    sleep 0.2
-    sh "rm -rf #{INSTALL_DIR}/#{BUNDLE_DIR}"
-    sh "cp -R #{BUNDLE_DIR} #{INSTALL_DIR}/"
-    sh "rm -rf #{BUNDLE_DIR}"
-    say.green "installed to #{INSTALL_DIR}/#{BUNDLE_DIR}"
-
-    hammer :register
+    cfg = opts[:release] ? 'release' : 'debug'
+    say "building #{APP_NAME} (simple-bun, #{cfg})", :cyan
+    sh 'bun run build'
+    sh "cd shell && cargo build --quiet #{opts[:release] ? '--release' : ''}"
+    bin = "shell/target/#{cfg}/#{BINARY_NAME}"
+    if RUBY_PLATFORM.include?('darwin')
+      sh "rm -rf #{BUNDLE_DIR}"
+      sh "mkdir -p #{BUNDLE_DIR}/Contents/MacOS #{BUNDLE_DIR}/Contents/Resources"
+      plist = File.read('shell/Info.plist').gsub('__VERSION__', VERSION)
+      File.write("#{BUNDLE_DIR}/Contents/Info.plist", plist)
+      sh "cp #{bin} #{BUNDLE_DIR}/Contents/MacOS/#{BINARY_NAME}"
+      sh "cp icons/icon.icns #{BUNDLE_DIR}/Contents/Resources/AppIcon.icns" if File.exist?('icons/icon.icns')
+      PAYLOAD_DIRS.each { |d| sh "cp -R #{d} #{BUNDLE_DIR}/Contents/Resources/" }
+      File.write("#{BUNDLE_DIR}/Contents/Resources/version.txt", "#{VERSION}\n")
+      say.green "built ./#{BUNDLE_DIR}"
+    else
+      out = "out/#{BINARY_NAME}"
+      sh "rm -rf out && mkdir -p #{out}"
+      sh "cp #{bin} #{out}/"
+      PAYLOAD_DIRS.each { |d| sh "cp -R #{d} #{out}/" }
+      File.write("#{out}/version.txt", "#{VERSION}\n")
+      say.green "built ./#{out}"
+    end
+    hammer :payload if opts[:release]
   end
 end
 
 task :run do
-  desc 'Open the installed app'
-  proc { sh "open #{INSTALL_DIR}/#{BUNDLE_DIR}" }
+  desc 'Launch the bundle built here (macOS) or the plain layout'
+  proc do
+    if RUBY_PLATFORM.include?('darwin')
+      sh "open #{BUNDLE_DIR}"
+    else
+      sh "out/#{BINARY_NAME}/#{BINARY_NAME}"
+    end
+  end
 end
 
-task :dev do
-  desc 'Build + install + run (default inner-loop)'
+task :install_app do
+  desc "Copy the bundle into #{INSTALL_DIR} (macOS)"
   proc do
-    hammer :build
-    hammer :run
+    raise 'macOS only' unless RUBY_PLATFORM.include?('darwin')
+    `pkill -x "#{BINARY_NAME}" 2>/dev/null`
+    sh "rm -rf #{INSTALL_DIR}/#{BUNDLE_DIR}"
+    sh "cp -R #{BUNDLE_DIR} #{INSTALL_DIR}/"
+    say.green "installed to #{INSTALL_DIR}/#{BUNDLE_DIR}"
   end
 end
 
 task :icon do
-  desc 'Regenerate AppIcon.icns from AppIcon.svg'
+  desc 'Regenerate icons/ from icons/AppIcon.svg (icns on macOS, png set everywhere)'
   proc do
-    iconset = 'tmp/AppIcon.iconset'
-    sh "rm -rf #{iconset} && mkdir -p #{iconset}"
-    [16, 32, 128, 256, 512].each do |size|
-      sh "rsvg-convert -w #{size} -h #{size} app/Resources/AppIcon.svg -o #{iconset}/icon_#{size}x#{size}.png"
-      sh "rsvg-convert -w #{size * 2} -h #{size * 2} app/Resources/AppIcon.svg -o #{iconset}/icon_#{size}x#{size}@2x.png"
+    svg = 'icons/AppIcon.svg'
+    sh 'mkdir -p icons'
+    [16, 32, 64, 128, 256, 512, 1024].each do |size|
+      sh "rsvg-convert -w #{size} -h #{size} #{svg} -o icons/icon_#{size}.png"
     end
-    sh "iconutil -c icns #{iconset} -o app/Resources/AppIcon.icns"
-    sh "rm -rf #{iconset}"
-    say.green 'icon regenerated'
+    if RUBY_PLATFORM.include?('darwin')
+      iconset = 'icons/AppIcon.iconset'
+      sh "rm -rf #{iconset} && mkdir -p #{iconset}"
+      [16, 32, 128, 256, 512].each do |size|
+        sh "cp icons/icon_#{size}.png #{iconset}/icon_#{size}x#{size}.png"
+        sh "cp icons/icon_#{size * 2}.png #{iconset}/icon_#{size}x#{size}@2x.png"
+      end
+      sh "iconutil -c icns #{iconset} -o icons/icon.icns"
+      sh "rm -rf #{iconset}"
+    end
+    say.green 'icons regenerated'
   end
 end
 
-task :register do
-  desc 'Re-register with LaunchServices so .md files bind to this build'
+task :payload do
+  desc 'Write payload-<version>.tar.gz: server/, dist/, version.txt - what an update replaces'
   proc do
-    lsregister = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
-    sh "#{lsregister} -f #{INSTALL_DIR}/#{BUNDLE_DIR}"
-    say.green 'registered'
+    raise 'dist/ is missing - run `hammer build` first' unless Dir.exist?('dist')
+    File.write('version.txt', "#{VERSION}\n")
+    name = "payload-#{VERSION}.tar.gz"
+    sh "tar czf #{name} #{PAYLOAD_DIRS.join(' ')} version.txt"
+    sh "shasum -a 256 #{name} > #{name}.sha256"
+    sh 'rm version.txt'
+    say.green "wrote ./#{name}"
   end
 end
 
-task :gh_pub do
-  desc 'Release build, then publish it to GitHub as the one latest release'
+task :link do
+  desc 'Put the md-boss command on PATH: bin/md-boss copied to ~/bin'
   proc do
-    hammer :build, release: true
-
-    hash = `git rev-parse --short HEAD`.strip
-    say "publishing release #{hash}", :cyan
-
-    # The install line carries the commit, so a fresh curl never lands on a cached copy
-    # of the previous script.
-    sh %(sed -i '' "s|/main/install.sh.*|/main/install.sh?v=#{hash} \\| bash|" README.md)
-    sh 'git add -A && git commit -m "release" --allow-empty && git push origin main'
-
-    # One release, always the newest build - which is what install.sh downloads.
-    say 'deleting old releases', :cyan
-    `gh release list --json tagName -q '.[].tagName'`.lines.map(&:strip).reject(&:empty?).each do |tag|
-      `gh release delete "#{tag}" --yes --cleanup-tag 2>/dev/null`
-    end
-
-    say 'publishing latest release', :cyan
-    tarball = "#{APP_NAME}.app.tar.gz"
-    sh "tar -czf #{tarball} -C #{INSTALL_DIR} #{BUNDLE_DIR}"
-    sh %(gh release create latest #{tarball} --title "#{APP_NAME}" --notes "Latest build" --latest)
-    sh "rm -f #{tarball}"
-    say.green 'published'
+    sh 'mkdir -p ~/bin'
+    sh 'install -m 755 bin/md-boss ~/bin/md-boss'
+    say.green 'installed ~/bin/md-boss'
   end
 end
 
@@ -181,297 +166,5 @@ task :demo do
     say 'serving http://localhost:8000/web-demo/', :cyan
     `open http://localhost:8000/web-demo/`
     sh 'python3 -m http.server 8000'
-  end
-end
-
-task :shots do
-  desc 'Recapture web-demo/assets by driving the installed app through settings.json'
-  proc do
-    require 'json'
-
-    root   = File.expand_path('web-demo/sample')
-    assets = File.expand_path('web-demo/assets')
-    config = File.expand_path('~/.config/md-boss')
-    backup = File.expand_path('tmp/shots-config')
-    winid  = File.expand_path('tmp/winid.swift')
-    notes  = "#{root}/.md-boss"
-
-    # A window is owned by the bundle name, not by the executable - "md-boss", not
-    # "MdBoss". Read it rather than write it down, so the two cannot drift apart.
-    owner = `/usr/libexec/PlistBuddy -c "Print :CFBundleName" app/Info.plist`.strip
-
-    sh "mkdir -p #{assets} #{backup}"
-
-    # A run points the app at the sample folder and resizes its window, which means
-    # writing over the live config. Put it back whatever happens.
-    %w[settings.json roots.txt].each do |name|
-      sh "cp #{config}/#{name} #{backup}/#{name}" if File.exist?("#{config}/#{name}")
-    end
-
-    File.write winid, <<~SWIFT
-      // Prints the CGWindowID of the app's document window, so `screencapture -l` grabs
-      // that window alone - no desktop behind it, no drop shadow around it.
-      import CoreGraphics
-      import Foundation
-
-      guard let windows = CGWindowListCopyWindowInfo(
-          [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { exit(1) }
-
-      for window in windows {
-          guard window[kCGWindowOwnerName as String] as? String == "#{owner}",
-                let number = window[kCGWindowNumber as String] as? Int,
-                let bounds = window[kCGWindowBounds as String] as? [String: Any],
-                let height = bounds["Height"] as? Double, height > 100 else { continue }
-          print(number)
-          exit(0)
-      }
-      exit(2)
-    SWIFT
-
-    # The demo notes are written for the run and taken away after it, so a screenshot
-    # fixture never lands in the repo carrying this machine's home directory.
-    plan = "#{root}/release-plan.md"
-    at   = plan.sub(Dir.home, '~')
-    File.write notes, JSON.pretty_generate(notes: [
-      { line: LINE_OF[plan, '[*] scroll sync'], path: at,
-        title: 'scroll sync between the raw pane and th', body: 'Landed - both panes drive off data-line.' },
-      { line: LINE_OF[plan, '[ ] rename and delete'], path: at,
-        title: 'rename and delete in the sidebar' },
-      { line: LINE_OF[plan, 'Moving is not undoable'], path: at,
-        title: 'Moving is not undoable - ⌘Z belongs to t', body: 'Worth saying again in the README.' }
-    ])
-
-    begin
-      File.write "#{config}/roots.txt", "#{root}\n"
-
-      SHOTS.each do |shot|
-        `pkill -9 -x "#{BINARY_NAME}" 2>/dev/null`
-        sleep 0.5
-
-        File.write "#{config}/settings.json", JSON.pretty_generate(
-          themeID:            shot[:theme],
-          visiblePanes:       shot[:panes],
-          expandedPaths:      ["#{root}/doc"],
-          expandedNoteScopes: shot[:scopes] || [],
-          lastOpenedFile:     "#{root}/#{shot[:file]}",
-          sidebarWidth:       230,
-          editorSplit:        0.5,
-          showSidebar:        true,
-          installCLI:         false,
-          windowX:            120,
-          windowY:            160,
-          windowWidth:        1280,
-          windowHeight:       820
-        )
-
-        sh "open -a #{INSTALL_DIR}/#{BUNDLE_DIR}"
-        sleep 4
-
-        id = `swift #{winid}`.strip
-        raise "no #{owner} window on screen" if id.empty?
-
-        sh "screencapture -o -x -l #{id} #{assets}/#{shot[:name]}.png"
-        # A 1280pt window captures at 2560px. Halving the long edge to 2000 keeps it
-        # crisp at the page's 1100px column and takes about a third off the file.
-        sh "sips -Z 2000 #{assets}/#{shot[:name]}.png > /dev/null"
-        say.green "captured #{shot[:name]}.png"
-      end
-    ensure
-      `pkill -9 -x "#{BINARY_NAME}" 2>/dev/null`
-      sleep 0.3
-      File.delete(notes) if File.exist?(notes)
-      %w[settings.json roots.txt].each do |name|
-        sh "cp #{backup}/#{name} #{config}/#{name}" if File.exist?("#{backup}/#{name}")
-      end
-      say.cyan 'config restored'
-    end
-  end
-end
-
-task :watch do
-  desc 'Rebuild + reinstall on Swift file changes'
-  proc do
-    say.cyan 'watching app/ for changes (ctrl-c to stop)'
-    stamp = '.watch_timestamp'
-    `touch #{stamp}`
-    loop do
-      changed = `find app -name "*.swift" -newer #{stamp} 2>/dev/null`.strip
-      unless changed.empty?
-        say.green 'change detected, rebuilding'
-        `touch #{stamp}`
-        `pkill -x "#{BINARY_NAME}" 2>/dev/null`
-        begin
-          hammer :dev
-        rescue StandardError => e
-          say.red "build failed: #{e.message}"
-        end
-      end
-      sleep 1
-    end
-  end
-end
-
-# The Tauri app in tauri-rust/ (doc/feature/port-tauri.md). Namespaced because the Swift
-# app in app/ ships alongside it and keeps the top-level names.
-TAURI_DIR ||= 'tauri-rust'
-
-namespace :tauri do
-  private
-
-  def tauri_sh(cmd)
-    sh "cd #{TAURI_DIR} && #{cmd}"
-  end
-
-  task :install do
-    desc 'bun install - the JS side of the toolchain'
-    proc { tauri_sh 'bun install --frozen-lockfile' }
-  end
-
-  task :lint do
-    desc 'tsc --noEmit and cargo clippy'
-    proc do
-      tauri_sh 'bun x tsc --noEmit'
-      tauri_sh 'cd src-tauri && cargo clippy --quiet -- -D warnings'
-    end
-  end
-
-  task :test do
-    desc 'bun test and cargo test'
-    proc do
-      # --pass-with-no-tests: bun exits 1 on an empty tests/, which is only the state
-      # before the first port lands, not a failure worth stopping a build over.
-      tauri_sh 'bun test --pass-with-no-tests'
-      tauri_sh 'cd src-tauri && cargo test --quiet'
-    end
-  end
-
-  task :dev do
-    desc 'Install, then run the app against the vite dev server (the inner loop)'
-    proc do
-      hammer 'tauri:install'
-      tauri_sh 'bun tauri dev'
-    end
-  end
-
-  # The release dmg is universal when both Apple targets are installed (rustup); a
-  # Homebrew rust has only the host target, and the build falls back to it rather than
-  # failing on a missing x86_64 std.
-  def universal_target
-    return nil unless RUBY_PLATFORM.include?('darwin')
-    installed = `rustup target list --installed 2>/dev/null`.split
-    return '--target universal-apple-darwin' if %w[aarch64-apple-darwin x86_64-apple-darwin].all? { |t| installed.include?(t) }
-    say.yellow 'universal dmg needs rustup with aarch64-apple-darwin and x86_64-apple-darwin - building the host arch only'
-    nil
-  end
-
-  # bundle.createUpdaterArtifacts makes a release build sign its update packages, and
-  # tauri-cli refuses to build without the key. CI has it as TAURI_SIGNING_PRIVATE_KEY; a
-  # local release build reads the generated key file from tmp/ when it is there.
-  UPDATER_KEY ||= 'tmp/md-boss-updater.key'
-
-  def signing_env
-    return {} if ENV['TAURI_SIGNING_PRIVATE_KEY'] || ENV['TAURI_SIGNING_PRIVATE_KEY_PATH']
-    return { 'TAURI_SIGNING_PRIVATE_KEY_PATH' => File.expand_path(UPDATER_KEY) } if File.exist?(UPDATER_KEY)
-    say.yellow "no updater signing key: set TAURI_SIGNING_PRIVATE_KEY or put the key at ./#{UPDATER_KEY} - the release build will stop at the updater artifacts"
-    {}
-  end
-
-  task :build do
-    desc 'Lint, test, then build the app - debug and unbundled unless --release'
-    opt :release, type: :boolean, desc: 'Optimised build with the platform bundles (dmg / msi / nsis / appimage / deb) and the signed updater packages'
-    proc do |opts|
-      hammer 'tauri:install'
-      hammer 'tauri:lint'
-      hammer 'tauri:test'
-      flags = opts[:release] ? universal_target : '--debug --no-bundle'
-      env = opts[:release] ? signing_env.map { |k, v| "#{k}=#{v}" }.join(' ') : ''
-      say "building #{APP_NAME} (tauri, #{opts[:release] ? 'release' : 'debug'})", :cyan
-      tauri_sh "#{env} bun tauri build #{flags}".strip
-      say.green 'built'
-      if opts[:release]
-        Dir.glob("#{TAURI_DIR}/src-tauri/target/**/release/bundle/{dmg,msi,nsis,appimage,deb}/*.{dmg,msi,exe,AppImage,deb}").each { |path| say.green "bundle: ./#{path}" }
-      end
-    end
-  end
-
-  task :icon do
-    desc 'Regenerate src-tauri/icons from app/Resources/AppIcon.svg'
-    proc do
-      tauri_sh 'bun tauri icon ../app/Resources/AppIcon.svg'
-      say.green 'icons regenerated'
-    end
-  end
-
-  task :link do
-    desc <<~TXT
-      Put the md-boss command on PATH: tauri-rust/bin/md-boss copied to ~/bin (macOS, Linux).
-
-      The launcher execs the installed binary - /Applications/MdBoss.app on macOS, /usr/bin
-      on Linux, or MD_BOSS_APP - so `md-boss .` resolves against the shell's cwd and a second
-      launch reaches the running window. Windows needs no launcher: put the install folder
-      (%LOCALAPPDATA%/MdBoss) on PATH and `md-boss file.md` runs md-boss.exe the same way.
-    TXT
-    proc do
-      sh 'mkdir -p ~/bin'
-      sh "install -m 755 #{TAURI_DIR}/bin/md-boss ~/bin/md-boss"
-      say.green 'installed ~/bin/md-boss'
-    end
-  end
-
-  task :clean do
-    desc 'Remove the tauri build artifacts (dist, cargo target)'
-    proc do
-      sh "rm -rf #{TAURI_DIR}/dist #{TAURI_DIR}/src-tauri/target"
-      say.green 'clean complete'
-    end
-  end
-end
-
-namespace :tauri do
-  task :probe do
-    desc <<~TXT
-      Launch the dev app against a scratch config and capture its window to tmp/probe.png.
-
-      MD_BOSS_CONFIG points the app at --config (default tmp/probe-config, so the real
-      ~/.config/md-boss is never touched). The window id comes from CGWindowList, so no
-      accessibility permission is needed - only Screen Recording for screencapture.
-    TXT
-    opt :config, type: :string, desc: 'config dir with roots.txt / settings.json (default tmp/probe-config)'
-    opt :wait, type: :string, desc: 'seconds to wait after launch before the shot (default 6)'
-    opt :out, type: :string, desc: 'png path (default tmp/probe.png)'
-    proc do |opts|
-      config = File.expand_path(opts[:config] || 'tmp/probe-config')
-      out    = File.expand_path(opts[:out] || 'tmp/probe.png')
-      wait   = (opts[:wait] || '6').to_f
-      winid  = File.expand_path('tmp/winid.swift')
-      sh "mkdir -p #{config} #{File.dirname(out)}"
-      File.write winid, <<~SWIFT
-        import CoreGraphics
-        import Foundation
-        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { exit(1) }
-        for window in windows {
-            guard let owner = window[kCGWindowOwnerName as String] as? String, ["md-boss", "MdBoss"].contains(owner),
-                  let number = window[kCGWindowNumber as String] as? Int,
-                  let bounds = window[kCGWindowBounds as String] as? [String: Any],
-                  let height = bounds["Height"] as? Double, height > 100 else { continue }
-            print(number); exit(0)
-        }
-        exit(2)
-      SWIFT
-      pid = spawn({ 'MD_BOSS_CONFIG' => config }, "cd #{TAURI_DIR} && bun tauri dev", out: File::NULL, err: File::NULL)
-      begin
-        90.times { break if system('pgrep -x md-boss >/dev/null') && system('lsof -ti :1420 >/dev/null 2>&1'); sleep 1 }
-        sleep wait
-        id = `swift #{winid}`.strip
-        error 'no md-boss window on screen' if id.empty?
-        sh "screencapture -o -x -l #{id} #{out}"
-        say.green "captured #{out}"
-      ensure
-        `pkill -x md-boss 2>/dev/null`
-        Process.kill('TERM', pid) rescue nil
-        sleep 1
-        `lsof -ti :1420 | xargs kill 2>/dev/null`
-      end
-    end
   end
 end

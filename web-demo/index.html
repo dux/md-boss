@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>md-boss - Markdown that reads like paper</title>
   <meta name="description" content="A macOS markdown viewer and editor with a warm paper theme, offline GitHub-flavored rendering, line-anchored scroll sync and notes you can commit.">
-  <link rel="icon" href="../app/Resources/AppIcon.svg">
+  <link rel="icon" href="../icons/AppIcon.svg">
   <script type="module">
     import PostWind from 'https://dux.github.io/postwind/dist/postwind.js'
     PostWind.init({ tailwind: true })
@@ -17,7 +17,7 @@
   <script fez="fez/shortcut-table.fez"></script>
   <style>
     /* The page is painted out of the app's own Paper palette - the same hex values that
-       live in app/Views/ThemePalettes.swift. Tailwind is used for layout only, so a
+       live in src/theme/theme.ts. Tailwind is used for layout only, so a
        colour never arrives from two places at once. */
     :root {
       --paper: #FBF7EF;
@@ -89,7 +89,7 @@
   <header class="u-surface border-b u-rule">
     <nav class="max-w-5xl mx-auto px-4 md:px-6 py-4 flex items-center justify-between">
       <a href="#top" class="flex items-center gap-3">
-        <img src="../app/Resources/AppIcon.svg" alt="" width="34" height="34">
+        <img src="../icons/AppIcon.svg" alt="" width="34" height="34">
         <span class="u-serif font-semibold text-lg u-ink">md-boss</span>
       </a>
       <div class="flex items-center gap-6 text-sm">
@@ -180,16 +180,20 @@
   <!-- Install -->
   <section id="install" class="u-night py-12 md:py-20">
     <div class="max-w-3xl mx-auto px-4 md:px-6 text-center">
-      <h2 class="u-serif text-2xl md:text-3xl font-bold mb-4">Install in one command</h2>
-      <p class="u-night-muted mb-8">Downloads the latest build and installs it to /Applications.</p>
-      <div class="u-code u-mono p-5 text-left text-sm mb-6">
-        <span class="u-night-muted">$</span>
-        <span class="u-night-accent"> curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh | bash</span>
+      <h2 class="u-serif text-2xl md:text-3xl font-bold mb-4">Install</h2>
+      <p class="u-night-muted mb-8">
+        There is no prebuilt download right now - the app was rebuilt on a new shell and the
+        release pipeline is being redone. Build it from the checkout; it takes a minute.
+      </p>
+      <div class="u-code u-mono p-5 text-left text-sm mb-6 space-y-2">
+        <div><span class="u-night-muted">$</span><span class="u-night-accent"> git clone https://github.com/dux/md-boss &amp;&amp; cd md-boss</span></div>
+        <div><span class="u-night-muted">$</span><span class="u-night-accent"> hammer install &amp;&amp; hammer build</span></div>
+        <div><span class="u-night-muted">$</span><span class="u-night-accent"> hammer install_app</span><span class="u-night-muted">  # MdBoss.app into /Applications</span></div>
       </div>
       <p class="u-night-muted text-sm">
-        On first launch the app writes a <span class="u-mono">md-boss</span> command into
-        <span class="u-mono">~/bin</span>, so <span class="u-mono">md-boss .</span> opens the
-        current folder in the sidebar.
+        <span class="u-mono">hammer link</span> puts a <span class="u-mono">md-boss</span>
+        command into <span class="u-mono">~/bin</span>, so <span class="u-mono">md-boss .</span>
+        opens the current folder in the sidebar.
       </p>
     </div>
   </section>
@@ -199,13 +203,14 @@
     <div class="max-w-3xl mx-auto px-4 md:px-6 text-center">
       <h2 class="u-serif text-2xl md:text-3xl font-bold mb-4">Or build it yourself</h2>
       <p class="u-muted mb-8">
-        SwiftPM and a <a href="https://github.com/dux/hammer" class="u-accent underline">hammer</a>
-        file, no Xcode project. Needs macOS 14, a Swift 6.2 toolchain and swiftlint.
+        A <a href="https://github.com/dux/hammer" class="u-accent underline">hammer</a> file over
+        bun and cargo. Needs <a href="https://bun.sh" class="u-accent underline">bun</a> and a Rust
+        toolchain; the shell is a thin native window, everything else is TypeScript.
       </p>
       <div class="u-code u-mono p-5 text-left text-sm space-y-2">
         <div><span class="u-night-muted">$</span><span class="u-night-accent"> git clone https://github.com/dux/md-boss &amp;&amp; cd md-boss</span></div>
-        <div><span class="u-night-muted">$</span><span class="u-night-accent"> hammer dev</span><span class="u-night-muted">      # lint, test, build, install, launch</span></div>
-        <div><span class="u-night-muted">$</span><span class="u-night-accent"> hammer watch</span><span class="u-night-muted">    # rebuild on every Swift file change</span></div>
+        <div><span class="u-night-muted">$</span><span class="u-night-accent"> hammer install</span><span class="u-night-muted">  # bun install + cargo fetch</span></div>
+        <div><span class="u-night-muted">$</span><span class="u-night-accent"> hammer dev</span><span class="u-night-muted">      # vite plus the shell pointed at it</span></div>
       </div>
     </div>
   </section>

@@ -1,6 +1,0 @@
-node_modules
-dist
-shell/target
-MdBoss.app
-payload-*.tar.gz
-.DS_Store

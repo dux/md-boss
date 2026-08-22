@@ -3,7 +3,7 @@
     FAST = true
 
     init() {
-      // Copied out of app/Views/ThemePalettes.swift, which is the only place in the app
+      // Copied out of src/theme/theme.ts, which is the only place in the app
       // a hex literal is allowed to live. Each card is drawn in its own palette, so the
       // strip is the picker rather than a description of it.
       this.state.themes = [

@@ -1,17 +1,17 @@
 # Themes
 
-Eight themes, every one of them defined once in `app/Views/ThemePalettes.swift` and consumed by
-the SwiftUI chrome and the preview web page alike.
-`ThemeToken`'s raw value is the CSS custom property name, so `--accent` in the page and
-`theme[.accent]` in a view are guaranteed to be the same color.
+Eight themes, every one of them defined once in `src/theme/theme.ts` and consumed by the app
+chrome and the preview page alike.
+A token's name *is* the CSS custom property name, so `--accent` in the preview page and
+`--accent` in a component are guaranteed to be the same color.
 
-`ThemePalettes.swift` is the authority; this file describes the shape and the rules, not the
-hexes, because a second copy of 200 token rows is a second thing to keep in sync.
+`theme.ts` is the authority; this file describes the shape and the rules, not the hexes,
+because a second copy of 200 token rows is a second thing to keep in sync.
 
 ## The list
 
-`Theme.all` is the one list, in picker and menu order. It drives the Settings grid, the
-View > Theme submenu, `Theme.named` and the tests.
+`THEMES` is the one list, in picker and menu order. It drives the Settings grid, the
+View > Theme submenu, `themeNamed` and the tests.
 
 | theme | polarity | stock | accent | lineage |
 |---|---|---|---|---|
@@ -33,16 +33,16 @@ The ports are ports, not tributes. Where a scheme's canonical body text is a ter
 rather than a reading one, the emphasized value is used instead: Solarized Light's text is
 `base02` and its secondary text `base01`, not `base00`, which only manages 4.5:1 and 4.1:1
 against base3. Dracula's `muted` is lifted off `#6272A4` for the same reason - under 3:1 is not
-UI text. `ThemeTests` enforces both thresholds, so this cannot quietly regress.
+UI text. `tests/theme.test.ts` enforces both thresholds, so this cannot quietly regress.
 
 ## Polarity
 
-A theme's light/dark polarity is **derived**, never declared: `Theme.isDark` is the WCAG
+A theme's light/dark polarity is **derived**, never declared: `isDark(theme)` is the WCAG
 relative luminance of `bg` below 0.5. A stored flag that disagreed with the palette it describes
 would be a bug; the flag does not exist, so it cannot.
 
-Polarity drives two things - `NSApp.appearance` (titlebar, menus, `NSOpenPanel`, WebKit's own
-scrollers) and the `color-scheme` line in `rootCSS`.
+Polarity drives the `color-scheme` line in `rootCSS`, which is what keeps the webview's own
+scrollbars, form controls and caret on the same side of the line as the palette.
 
 ## Choosing one
 
@@ -65,7 +65,8 @@ piece of UI.
 
 * Preview body and headings: `ui-serif, "New York", "Iowan Old Style", Charter, Palatino, Georgia, serif`.
   `ui-serif` resolves to New York on macOS; Iowan Old Style is the warm oldstyle fallback.
-* Chrome: the SwiftUI system font, sized from `AppSettings` through `.textStyle(...)`.
+* Chrome: `-apple-system, system-ui, sans-serif`, sized through the four `.text-*` classes in
+  `src/ui/styles.css`, which read the `--font-*` vars `src/theme/apply.ts` writes from settings.
 * Mono: `"SF Mono", ui-monospace, Menlo, monospace`.
 * Measure 48em by default, adjustable from the arrows pinned to the preview's top-right corner
   in 2em steps and stored in `previewMeasure`.
@@ -77,9 +78,9 @@ piece of UI.
 * Never add `@media (prefers-color-scheme: ...)` to the preview CSS. The page is told which
   theme to use so it can never disagree with the app around it.
 * `color-scheme: light|dark` **is** set on `:root`. That is orthogonal to the palette and is
-  what makes WebKit's scrollbars and default caret match.
-* Adding a token means adding it to `ThemeToken` **and** to all eight palettes. `ThemeTests`
+  what makes the webview's scrollbars and default caret match.
+* Adding a token means adding it to `TOKENS` **and** to all eight palettes. `theme.test.ts`
   fails otherwise.
-* Adding a theme means a case in `ThemeID`, a palette, and an entry in `Theme.all`. `ThemeTests`
-  fails if the enum and the list disagree, if the palette is a duplicate of another, or if its
+* Adding a theme means an id in `THEME_IDS`, a palette, and an entry in `THEMES`. `theme.test.ts`
+  fails if the ids and the list disagree, if the palette is a duplicate of another, or if its
   text misses 7:1 or its `muted` misses 4.5:1 against its own background.

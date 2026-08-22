@@ -1,0 +1,540 @@
+<script>
+  // The folder tree: rows from the tree model, indented by depth, a chevron on folders.
+  // Clicking a folder row toggles it, a file row opens the document.
+  //
+  // The element is focusable and owns the bare keys while it has focus - arrows, Return,
+  // Escape, and letters for type-to-jump. Every modified combination belongs to the app
+  // shortcuts (src/ui/keys.ts) and later the menu bar, so a modifier here is left alone.
+  //
+  // While something is typed into the search field above, the result list takes the tree's
+  // place here and the arrows belong to it - reached by clicking a result and then using
+  // the keyboard. The query decides, not a mode: an empty field is the tree.
+  //
+  // Right-click on a row is the file menu (rename, cut, copy, trash); on a folder row it
+  // offers to move the cut file there; on the blank space below the rows it is New File.
+  // A rename happens in the row: the name becomes a field, Return commits, Escape cancels,
+  // and focus leaving the field commits the way Finder does.
+  //
+  // A file row can also be dragged onto a folder row. Only a drag that started here can
+  // land - the manager's draggedFile is the one thing a drop reads - and a folder lights up
+  // only when the move would actually do something, so an invalid target never invites the
+  // drag in the first place. The drag events are taken on the tree element and mapped back
+  // to rows through data-index, since enter/leave pairs on the rows' own children fire in
+  // an order no two browsers agree on.
+  class {
+    init() {
+      this.state.rows = []
+      this.state.cursor = 0
+      this.state.selected = null
+      this.state.cut = null
+      this.state.renaming = null
+      this.state.message = null
+      this.state.searching = false
+      this.state.dropTarget = null
+      this.state.truncated = false
+    }
+
+    onMount() {
+      this.local.typeAhead = new MdBoss.TypeAhead()
+      this.local.unsubscribe = [
+        MdBoss.manager.tree.onChange(() => this.pull()),
+        MdBoss.manager.onChange(() => this.pull()),
+        MdBoss.manager.search.onChange(() => {
+          this.state.searching = MdBoss.manager.search.isActive
+        }),
+      ]
+      this.root.tabIndex = 0
+      this.on(this.root, 'keydown', (event) => this.keyDown(event))
+      // Clicking anywhere in the tree gives it the keyboard; a click on a row would also
+      // focus through the row, but the empty message has nothing to land on. Not while a
+      // name is being edited - the field keeps the caret.
+      this.on(this.root, 'mousedown', (event) => {
+        if (!event.target.closest('.rename')) this.root.focus()
+      })
+      this.on(this.root, 'contextmenu', (event) => this.blankMenu(event))
+      this.on(this.root, 'dragover', (event) => this.dragOver(event))
+      this.on(this.root, 'dragleave', (event) => {
+        if (!this.root.contains(event.relatedTarget)) this.clearDrop()
+      })
+      this.on(this.root, 'drop', (event) => this.drop(event))
+      // In the native shell drags arrive as native events, HTML5 drops never do. The
+      // handlers above serve the browser build.
+      this.local.nativeDragged = null
+      const unlisten = MdBoss.native().onFileDrag((drag) => this.nativeDrag(drag))
+      this.local.unsubscribe.push(() => unlisten.then((off) => off()))
+      this.pull()
+      this.root.focus()
+    }
+
+    afterRender() {
+      // Keep the cursor row on screen as the keyboard moves it. nearest: no jump when it
+      // is already visible, so the mouse wheel and the keyboard do not fight.
+      const cursor = this.find('.row.cursor')
+      if (cursor) cursor.scrollIntoView({ block: 'nearest' })
+      // The name field arriving: filled once, the stem selected so typing replaces the
+      // name and keeps the extension, the way Finder does.
+      const field = this.find('.rename')
+      if (field && !field.dataset.primed) {
+        field.dataset.primed = '1'
+        const name = field.dataset.name || ''
+        field.value = name
+        field.focus()
+        const dot = name.lastIndexOf('.')
+        field.setSelectionRange(0, dot > 0 ? dot : name.length)
+      }
+    }
+
+    onDestroy() {
+      for (const off of this.local.unsubscribe || []) off()
+    }
+
+    pull() {
+      const manager = MdBoss.manager
+      const tree = manager.tree
+      this.state.rows = tree.rows.map((row) => ({
+        path: row.node.path,
+        name: row.node.name,
+        isDir: row.node.isDir,
+        depth: row.depth,
+        isDenied: row.isDenied,
+        isExpanded: tree.isExpanded(row.node),
+        icon: MdBoss.rowIcon(row.node.name, row.node.isDir, tree.isExpanded(row.node)),
+      }))
+      this.state.cursor = tree.cursor
+      this.state.selected = manager.document ? manager.document.path : null
+      this.state.cut = manager.cutFile
+      this.state.renaming = manager.renaming
+      this.state.message = this.emptyMessage(manager, tree)
+      this.state.truncated = tree.isTruncated
+      this.state.limit = tree.fileLimit
+      this.state.searching = manager.search.isActive
+    }
+
+    // MARK: Keyboard
+
+    keyDown(event) {
+      // The name field has the keyboard while the caret is in it.
+      if (event.target.closest('.rename')) return
+      if (event.metaKey || event.ctrlKey || event.altKey) return
+      const handled = MdBoss.manager.search.isActive ? this.handleResultKey(event) : this.handleKey(event)
+      if (handled) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    }
+
+    /** Results are showing, so the arrows belong to that list and not to a tree nobody
+     *  can see. Escape empties the field, which is what brings the tree back. */
+    handleResultKey(event) {
+      const search = MdBoss.manager.search
+      switch (event.key) {
+        case 'ArrowDown': return search.moveCursor(1)
+        case 'ArrowUp':   return search.moveCursor(-1)
+        case 'Enter':
+          MdBoss.manager.openSearchCursor()
+          return true
+        case 'Escape':
+          search.clear()
+          return true
+        default:
+          return false
+      }
+    }
+
+    /** True when the key was the tree's. An unhandled key is left to bubble, so Escape with
+     *  nothing pending stays available to whatever else wants it. */
+    handleKey(event) {
+      const tree = MdBoss.manager.tree
+      switch (event.key) {
+        case 'ArrowDown':  return tree.moveCursorBy(1)
+        case 'ArrowUp':    return tree.moveCursorBy(-1)
+        case 'ArrowRight': return tree.expandOrDescend()
+        case 'ArrowLeft':  return tree.collapseOrAscend()
+        case 'Home':       return tree.moveCursor(0)
+        case 'End':        return tree.moveCursor(tree.rows.length - 1)
+        case 'PageDown':   return tree.moveCursorBy(this.pageRows())
+        case 'PageUp':     return tree.moveCursorBy(-this.pageRows())
+        case 'Enter':
+        case ' ': {
+          const row = tree.cursorRow
+          if (!row) return false
+          this.open(tree.cursor)
+          return true
+        }
+        case 'Escape':
+          return MdBoss.manager.cancelCut()
+        default: {
+          const prefix = this.local.typeAhead.append(event.key, performance.now())
+          return prefix === null ? false : tree.jumpTo(prefix)
+        }
+      }
+    }
+
+    /** Rows per page, from the visible height and the row height - so Page Down moves by
+     *  what is on screen rather than by a number. */
+    pageRows() {
+      const row = this.find('.row')
+      const rowHeight = row ? row.getBoundingClientRect().height || 22 : 22
+      return Math.max(1, Math.floor(this.root.clientHeight / rowHeight) - 1)
+    }
+
+    emptyMessage(manager, tree) {
+      if (tree.rows.length) return null
+      const active = manager.activeRoot
+      if (!active) return 'No folders yet.\nPress ⌘O to add one.'
+      if (tree.activeIsMissing) return `No folder or files found in\n${active}`
+      if (tree.activeIsDenied) return 'No access to that folder.'
+      return 'No documents here.'
+    }
+
+    rowAt(index) {
+      return MdBoss.manager.tree.rows[Number(index)]
+    }
+
+    toggle(index) {
+      const row = this.rowAt(index)
+      if (row) MdBoss.manager.tree.toggle(row.node)
+    }
+
+    open(index) {
+      const row = this.rowAt(index)
+      if (!row) return
+      MdBoss.manager.tree.moveCursor(Number(index))
+      if (row.node.isDir) MdBoss.manager.tree.toggle(row.node)
+      else MdBoss.manager.open(row.node.path)
+    }
+
+    // MARK: Renaming
+
+    renameKey(event, index) {
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        event.stopPropagation()
+        this.commitRename(event.target, index)
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        MdBoss.manager.cancelRename()
+        this.root.focus()
+      }
+    }
+
+    /** Focus leaving the field commits - unless the rename already finished, in which case
+     *  the blur is the field being taken out of the row, not the user leaving it. */
+    renameBlur(event, index) {
+      const row = this.rowAt(index)
+      if (row && MdBoss.manager.renaming === row.node.path) this.commitRename(event.target, index)
+    }
+
+    commitRename(field, index) {
+      const row = this.rowAt(index)
+      if (!row) return
+      MdBoss.manager.rename(row.node.path, field.value)
+      this.root.focus()
+    }
+
+    // MARK: Dragging
+
+    dragStart(event, index) {
+      const row = this.rowAt(index)
+      if (!row || row.node.isDir) {
+        event.preventDefault()
+        return
+      }
+      MdBoss.manager.draggedFile = row.node.path
+      event.dataTransfer.effectAllowed = 'move'
+      // A private type rather than text/plain: a row dropped in the editor must not paste
+      // its path, and nothing outside this window has a use for it.
+      event.dataTransfer.setData('application/x-md-boss-file', row.node.path)
+    }
+
+    /** Fires on the source row however the drag ended - dropped, refused, or cancelled with
+     *  Escape - so it is the one place the drag state is certain to be cleared. */
+    dragEnd() {
+      MdBoss.manager.draggedFile = null
+      this.clearDrop()
+    }
+
+    rowAtPoint(x, y) {
+      const element = document.elementFromPoint(x, y)?.closest('.row')
+      return element && this.root.contains(element) ? this.rowAt(element.dataset.index) : null
+    }
+
+    /** "May this land here", asked on every pointer move. The answer is the move check,
+     *  cached per folder for the length of one hover - it stats the disk - and the first
+     *  ask after landing on a folder is a no until the check comes back, which is a few
+     *  frames at most. Answers the folder a drop at the point may land in, or null. */
+    hover(x, y, dragged) {
+      const row = dragged ? this.rowAtPoint(x, y) : null
+      if (!row || !row.node.isDir) {
+        this.setDropTarget(null)
+        return null
+      }
+      const path = row.node.path
+      let probe = this.local.dropProbe
+      if (!probe || probe.path !== path || probe.dragged !== dragged) {
+        probe = { path, dragged, ok: false }
+        this.local.dropProbe = probe
+        MdBoss.manager.canMove(dragged, path).then((ok) => {
+          if (this.local.dropProbe === probe) probe.ok = ok
+        })
+      }
+      if (!probe.ok) {
+        this.setDropTarget(null)
+        return null
+      }
+      this.setDropTarget(path)
+      return path
+    }
+
+    /** The drop lands only where the hover said yes. */
+    dropAt(x, y, dragged) {
+      const row = this.rowAtPoint(x, y)
+      const probe = this.local.dropProbe
+      this.clearDrop()
+      if (!row || !row.node.isDir || !probe || probe.path !== row.node.path || !probe.ok) return false
+      MdBoss.manager.dropDragged(row.node.path, dragged)
+      return true
+    }
+
+    dragOver(event) {
+      if (this.hover(event.clientX, event.clientY, MdBoss.manager.draggedFile) === null) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+    }
+
+    drop(event) {
+      if (this.dropAt(event.clientX, event.clientY, MdBoss.manager.draggedFile)) event.preventDefault()
+    }
+
+    /** A native drag: an in-window one when it entered carrying no OS paths while a row was
+     *  being dragged - remembered here, because the HTML5 dragend that clears draggedFile
+     *  can land before the native drop does. OS files never move anything. */
+    nativeDrag(drag) {
+      if (drag.kind === 'enter') this.local.nativeDragged = drag.paths.length ? null : MdBoss.manager.draggedFile
+      const dragged = this.local.nativeDragged
+      if (!dragged) return
+      if (drag.kind === 'leave') {
+        this.local.nativeDragged = null
+        this.clearDrop()
+      } else if (drag.kind === 'drop') {
+        this.local.nativeDragged = null
+        this.dropAt(drag.x, drag.y, dragged)
+      } else {
+        this.hover(drag.x, drag.y, dragged)
+      }
+    }
+
+    setDropTarget(path) {
+      if (this.state.dropTarget !== path) this.state.dropTarget = path
+    }
+
+    clearDrop() {
+      this.local.dropProbe = null
+      this.setDropTarget(null)
+    }
+
+    // MARK: Menus
+
+    async menu(event, index) {
+      event.preventDefault()
+      event.stopPropagation()
+      const row = this.rowAt(index)
+      if (!row) return
+      const manager = MdBoss.manager
+      const path = row.node.path
+      const { clientX, clientY } = event
+      const items = []
+      if (row.node.isDir) {
+        const cut = manager.cutFile
+        if (cut && await manager.canMove(cut, path)) {
+          // The dimmed row says something is pending; only the menu can say what.
+          items.push({ label: `Move ${cut.slice(cut.lastIndexOf('/') + 1)} Here`, action: () => manager.moveCut(path) })
+          items.push({ separator: true })
+        }
+      } else {
+        items.push({ label: 'Rename…', action: () => manager.startRename(path) })
+        items.push({ label: 'Cut', action: () => {
+          manager.cut(path)
+          this.root.focus()
+        } })
+        items.push({ separator: true })
+      }
+      items.push({ label: 'Copy Path', action: () => manager.copyText(path, 'Path copied') })
+      items.push({ label: 'Copy Name', action: () => manager.copyText(row.node.name, 'Name copied') })
+      if (!row.node.isDir) items.push({ label: 'Copy Text', action: () => manager.copyContents(path) })
+      items.push({ separator: true })
+      items.push({ label: MdBoss.revealLabel, action: () => manager.showInFileManager(path) })
+      if (!row.node.isDir) {
+        items.push({ separator: true })
+        items.push({ label: 'Move to Trash', action: () => manager.trash(path) })
+      }
+      MdBoss.menus.open(clientX, clientY, items)
+    }
+
+    /** The blank space below the tree stands for the folder the tree is showing. */
+    blankMenu(event) {
+      if (event.target.closest('.row')) return
+      event.preventDefault()
+      MdBoss.menus.open(event.clientX, event.clientY, [
+        { label: 'New File…', action: () => MdBoss.manager.newFile(), disabled: !MdBoss.manager.activeRoot },
+      ])
+    }
+  }
+</script>
+
+<style>
+  display: block;
+  overflow: auto;
+  padding: 4px;
+  box-sizing: border-box;
+  outline: none;
+
+  .empty {
+    padding: 24px 12px;
+    color: var(--muted);
+    text-align: center;
+    white-space: pre-line;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: calc(var(--font-default) + 9px);
+    padding: 0 8px;
+    border-radius: 5px;
+    color: var(--text);
+    white-space: nowrap;
+    cursor: default;
+    user-select: none;
+  }
+
+  .row:hover {
+    background: var(--surface);
+  }
+
+  .row.selected,
+  .row.cursor {
+    background: var(--selection);
+  }
+
+  /* Waiting for a Move Here: drawn faded, the way Finder shows a cut file. */
+  .row.cut {
+    opacity: 0.5;
+  }
+
+  /* The folder a dragged file would land in. An inset ring rather than a border, so the
+     row keeps its size and nothing below it shifts while the drag is over it. */
+  .row.drop {
+    box-shadow: inset 0 0 0 1.5px var(--accent);
+  }
+
+  /* One glyph, turned rather than swapped, so the open/close reads as motion. */
+  .chevron {
+    width: 12px;
+    flex: none;
+    color: var(--muted);
+    font-size: 0.7em;
+    text-align: center;
+    transition: transform 0.15s ease-out;
+  }
+
+  .row.open .chevron {
+    transform: rotate(90deg);
+  }
+
+  /* The kind glyph: folders in the accent so the tree's structure reads at a glance, files
+     in the muted ink so the names stay the loudest thing in the row. */
+  .icon {
+    flex: none;
+    display: flex;
+    color: var(--muted);
+  }
+
+  .row.dir .icon {
+    color: var(--accent);
+  }
+
+  .icon svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  /* Rows are keyed by path, so an expand only inserts the children: those fade and slide
+     in; everything already on screen stays put. */
+  .row {
+    animation: row-in 0.15s ease-out;
+  }
+
+  @keyframes row-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* The row's name as a field: the same box, the row's own height, no chrome of its own
+     beyond a hairline so it reads as the name being edited rather than a form. */
+  input.rename {
+    flex: 1;
+    min-width: 0;
+    height: calc(100% - 4px);
+    padding: 0 3px;
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+    outline: none;
+  }
+
+  .denied {
+    margin-left: 6px;
+    color: var(--muted);
+  }
+</style>
+
+{#if state.searching}
+  <search-results></search-results>
+{:else if state.message}
+  <div class="empty text-default">{state.message}</div>
+{:else}
+  {#each state.rows as row, index}
+    <div
+      key={row.path}
+      class={'row text-default' + (row.isDir ? ' dir' : '') + (row.isExpanded ? ' open' : '') + (row.path === state.selected ? ' selected' : '') + (index === state.cursor ? ' cursor' : '') + (row.path === state.cut ? ' cut' : '') + (row.path === state.dropTarget ? ' drop' : '')}
+      style="padding-left: {8 + row.depth * 14}px"
+      title={row.path}
+      data-index={index}
+      draggable={row.isDir || row.path === state.renaming ? 'false' : 'true'}
+      onclick="fez.open({index})"
+      oncontextmenu="fez.menu(event, {index})"
+      ondragstart="fez.dragStart(event, {index})"
+      ondragend="fez.dragEnd()"
+    >
+      <span class="chevron" onclick!="fez.toggle({index})">{row.isDir ? '▶' : ''}</span>
+      <span class="icon">{@html row.icon}</span>
+      {#if row.path === state.renaming}
+        <input fez:keep="rename-{index}" class="rename text-default" type="text" spellcheck="false" data-name={row.name} onclick="event.stopPropagation()" onkeydown="fez.renameKey(event, {index})" onblur="fez.renameBlur(event, {index})">
+      {:else}
+        <span class="name">{row.name}</span>
+      {/if}
+      {#if row.isDenied}
+        <span class="denied text-small">no access</span>
+      {/if}
+    </div>
+  {/each}
+  {#if state.truncated}
+    <div class="empty text-small">Showing the first {state.limit} files - narrow the root to see the rest.</div>
+  {/if}
+{/if}

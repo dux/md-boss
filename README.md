@@ -43,27 +43,8 @@ corner or ⌘[, or just click the file again.
 
 ## Install
 
-macOS:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh?v=43a3415 | bash
-```
-
-Downloads the latest universal dmg, copies `MdBoss.app` into `/Applications`, puts the
-`md-boss` command in `~/bin` (`PREFIX=/usr/local` for `/usr/local/bin`) and opens the app.
-macOS 10.15 or newer, and nothing else to install.
-Or take `MdBoss_<version>_universal.dmg` from the
-[releases page](https://github.com/dux/md-boss/releases/latest) and drag it to Applications.
-
-Windows: `MdBoss_<version>_x64-setup.exe` or the `.msi` from the releases page.
-Windows 10 or newer; the installer puts `md-boss.exe` in `%LOCALAPPDATA%\MdBoss`.
-
-Linux (x86_64): the same `install.sh` line installs the `.deb` where there is `apt`, the
-AppImage into `~/.local/bin` otherwise; or pick either from the releases page.
-Needs webkit2gtk 4.1, which is Ubuntu 22.04 and newer.
-
-Installed copies check the release on launch and offer "Restart to update" when a newer one
-is signed.
+There is no prebuilt download at the moment - the app was rebuilt on a new shell and the
+release pipeline is being redone. Build it from source (below); it takes a minute.
 
 | Paper | Raw and preview |
 |---|---|
@@ -75,59 +56,51 @@ Click any of them for the full-size image.
 
 ### From source
 
+Three pieces, and the line between them is the whole design:
+
+* `shell/` - a small Rust launcher: one window with the platform webview, native menus and
+  dialogs, nothing else.
+* `server/` - the backend, plain TypeScript run by the locally installed `bun`: files, walk,
+  search, link rewrite, notes, watching.
+* `src/` - the frontend, a fez + TypeScript app talking JSON-RPC to the server over a
+  localhost WebSocket.
+
 ```sh
 git clone https://github.com/dux/md-boss
 cd md-boss
-hammer tauri:dev
+hammer install     # bun install + cargo fetch
+hammer dev         # vite plus the shell pointed at it
 ```
 
-Requires [Bun](https://bun.sh), a stable Rust toolchain (`rustup`), the
-[Tauri v2 system dependencies](https://v2.tauri.app/start/prerequisites/) for your OS
-(Xcode command line tools on macOS; the WebView2 runtime and MSVC build tools on Windows;
-`libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf` on Debian/Ubuntu) and
-[hammer](https://github.com/dux/hammer).
-`hammer tauri:dev` runs `bun install` and the app against the Vite dev server.
+Requires [Bun](https://bun.sh) (`curl -fsSL https://bun.sh/install | bash`), a stable Rust
+toolchain (`rustup`) and [hammer](https://github.com/dux/hammer).
+On Debian/Ubuntu the webview needs `libwebkit2gtk-4.1-dev librsvg2-dev libxdo-dev`; on
+Windows, the WebView2 runtime and the MSVC build tools; on macOS, the Xcode command line
+tools.
+
+`hammer build` assembles `MdBoss.app` next to the checkout, `hammer install_app` copies it
+into `/Applications`.
+
+Bun is not bundled - the shell finds it on PATH and spawns the server with it. That is also
+what makes updates cheap: the payload is `server/` and `dist/`, and the native shell rarely
+changes.
 
 ## Tasks
 
-The cross-platform app lives in [tauri-rust/](tauri-rust/); its tasks sit under the
-`tauri:` namespace.
-
 | command | what it does |
 |---|---|
-| `hammer tauri:dev` | install, then run the app against the vite dev server - the inner loop |
-| `hammer tauri:build` | lint, test, then build - debug and unbundled; `--release` for an optimised build with the platform bundles (dmg / msi / nsis / appimage / deb) and the signed updater packages |
-| `hammer tauri:test` | `bun test` and `cargo test` |
-| `hammer tauri:lint` | `tsc --noEmit` and `cargo clippy` |
-| `hammer tauri:icon` | regenerate `src-tauri/icons` from `app/Resources/AppIcon.svg` |
-| `hammer tauri:link` | put the `md-boss` command on PATH (`tauri-rust/bin/md-boss` copied to `~/bin`) |
-| `hammer tauri:probe` | launch the dev app against a scratch config and capture its window to `tmp/probe.png` |
-| `hammer tauri:clean` | remove the tauri build artifacts (dist, cargo target) |
-
-Releases are built by [.github/workflows/release.yml](.github/workflows/release.yml) on a
-`v*` tag: one GitHub release per tag carrying the dmg, msi, nsis, deb and AppImage plus the
-`latest.json` the in-app updater reads.
-
-### The Swift app
-
-The original macOS app in [app/](app/) stays alongside the port; it builds with SwiftPM and
-the same `Hammerfile`.
-`hammer dev` lints, tests, builds, installs `MdBoss.app` to `/Applications` and launches it.
-Requires macOS 14, a Swift 6.2 toolchain and `swiftlint`.
-
-| command | what it does |
-|---|---|
-| `hammer dev` | lint, test, build, install to /Applications, launch - the inner loop |
-| `hammer build` | same, without launching - `--release` for an optimised build |
-| `hammer test` | `swift test` |
-| `hammer lint` | `swiftlint` |
-| `hammer watch` | rebuild and reinstall on every Swift file change |
-| `hammer icon` | regenerate `AppIcon.icns` from `AppIcon.svg` |
-| `hammer register` | re-register with LaunchServices so `.md` files bind to this build |
-| `hammer gh_pub` | release build, then publish it to GitHub as the one latest release |
+| `hammer install` | `bun install` and `cargo fetch` - both sides of the toolchain |
+| `hammer dev` | vite on 1430 plus the shell (`cargo run`) pointed at it - the inner loop |
+| `hammer test` | `bun test` and `cargo test` |
+| `hammer lint` | `tsc --noEmit` and `cargo clippy` |
+| `hammer build` | lint, test, build the frontend and the shell, assemble the bundle; `--release` also writes the payload tarball |
+| `hammer run` | launch the bundle built here |
+| `hammer install_app` | copy the bundle into `/Applications` (macOS) |
+| `hammer server` | run the bun server alone on a fixed port, for poking at it with a WebSocket client |
+| `hammer payload` | write `payload-<version>.tar.gz` - `server/`, `dist/`, `version.txt` |
+| `hammer icon` | regenerate `icons/` from `icons/AppIcon.svg` |
+| `hammer link` | put the `md-boss` command on PATH (`bin/md-boss` copied to `~/bin`) |
 | `hammer demo` | serve the repo and open the demo page |
-| `hammer shots` | recapture `web-demo/assets` by driving the installed app |
-| `hammer clean` | remove build artifacts |
 
 ## Notes
 
@@ -212,7 +185,7 @@ md-boss notes/x.md     # open a file, adding its folder if it is not already lis
 md-boss --help         # the flags, printed here rather than in a window
 ```
 
-`install.sh` puts it in `~/bin`; from a checkout, `hammer tauri:link` does the same.
+`hammer link` copies it to `~/bin`.
 On Windows the install folder (`%LOCALAPPDATA%\MdBoss`) on PATH gives `md-boss file.md`
 the same behaviour.
 
@@ -253,12 +226,12 @@ On Windows and Linux read ⌘ as Ctrl and ⌥ as Alt; the shortcuts are the menu
 Settings live in `~/.config/md-boss/settings.json` and the sidebar's root folders in
 `~/.config/md-boss/roots.txt`, one absolute path per line - the same path on every OS.
 Both are plain text and meant to be edited by hand.
-The window's position and size are not a setting: they are kept by the OS shell in the app's
-data folder (`~/Library/Application Support/com.dux.md-boss/.window-state.json` on macOS).
+An update unpacks into `~/.config/md-boss/app/`, and the shell runs that copy in preference
+to the one inside the bundle.
 
 ## Docs
 
-* [doc/CODE_STRUCTURE.md](doc/CODE_STRUCTURE.md) - architecture of both apps
-* [doc/feature/port-tauri.md](doc/feature/port-tauri.md) - the port plan and the decisions made along the way
+* [TODO.md](TODO.md) - where the build stands, phase by phase
 * [doc/THEMES.md](doc/THEMES.md) - the palettes and the rules around them
+* [doc/ai-claude-integration-plan.todo.md](doc/ai-claude-integration-plan.todo.md) - the planned chat pane
 * [web-demo/](web-demo/) - the demo page, its sample documents and `hammer demo`
