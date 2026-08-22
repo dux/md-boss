@@ -4,7 +4,12 @@ out
 shell/target
 MdBoss.app
 payload-*.tar.gz
+md-boss-*.tar.gz
+md-boss-*.zip
+SHA256SUMS
 version.txt
+icons/icon_*.png
+icons/*.icns
 .DS_Store
 
 # written and removed around a demo screenshot run - never committed

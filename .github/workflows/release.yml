@@ -1,0 +1,145 @@
+# Release pipeline. Tag `vX.Y.Z` (matching package.json) and this builds every platform
+# and publishes the assets the install scripts pull from.
+#
+# The build steps themselves live in the Hammerfile, not here - this installs the gem and
+# calls the same `hammer` tasks you run locally, so there is one description of how the app
+# is assembled rather than two that drift apart.
+#
+# The frontend is built once and shared: dist/ must be the same bytes in every platform
+# bundle, and the payload tarball an in-app update replaces is platform independent.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  HAMMER_VERSION: '~> 0.3'
+
+jobs:
+  frontend:
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: ruby/setup-ruby@v1
+        with: { ruby-version: '3.3' }
+      - run: gem install lux-hammer -v "$HAMMER_VERSION"
+
+      - id: meta
+        name: Version from package.json, checked against the tag
+        run: |
+          version=$(ruby -rjson -e 'puts JSON.parse(File.read("package.json"))["version"]')
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # Not `hammer install` - that also runs cargo fetch, and there is no Rust on this job.
+      - run: bun install --frozen-lockfile
+
+      # `hammer icon` skips quietly without this, and the macOS bundle would ship iconless.
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq librsvg2-bin
+
+      - run: hammer frontend
+
+      - uses: actions/upload-artifact@v4
+        with: { name: dist, path: dist, retention-days: 1 }
+      - uses: actions/upload-artifact@v4
+        with: { name: icons, path: icons/icon_*.png, retention-days: 1 }
+      - uses: actions/upload-artifact@v4
+        with: { name: asset-payload, path: payload-*.tar.gz, retention-days: 1 }
+
+  shell:
+    needs: frontend
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-14,     target: darwin-arm64 }
+          - { os: macos-13,     target: darwin-x64   }
+          - { os: ubuntu-22.04, target: linux-x64    }
+          - { os: windows-2022, target: windows-x64  }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: ruby/setup-ruby@v1
+        with: { ruby-version: '3.3' }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with: { workspaces: shell }
+      - run: gem install lux-hammer -v "${{ env.HAMMER_VERSION }}"
+
+      # Built on the oldest supported runner so the glibc floor stays low.
+      - name: WebKitGTK and the drop libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev librsvg2-dev libxdo-dev pkg-config
+
+      - run: bun install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: icons, path: icons }
+
+      # Every platform lints and tests its own half: this is where a Windows-only clippy
+      # failure surfaces, rather than in the bundle someone downloads.
+      - run: hammer lint
+      - run: hammer test
+
+      - run: hammer package --release
+
+      # The only machine in the pipeline that can parse it, so it is checked here rather
+      # than shipped untested to whoever runs the install line first.
+      - name: Parse-check install.ps1
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD\install.ps1", [ref]$null, [ref]$errors)
+          if ($errors) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+          Write-Host 'install.ps1 parses'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asset-${{ matrix.target }}
+          path: |
+            md-boss-*.tar.gz
+            md-boss-*.zip
+          retention-days: 1
+
+  release:
+    needs: [frontend, shell]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { pattern: asset-*, path: assets, merge-multiple: true }
+
+      # One SHA256SUMS rather than a .sha256 per asset: the install scripts fetch it once
+      # and read their own line out of it.
+      - name: SHA256SUMS
+        working-directory: assets
+        run: sha256sum * | tee SHA256SUMS
+
+      - name: Publish
+        working-directory: assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', needs.frontend.outputs.version) }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            && gh release upload "$TAG" ./* --repo "$GITHUB_REPOSITORY" --clobber \
+            || gh release create "$TAG" ./* --repo "$GITHUB_REPOSITORY" \
+                 --title "md-boss $TAG" --generate-notes

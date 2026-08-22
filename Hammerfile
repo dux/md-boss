@@ -1,25 +1,157 @@
 # Hammerfile - build / run helpers for md-boss.
 # Run with: hammer <command>   (https://github.com/dux/hammer)
+#
+# Every build goes through these tasks, local and CI alike: the release workflow installs
+# the gem and calls `hammer frontend` / `hammer package --release`, so how the app is put
+# together is described once rather than twice in two places that drift.
+#
+# File work is FileUtils rather than `cp -R` and friends: these tasks run on the Windows
+# runner too, where there is no shell to hold them.
 
 require 'json'
+require 'fileutils'
+require 'rbconfig'
 
 APP_NAME    ||= 'MdBoss'
 BINARY_NAME ||= 'md-boss'
 BUNDLE_DIR  ||= "#{APP_NAME}.app"
 INSTALL_DIR ||= '/Applications'
-VERSION     ||= JSON.parse(File.read('package.json'))['version']
 DEV_URL     ||= 'http://localhost:1430'
 MIN_BUN     ||= '1.2.0'
+ICON_SIZES  ||= [16, 32, 64, 128, 256, 512, 1024].freeze
+
+# Not VERSION: hammer defines one of its own, and `VERSION ||=` resolves to that rather
+# than assigning - which is how every build so far stamped hammer's version into the app.
+APP_VERSION ||= JSON.parse(File.read('package.json'))['version']
 
 # What the payload and the bundle carry besides the shell binary. The server runs from
 # source - bun runs TypeScript - so there is nothing to compile on that side.
 PAYLOAD_DIRS ||= %w[server dist].freeze
 
+helpers do
+  def host_os
+    case RbConfig::CONFIG['host_os']
+    when /darwin/            then :macos
+    when /mswin|mingw|msys/  then :windows
+    else                          :linux
+    end
+  end
+
+  # The name the release assets and the install scripts agree on.
+  def host_target
+    arch = RbConfig::CONFIG['host_cpu'].match?(/arm|aarch64/) ? 'arm64' : 'x64'
+    case host_os
+    when :macos   then "darwin-#{arch}"
+    when :windows then 'windows-x64'
+    else               "linux-#{arch}"
+    end
+  end
+
+  def shell_binary(cfg)
+    exe = host_os == :windows ? "#{BINARY_NAME}.exe" : BINARY_NAME
+    File.join 'shell', 'target', cfg, exe
+  end
+
+  def archive_name(ext)
+    "#{BINARY_NAME}-#{APP_VERSION}-#{host_target}.#{ext}"
+  end
+
+  # `which`, without shelling out to a `which` that Windows does not have.
+  def tool?(name)
+    exts = host_os == :windows ? %w[.exe .bat .cmd] : ['']
+    ENV.fetch('PATH', '').split(File::PATH_SEPARATOR).any? do |dir|
+      exts.any? { |ext| File.file?(File.join(dir, "#{name}#{ext}")) }
+    end
+  end
+
+  def stage_payload(dir)
+    PAYLOAD_DIRS.each { |d| FileUtils.cp_r d, dir }
+    File.write File.join(dir, 'version.txt'), "#{APP_VERSION}\n"
+  end
+
+  def need_frontend!
+    return if Dir.exist?('dist') && !Dir.empty?('dist')
+    error 'dist/ is missing - run `hammer frontend` first'
+  end
+
+  # iconutil is macOS-only and needs the PNG set `hammer icon` writes. Returns false
+  # rather than raising, so a build on a machine without them still produces an app.
+  def build_icns(dest)
+    return false unless host_os == :macos && tool?('iconutil')
+    return false unless ICON_SIZES.all? { |s| File.exist?("icons/icon_#{s}.png") }
+
+    iconset = 'icons/AppIcon.iconset'
+    FileUtils.rm_rf iconset
+    FileUtils.mkdir_p iconset
+    [16, 32, 128, 256, 512].each do |size|
+      FileUtils.cp "icons/icon_#{size}.png", "#{iconset}/icon_#{size}x#{size}.png"
+      FileUtils.cp "icons/icon_#{size * 2}.png", "#{iconset}/icon_#{size}x#{size}@2x.png"
+    end
+    sh "iconutil -c icns #{iconset} -o #{dest}"
+    FileUtils.rm_rf iconset
+    true
+  end
+
+  def package_macos(bin, archive:)
+    resources = "#{BUNDLE_DIR}/Contents/Resources"
+    FileUtils.rm_rf BUNDLE_DIR
+    FileUtils.mkdir_p "#{BUNDLE_DIR}/Contents/MacOS"
+    FileUtils.mkdir_p resources
+    File.write "#{BUNDLE_DIR}/Contents/Info.plist",
+               File.read('shell/Info.plist').gsub('__VERSION__', APP_VERSION)
+    FileUtils.cp bin, "#{BUNDLE_DIR}/Contents/MacOS/#{BINARY_NAME}"
+    # The install script puts this on PATH, pinning the bundle's real location into it.
+    FileUtils.cp "bin/#{BINARY_NAME}", "#{resources}/#{BINARY_NAME}.sh"
+    stage_payload resources
+    build_icns "#{resources}/AppIcon.icns"
+
+    # Ad-hoc: arm64 refuses to run unsigned code. A Developer ID is unnecessary because
+    # installs come through curl, which sets no com.apple.quarantine attribute.
+    sh "codesign --force --sign - #{BUNDLE_DIR}"
+    say.green "built ./#{BUNDLE_DIR}"
+    return unless archive
+
+    # COPYFILE_DISABLE keeps macOS from padding the tar with ._ AppleDouble entries.
+    sh "COPYFILE_DISABLE=1 tar czf #{archive_name 'tar.gz'} #{BUNDLE_DIR}"
+    say.green "built ./#{archive_name 'tar.gz'}"
+  end
+
+  def package_linux(bin, archive:)
+    out = "out/#{BINARY_NAME}"
+    FileUtils.rm_rf 'out'
+    FileUtils.mkdir_p out
+    FileUtils.cp bin, out
+    FileUtils.cp "bin/#{BINARY_NAME}", "#{out}/#{BINARY_NAME}.sh"
+    FileUtils.cp 'icons/icon_256.png', "#{out}/#{BINARY_NAME}.png" if File.exist?('icons/icon_256.png')
+    stage_payload out
+    say.green "built ./#{out}"
+    return unless archive
+
+    sh "tar czf #{archive_name 'tar.gz'} -C out #{BINARY_NAME}"
+    say.green "built ./#{archive_name 'tar.gz'}"
+  end
+
+  def package_windows(bin, archive:)
+    out = "out/#{APP_NAME}"
+    FileUtils.rm_rf 'out'
+    FileUtils.mkdir_p out
+    FileUtils.cp bin, out
+    stage_payload out
+    say.green "built ./#{out}"
+    return unless archive
+
+    # Flat zip - install.ps1 expands it straight into %LOCALAPPDATA%\MdBoss.
+    sh %(powershell -NoProfile -Command "Compress-Archive -Path 'out\\#{APP_NAME}\\*' ) +
+       %(-DestinationPath '#{archive_name 'zip'}' -Force")
+    say.green "built ./#{archive_name 'zip'}"
+  end
+end
+
 task :install do
   desc 'bun install and cargo fetch - both sides of the toolchain'
   proc do
     sh 'bun install'
-    sh 'cd shell && cargo fetch'
+    sh 'cargo fetch --manifest-path shell/Cargo.toml'
   end
 end
 
@@ -27,7 +159,7 @@ task :lint do
   desc 'tsc --noEmit and cargo clippy'
   proc do
     sh 'bun x tsc --noEmit'
-    sh 'cd shell && cargo clippy --quiet -- -D warnings'
+    sh 'cargo clippy --quiet --manifest-path shell/Cargo.toml -- -D warnings'
   end
 end
 
@@ -35,7 +167,7 @@ task :test do
   desc 'bun test and cargo test'
   proc do
     sh 'bun test --pass-with-no-tests'
-    sh 'cd shell && cargo test --quiet'
+    sh 'cargo test --quiet --manifest-path shell/Cargo.toml'
   end
 end
 
@@ -58,47 +190,61 @@ task :dev do
   end
 end
 
+task :frontend do
+  desc <<~TXT
+    Build everything platform independent: dist/, the icon set, the payload tarball.
+    The release pipeline runs this once and shares the result with every platform, so
+    the frontend in each bundle is the same bytes.
+  TXT
+  proc do
+    sh 'bun run build'
+    hammer :icon
+    hammer :payload
+  end
+end
+
+task :package do
+  desc <<~TXT
+    Build the shell and assemble the app for the platform you are on.
+    Needs dist/ - run `hammer frontend` first, or use `hammer build` for both.
+  TXT
+  opt :release, type: :boolean, desc: 'Optimised shell, and the release archive beside it'
+  proc do |opts|
+    need_frontend!
+    cfg = opts[:release] ? 'release' : 'debug'
+    say "packaging #{APP_NAME} #{APP_VERSION} for #{host_target} (#{cfg})", :cyan
+    sh "cargo build --quiet --manifest-path shell/Cargo.toml#{opts[:release] ? ' --release' : ''}"
+
+    bin = shell_binary(cfg)
+    error "#{bin} is missing - the shell build produced nothing" unless File.file?(bin)
+
+    case host_os
+    when :macos   then package_macos   bin, archive: opts[:release]
+    when :windows then package_windows bin, archive: opts[:release]
+    else               package_linux   bin, archive: opts[:release]
+    end
+  end
+end
+
 task :build do
-  desc 'Lint, test, build the frontend and the shell, assemble the app bundle (macOS) or a plain layout (elsewhere)'
-  opt :release, type: :boolean, desc: 'Optimised shell, and the payload tarball next to it'
+  desc 'Lint, test, and build both halves - the frontend and this platform package'
+  opt :release, type: :boolean, desc: 'Optimised shell, and the release archives'
   proc do |opts|
     hammer :install
     hammer :lint
     hammer :test
-    cfg = opts[:release] ? 'release' : 'debug'
-    say "building #{APP_NAME} (simple-bun, #{cfg})", :cyan
-    sh 'bun run build'
-    sh "cd shell && cargo build --quiet #{opts[:release] ? '--release' : ''}"
-    bin = "shell/target/#{cfg}/#{BINARY_NAME}"
-    if RUBY_PLATFORM.include?('darwin')
-      sh "rm -rf #{BUNDLE_DIR}"
-      sh "mkdir -p #{BUNDLE_DIR}/Contents/MacOS #{BUNDLE_DIR}/Contents/Resources"
-      plist = File.read('shell/Info.plist').gsub('__VERSION__', VERSION)
-      File.write("#{BUNDLE_DIR}/Contents/Info.plist", plist)
-      sh "cp #{bin} #{BUNDLE_DIR}/Contents/MacOS/#{BINARY_NAME}"
-      sh "cp icons/icon.icns #{BUNDLE_DIR}/Contents/Resources/AppIcon.icns" if File.exist?('icons/icon.icns')
-      PAYLOAD_DIRS.each { |d| sh "cp -R #{d} #{BUNDLE_DIR}/Contents/Resources/" }
-      File.write("#{BUNDLE_DIR}/Contents/Resources/version.txt", "#{VERSION}\n")
-      say.green "built ./#{BUNDLE_DIR}"
-    else
-      out = "out/#{BINARY_NAME}"
-      sh "rm -rf out && mkdir -p #{out}"
-      sh "cp #{bin} #{out}/"
-      PAYLOAD_DIRS.each { |d| sh "cp -R #{d} #{out}/" }
-      File.write("#{out}/version.txt", "#{VERSION}\n")
-      say.green "built ./#{out}"
-    end
-    hammer :payload if opts[:release]
+    hammer :frontend
+    hammer :package, release: opts[:release]
   end
 end
 
 task :run do
-  desc 'Launch the bundle built here (macOS) or the plain layout'
+  desc 'Launch the bundle built here'
   proc do
-    if RUBY_PLATFORM.include?('darwin')
-      sh "open #{BUNDLE_DIR}"
-    else
-      sh "out/#{BINARY_NAME}/#{BINARY_NAME}"
+    case host_os
+    when :macos   then sh "open #{BUNDLE_DIR}"
+    when :windows then sh "out\\#{APP_NAME}\\#{BINARY_NAME}.exe"
+    else               sh "out/#{BINARY_NAME}/#{BINARY_NAME}"
     end
   end
 end
@@ -106,32 +252,26 @@ end
 task :install_app do
   desc "Copy the bundle into #{INSTALL_DIR} (macOS)"
   proc do
-    raise 'macOS only' unless RUBY_PLATFORM.include?('darwin')
+    error 'macOS only' unless host_os == :macos
     `pkill -x "#{BINARY_NAME}" 2>/dev/null`
-    sh "rm -rf #{INSTALL_DIR}/#{BUNDLE_DIR}"
-    sh "cp -R #{BUNDLE_DIR} #{INSTALL_DIR}/"
-    say.green "installed to #{INSTALL_DIR}/#{BUNDLE_DIR}"
+    FileUtils.rm_rf "#{INSTALL_DIR}/#{BUNDLE_DIR}"
+    FileUtils.cp_r BUNDLE_DIR, INSTALL_DIR
+    say.green "installed #{INSTALL_DIR}/#{BUNDLE_DIR}"
   end
 end
 
 task :icon do
-  desc 'Regenerate icons/ from icons/AppIcon.svg (icns on macOS, png set everywhere)'
+  desc 'Regenerate icons/ from icons/AppIcon.svg - the PNG set everywhere, .icns on macOS'
   proc do
-    svg = 'icons/AppIcon.svg'
-    sh 'mkdir -p icons'
-    [16, 32, 64, 128, 256, 512, 1024].each do |size|
-      sh "rsvg-convert -w #{size} -h #{size} #{svg} -o icons/icon_#{size}.png"
+    unless tool?('rsvg-convert')
+      say.yellow 'rsvg-convert not found - keeping the icons already in icons/'
+      next
     end
-    if RUBY_PLATFORM.include?('darwin')
-      iconset = 'icons/AppIcon.iconset'
-      sh "rm -rf #{iconset} && mkdir -p #{iconset}"
-      [16, 32, 128, 256, 512].each do |size|
-        sh "cp icons/icon_#{size}.png #{iconset}/icon_#{size}x#{size}.png"
-        sh "cp icons/icon_#{size * 2}.png #{iconset}/icon_#{size}x#{size}@2x.png"
-      end
-      sh "iconutil -c icns #{iconset} -o icons/icon.icns"
-      sh "rm -rf #{iconset}"
+    FileUtils.mkdir_p 'icons'
+    ICON_SIZES.each do |size|
+      sh "rsvg-convert -w #{size} -h #{size} icons/AppIcon.svg -o icons/icon_#{size}.png"
     end
+    build_icns 'icons/icon.icns'
     say.green 'icons regenerated'
   end
 end
@@ -139,12 +279,14 @@ end
 task :payload do
   desc 'Write payload-<version>.tar.gz: server/, dist/, version.txt - what an update replaces'
   proc do
-    raise 'dist/ is missing - run `hammer build` first' unless Dir.exist?('dist')
-    File.write('version.txt', "#{VERSION}\n")
-    name = "payload-#{VERSION}.tar.gz"
-    sh "tar czf #{name} #{PAYLOAD_DIRS.join(' ')} version.txt"
-    sh "shasum -a 256 #{name} > #{name}.sha256"
-    sh 'rm version.txt'
+    need_frontend!
+    File.write 'version.txt', "#{APP_VERSION}\n"
+    name = "payload-#{APP_VERSION}.tar.gz"
+    begin
+      sh "tar czf #{name} #{PAYLOAD_DIRS.join ' '} version.txt"
+    ensure
+      FileUtils.rm_f 'version.txt'
+    end
     say.green "wrote ./#{name}"
   end
 end
@@ -152,9 +294,9 @@ end
 task :link do
   desc 'Put the md-boss command on PATH: bin/md-boss copied to ~/bin'
   proc do
-    sh 'mkdir -p ~/bin'
-    sh 'install -m 755 bin/md-boss ~/bin/md-boss'
-    say.green 'installed ~/bin/md-boss'
+    FileUtils.mkdir_p File.expand_path('~/bin')
+    FileUtils.install "bin/#{BINARY_NAME}", File.expand_path("~/bin/#{BINARY_NAME}"), mode: 0o755
+    say.green "installed ~/bin/#{BINARY_NAME}"
   end
 end
 

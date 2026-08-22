@@ -1,3 +1,8 @@
+// Rust links a console subsystem binary by default, which on Windows means a black
+// console window behind the app every time it is launched from Explorer, the Start Menu
+// or the installer's shortcut. Debug builds keep it - `hammer dev` prints there.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 // The md-boss shell: one window, the platform webview, and a bun process behind it.
 //
 // Everything that needs a window or the OS is answered here - menus, dialogs, clipboard,

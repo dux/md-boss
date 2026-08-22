@@ -47,8 +47,27 @@ label, with ⌫ or ⌘[, or just click the file again.
 
 ## Install
 
-There is no prebuilt download at the moment - the app was rebuilt on a new shell and the
-release pipeline is being redone. Build it from source (below); it takes a minute.
+macOS and Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh | sh
+```
+
+Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/dux/md-boss/main/install.ps1 | iex
+```
+
+No administrator, no installer, nothing added outside your home folder except
+`/Applications/MdBoss.app` on macOS. The script checks the release checksum, tells you if
+`bun` is missing, and prints the one command that fixes it.
+
+Installing this way rather than from a browser download is deliberate: `curl` sets no
+quarantine attribute and `irm` writes no Mark-of-the-Web, so an unsigned build opens without
+a Gatekeeper or SmartScreen prompt.
+
+`| sh -s -- --uninstall` removes it again, leaving `~/.config/md-boss` alone.
 
 | Paper | Raw and preview |
 |---|---|
@@ -85,6 +104,10 @@ tools.
 `hammer build` assembles `MdBoss.app` next to the checkout, `hammer install_app` copies it
 into `/Applications`.
 
+Releases go through the same tasks: `.github/workflows/release.yml` installs the `lux-hammer`
+gem on each runner and calls `hammer frontend` once, then `hammer package --release` per
+platform, so CI and your machine build the app the same way.
+
 Bun is not bundled - the shell finds it on PATH and spawns the server with it. That is also
 what makes updates cheap: the payload is `server/` and `dist/`, and the native shell rarely
 changes.
@@ -97,7 +120,9 @@ changes.
 | `hammer dev` | vite on 1430 plus the shell (`cargo run`) pointed at it - the inner loop |
 | `hammer test` | `bun test` and `cargo test` |
 | `hammer lint` | `tsc --noEmit` and `cargo clippy` |
-| `hammer build` | lint, test, build the frontend and the shell, assemble the bundle; `--release` also writes the payload tarball |
+| `hammer frontend` | everything platform independent: `dist/`, the icon set, the payload tarball |
+| `hammer package` | build the shell and assemble the app for the platform you are on; `--release` also writes the release archive |
+| `hammer build` | lint, test, then `frontend` and `package` together |
 | `hammer run` | launch the bundle built here |
 | `hammer install_app` | copy the bundle into `/Applications` (macOS) |
 | `hammer server` | run the bun server alone on a fixed port, for poking at it with a WebSocket client |
