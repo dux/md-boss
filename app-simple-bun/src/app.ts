@@ -1,0 +1,70 @@
+import { createEditor } from './editor/editor'
+import { Manager } from './models/manager'
+import { RootFolders } from './models/rootFolders'
+import { SettingsStore } from './models/settingsStore'
+import { TypeAhead } from './models/typeAhead'
+import { Updater } from './models/updater'
+import { documentKind } from './models/fileKinds'
+import { FONT_SETTINGS, PANE_TITLE, PANES, paneShortTitle, visiblePanes } from './models/settings'
+import { Panels } from './ui/panels'
+import { ContextMenus } from './ui/menus'
+import { isInside } from './ui/dragPoint'
+import { NOTE_SCOPES, SCOPE_TITLE, noteLabel, partitionNotes, scopeIsCollapsible } from './models/notes'
+import { SEARCH_PLACEHOLDER } from './models/sidebarSearch'
+import { documentBaseURL } from './models/linkTarget'
+import { revealLabel } from './models/platform'
+import { native } from './native/bridge'
+import { buildPreviewPage } from './preview/page'
+import { buildCSVPage } from './preview/csvPage'
+import { parseCSV } from './models/csvTable'
+import { rootCSS, THEMES, themeNamed } from './theme/theme'
+
+// What .fez components may reach. Fez compiles them at runtime, so they cannot import
+// modules; this object is their one import and the explicit list of the app surface.
+export async function createApp() {
+  const settings = await SettingsStore.load()
+  const folders = await RootFolders.load()
+  const home = await native().paths.home()
+  const configDir = await native().paths.config()
+  const manager = new Manager(settings, folders, home, configDir)
+  return {
+    native,
+    TypeAhead,
+    createEditor,
+    documentKind,
+    visiblePanes,
+    PANES,
+    PANE_TITLE,
+    paneShortTitle,
+    FONT_SETTINGS,
+    NOTE_SCOPES,
+    SCOPE_TITLE,
+    noteLabel,
+    partitionNotes,
+    scopeIsCollapsible,
+    SEARCH_PLACEHOLDER,
+    panels: new Panels(),
+    menus: new ContextMenus(),
+    buildPreviewPage,
+    buildCSVPage,
+    parseCSV,
+    documentBaseURL,
+    isInside,
+    /** "Reveal in Finder" / "Show in Explorer" / "Show in File Manager" - the menus' item. */
+    revealLabel: revealLabel(native().platform),
+    rootCSS,
+    THEMES,
+    themeNamed,
+    settings,
+    manager,
+    /** Self-update: the launch check and the Help item. Restart runs quit's guard first. */
+    updater: new Updater(native().updater, manager.toast, () => manager.prepareToExit()),
+  }
+}
+
+export type App = Awaited<ReturnType<typeof createApp>>
+
+declare global {
+  // eslint-disable-next-line no-var
+  var MdBoss: App
+}

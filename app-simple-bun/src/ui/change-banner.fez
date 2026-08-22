@@ -1,0 +1,87 @@
+<script>
+  // What the file did while you were looking at it. A banner rather than an alert: file
+  // watchers fire in bursts, and a modal that steals focus while someone is typing is
+  // hostile. Drawn by *both* document panes: with the preview on its own - the default -
+  // the editor's banner is not on screen to say so, and a document silently going stale
+  // under a reader is the same bug as it going stale under a typist.
+  class {
+    init() {
+      this.state.change = null
+    }
+
+    onMount() {
+      this.local.unsubscribe = MdBoss.manager.onChange(() => this.pull())
+      this.pull()
+    }
+
+    onDestroy() {
+      if (this.local.unsubscribe) this.local.unsubscribe()
+    }
+
+    pull() {
+      const doc = MdBoss.manager.document
+      this.state.change = doc ? doc.externalChange : null
+    }
+
+    reload() {
+      MdBoss.manager.reloadFromDisk()
+    }
+
+    keep() {
+      MdBoss.manager.keepMine()
+    }
+  }
+</script>
+
+<style>
+  display: block;
+
+  /* A stable root with a hidden class rather than an {#if} around everything: a template
+     that renders to nothing leaves fez's render hash untouched, and the next identical
+     banner would be skipped as "unchanged" (see AGENTS.md, toggleable views). */
+  .banner.hidden {
+    display: none;
+  }
+
+  .banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    border-left: 3px solid var(--accent);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+  }
+
+  .banner .glyph {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .banner .text {
+    flex: 1;
+  }
+
+  .banner button {
+    padding: 2px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+  }
+</style>
+
+<div class={'banner text-buttons' + (state.change ? '' : ' hidden')}>
+  {#if state.change}
+    <span class="glyph">!</span>
+    <span class="text">{state.change === 'conflict' ? 'This file changed on disk.' : 'This file was moved or deleted. Your text is still here.'}</span>
+    {#if state.change === 'conflict'}
+      <button class="text-buttons pointer" onclick="fez.reload()">Reload from Disk</button>
+      <button class="text-buttons pointer" onclick="fez.keep()">Keep My Version</button>
+    {:else}
+      <button class="text-buttons pointer" onclick="fez.keep()">Dismiss</button>
+    {/if}
+  {/if}
+</div>

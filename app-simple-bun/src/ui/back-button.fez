@@ -1,0 +1,63 @@
+<script>
+  // Back to the document you were reading before this one. Pinned to the rendered pane's
+  // top-left corner: following a link is something you do in the rendered page, so the way
+  // back sits where you left. Hidden rather than disabled when there is no history - a
+  // permanently dead control on top of the text is just noise. Cmd-[ works either way.
+  class {
+    init() {
+      this.state.target = null
+    }
+
+    onMount() {
+      this.local.unsubscribe = MdBoss.manager.onChange(() => this.pull())
+      this.pull()
+    }
+
+    onDestroy() {
+      if (this.local.unsubscribe) this.local.unsubscribe()
+    }
+
+    pull() {
+      const target = MdBoss.manager.backTarget
+      this.state.target = target ? target.slice(target.lastIndexOf('/') + 1) : null
+    }
+
+    back() {
+      MdBoss.manager.goBack()
+    }
+  }
+</script>
+
+<style>
+  display: block;
+
+  /* Stable root + hidden class, not an {#if} around everything - see change-banner. */
+  .back.hidden {
+    display: none;
+  }
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: max(22px, calc(var(--font-buttons) + 10px));
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--muted);
+    font-family: inherit;
+    white-space: nowrap;
+  }
+
+  button .chevron {
+    font-size: 0.8em;
+    font-weight: 600;
+  }
+</style>
+
+<div class={'back' + (state.target ? '' : ' hidden')}>
+  {#if state.target}
+    <button class="text-buttons pointer" title={'Back to ' + state.target} onclick="fez.back()"><span class="chevron">‹</span> go back</button>
+  {/if}
+</div>

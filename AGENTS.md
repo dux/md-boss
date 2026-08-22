@@ -1,6 +1,7 @@
 # md-boss
 
 * two apps live here: the cross-platform Tauri app in tauri-rust/ and the Swift macOS app in app/
+* a third, exploratory root is app-simple-bun/ (own Rust shell + local bun backend + JSON-RPC); it has its own Hammerfile and TODO.md - `cd app-simple-bun && hammer lint && hammer test` after changes there
 * read doc/CODE_STRUCTURE.md first (tauri-rust) and doc/CODE_STRUCTURE_SWIFT.md (app/) to understand the codebase architecture
 * tauri-rust: run `hammer tauri:lint` and `hammer tauri:test` after every batch of jobs -> when code is changed and you are done
 * tauri-rust: for text styles use only the classes in tauri-rust/src/ui/styles.css (`.text-default`, `.text-buttons`, `.text-small`, `.text-title`, `.text-mono`)
