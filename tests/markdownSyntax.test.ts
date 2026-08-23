@@ -114,7 +114,7 @@ describe('lists and quotes', () => {
   })
 
   test('all three task states are marked', () => {
-    for (const box of ['[ ]', '[x]', '[X]', '[*]']) {
+    for (const box of ['[ ]', '[x]', '[X]', '[o]', '[O]', '[*]']) {
       expect(kinds(`- ${box} do it`).slice(0, 2)).toEqual(['listMarker', 'taskMarker'])
     }
   })

@@ -27,7 +27,7 @@ describe('Return continues a list', () => {
     expect(atEnd('> - item')).toEqual(insert('\n> - '))
   })
 
-  test.each(['[ ]', '[x]', '[X]', '[*]'])('a task %p continues unchecked', (box) => {
+  test.each(['[ ]', '[x]', '[X]', '[o]', '[O]', '[*]'])('a task %p continues unchecked', (box) => {
     expect(atEnd(`- ${box} done`)).toEqual(insert('\n- [ ] '))
   })
 

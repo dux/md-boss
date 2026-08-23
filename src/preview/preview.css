@@ -121,13 +121,14 @@ li > p + p { margin-top: 0.25em; }
    All three markers are drawn here rather than left to the platform. An input does not
    inherit the page font, so an em on the native box resolved against 13px while the same em
    on the spinner resolved against the body size - three states, three sizes, three columns.
-   `font: inherit` puts them back on one scale and `appearance: none` stops AppKit drawing
-   its own control at whatever size it likes. */
+   `font: inherit` puts them back on one scale; `appearance: none` below stops AppKit drawing
+   its own control at whatever size it likes.
+
+   Only the geometry is shared: the box paints itself with a border, the spinner with its own
+   strokes. */
 li.md-task { list-style: none; }
 
 .md-task input[type="checkbox"], .md-spinner {
-  appearance: none;
-  -webkit-appearance: none;
   display: inline-block;
   font: inherit;
   width: 1em;
@@ -138,13 +139,15 @@ li.md-task { list-style: none; }
      gap between marker and text: the script strips the space that follows both. */
   margin: 0 0.45em 0 -1.45em;
   vertical-align: -0.12em;
-  border: 1.5px solid var(--border-strong);
-  background: transparent;
 }
 
 .md-task input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
   position: relative;
+  border: 1.5px solid var(--border-strong);
   border-radius: 0.25em;
+  background: transparent;
 }
 
 .md-task input[type="checkbox"]:checked {
@@ -166,19 +169,29 @@ li.md-task { list-style: none; }
   transform: rotate(43deg);
 }
 
-/* `[*]` - started, not finished. A ring rather than a box, because the point is that it is
-   still turning. */
-.md-spinner {
-  border-width: 2px;
-  border-radius: 50%;
-  border-top-color: var(--accent);
+/* `[o]` - started, not finished. A ring rather than a box, because the point is that it is
+   still turning. Stroke widths are in the 16-unit viewBox, so they scale with the em the
+   marker is sized in rather than staying at a fixed pixel weight. */
+.md-spinner-track {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+
+.md-spinner-head {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  /* The box is the viewBox, so the centre is where the circle already is. */
+  transform-origin: 50% 50%;
   animation: md-spin 0.9s linear infinite;
 }
 
 @keyframes md-spin { to { transform: rotate(360deg); } }
 
 /* The ring alone still reads as "in progress" - the motion is decoration. */
-@media (prefers-reduced-motion: reduce) { .md-spinner { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .md-spinner-head { animation: none; } }
 
 /* Quotes */
 

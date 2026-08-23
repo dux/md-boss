@@ -104,9 +104,10 @@
   // MARK: task lists
 
   // GFM wants a bullet before the box; a bare `[x] item` line is what people actually type,
-  // so it gets the bullet here. Same line count, so every anchor below stays put. `[*]` is
-  // ours - a third state, still running - and rides through the lexer as plain text.
-  var TASK = /^([ \t]*)\[([ xX*])\]([ \t])/;
+  // so it gets the bullet here. Same line count, so every anchor below stays put. `[o]` is
+  // ours - a third state, still running - and rides through the lexer as plain text. `[*]`
+  // spells the same state, kept because documents already carry it.
+  var TASK = /^([ \t]*)\[([ xXoO*])\]([ \t])/;
   var FENCE = /^ {0,3}(`{3,}|~{3,})/;
 
   function expandTasks(source) {
@@ -133,21 +134,47 @@
     return node && node.nodeType === 3 ? node : null;
   }
 
-  // `[*]` arrives as literal text at the head of the item; swapping it for a spinner here
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+
+  // Two arcs on one circle: the whole ring in the border ink, and a quarter of it in the
+  // accent, turning. An SVG rather than a bordered box because a border can only be a whole
+  // ring or four separately coloured sides - the head needs a rounded cap and a length that
+  // does not answer to the box model. Sized in em by the stylesheet, so it tracks the text.
+  function spinnerSvg() {
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'md-spinner');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', 'in progress');
+
+    var track = document.createElementNS(SVG_NS, 'circle');
+    track.setAttribute('class', 'md-spinner-track');
+    track.setAttribute('cx', '8');
+    track.setAttribute('cy', '8');
+    track.setAttribute('r', '6.4');
+
+    // A quarter turn, drawn from twelve o'clock.
+    var head = document.createElementNS(SVG_NS, 'path');
+    head.setAttribute('class', 'md-spinner-head');
+    head.setAttribute('d', 'M8 1.6a6.4 6.4 0 0 1 6.4 6.4');
+
+    svg.appendChild(track);
+    svg.appendChild(head);
+    return svg;
+  }
+
+  // `[o]` arrives as literal text at the head of the item; swapping it for a spinner here
   // keeps the third state out of the lexer entirely. Boxed items are tagged in the same
   // pass rather than matched in CSS, because a loose list wraps the item in a <p> and no
   // child selector survives that.
   function markTasks() {
     content.querySelectorAll('li').forEach(function (item) {
       var head = itemHead(item);
-      var match = head && /^\[\*\][ \t]/.exec(head.nodeValue);
+      var match = head && /^\[[oO*]\][ \t]/.exec(head.nodeValue);
 
       if (match) {
         head.nodeValue = head.nodeValue.slice(match[0].length);
-        var spinner = document.createElement('span');
-        spinner.className = 'md-spinner';
-        spinner.setAttribute('aria-label', 'in progress');
-        head.parentNode.insertBefore(spinner, head);
+        head.parentNode.insertBefore(spinnerSvg(), head);
         item.classList.add('md-task');
         return;
       }

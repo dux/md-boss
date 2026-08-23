@@ -21,7 +21,7 @@ export interface Prefix {
   /** The `> ` runs, exactly as written. A quote can carry a list and vice versa. */
   quotes: string
   marker: Marker | null
-  /** Whether the item carried a `[ ]`, `[x]` or `[*]` box. */
+  /** Whether the item carried a `[ ]`, `[x]`, `[o]` or `[*]` box. */
   isTask: boolean
   /** UTF-16 offset where the item's own text starts. */
   contentStart: number
@@ -51,10 +51,10 @@ export function markerEnd(text: string, start: number): number | null {
   return text[start + digits + 1] === ' ' ? start + digits + 2 : null
 }
 
-/** Where a `[ ]`, `[x]` or `[*]` box starting at `start` ends, when one follows the marker. */
+/** Where a `[ ]`, `[x]`, `[o]` or `[*]` box starting at `start` ends, when one follows the marker. */
 export function taskEnd(text: string, start: number): number | null {
   if (text[start] !== '[') return null
-  if (!' xX*'.includes(text[start + 1] ?? '\0')) return null
+  if (!' xXoO*'.includes(text[start + 1] ?? '\0')) return null
   if (text[start + 2] !== ']') return null
   if (text[start + 3] !== ' ') return null
   return start + 4
