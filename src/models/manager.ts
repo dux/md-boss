@@ -16,7 +16,7 @@ import { resolveLinkTarget } from './linkTarget'
 import { snippet } from './markdownLinks'
 import { type Note, suggestedTitle } from './notes'
 import type { Edit } from './noteShift'
-import { basename, dirname, joinPath, normalizePath } from './paths'
+import { basename, dirname, joinPath, normalizePath, relativeTo } from './paths'
 import { Prompts } from './prompts'
 import { RootFolders } from './rootFolders'
 import { ScrollMemory } from './scrollMemory'
@@ -362,6 +362,18 @@ export class Manager {
 
   get activeRoot(): string | null {
     return this.folders.active
+  }
+
+  /** The open file written against the root that holds it - what the Preview label shows
+   *  next to its own name. Relative, because the root is what the sidebar is already
+   *  showing and repeating it in the strip says nothing. A file under no listed root has
+   *  nothing to be relative to, so it keeps its own path with the home folder abbreviated. */
+  get documentPath(): string | null {
+    const doc = this.document
+    if (!doc) return null
+    const root = this.folders.rootContaining(doc.path)
+    const relative = root === null ? null : relativeTo(doc.path, root)
+    return relative || this.abbreviateHome(doc.path)
   }
 
   onChange(listener: () => void): () => void {

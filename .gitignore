@@ -17,3 +17,6 @@ icons/*.icns
 
 # per-machine agent task queue (llm todo)
 LLM_TODO.local.md
+
+# plan bundles, backups and other scratch - ./tmp is the agreed scratch dir
+tmp/

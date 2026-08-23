@@ -1,0 +1,70 @@
+<script>
+  // The open document's full path, onto the clipboard. It sits in the rendered panel's
+  // label strip beside Back: the sidebar's folder box already copies the root, and this is
+  // the one for the file you are actually reading, which the window otherwise never spells
+  // out - the tree shows a name, the strip shows a label, neither is something you can
+  // paste into a terminal.
+  //
+  // Hidden rather than disabled with no document, the same as Back: a control that can
+  // never do anything is noise.
+  class {
+    init() {
+      this.state.path = null
+    }
+
+    onMount() {
+      this.local.unsubscribe = MdBoss.manager.onChange(() => this.pull())
+      this.pull()
+    }
+
+    onDestroy() {
+      if (this.local.unsubscribe) this.local.unsubscribe()
+    }
+
+    pull() {
+      const doc = MdBoss.manager.document
+      this.state.path = doc ? doc.path : null
+    }
+
+    copy() {
+      if (this.state.path) MdBoss.manager.copyText(this.state.path, 'Path copied')
+    }
+  }
+</script>
+
+<style>
+  display: block;
+
+  /* Stable root + hidden class, not an {#if} around everything - see change-banner. */
+  .copy.hidden {
+    display: none;
+  }
+
+  /* The same light face as the two controls beside it - back-button carries the note on
+     why it is bg rather than surface. */
+  button {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    height: calc(var(--font-buttons) + 8px);
+    padding: 0 7px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--muted);
+    font-family: inherit;
+    white-space: nowrap;
+  }
+
+  button:hover {
+    border-color: var(--border-strong);
+    background: var(--selection);
+    color: var(--text);
+  }
+</style>
+
+<div class={'copy' + (state.path ? '' : ' hidden')}>
+  {#if state.path}
+    <button class="text-buttons pointer" title={'Copy ' + state.path} onclick="fez.copy()">copy path</button>
+  {/if}
+</div>

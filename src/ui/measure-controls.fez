@@ -19,21 +19,23 @@
   align-items: center;
   gap: 2px;
 
-  /* Tracks the button font, so nothing clips once it is raised. Borderless for the same
-     reason as the Back button beside it: the strip is the surface. */
+  /* Tracks the button font, so nothing clips once it is raised. The same light face as the
+     Back button beside it - see the note there for why it is bg rather than surface. */
   button {
-    width: calc(var(--font-buttons) + 8px);
-    height: calc(var(--font-buttons) + 6px);
+    box-sizing: border-box;
+    width: calc(var(--font-buttons) + 12px);
+    height: calc(var(--font-buttons) + 8px);
     padding: 0;
-    border: 0;
+    border: 1px solid var(--border);
     border-radius: 4px;
-    background: transparent;
+    background: var(--bg);
     color: var(--muted);
     font-family: inherit;
     font-weight: 600;
   }
 
   button:hover {
+    border-color: var(--border-strong);
     background: var(--selection);
     color: var(--text);
   }

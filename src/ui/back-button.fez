@@ -36,23 +36,27 @@
     display: none;
   }
 
-  /* Borderless and low: the label strip it sits in is already a surface, and a boxed
-     control on it would read as a second bar. */
+  /* A light button, the same face the other two controls in this strip wear. bg and not
+     surface: the strip is already surface, and in the paper palette the two are the same
+     hex - a surface button on it would have no edges at all. Sized in border-box so the
+     border does not push it past the rail. */
   button {
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     gap: 4px;
-    height: calc(var(--font-buttons) + 6px);
-    padding: 0 6px;
-    border: 0;
+    height: calc(var(--font-buttons) + 8px);
+    padding: 0 7px;
+    border: 1px solid var(--border);
     border-radius: 4px;
-    background: transparent;
+    background: var(--bg);
     color: var(--muted);
     font-family: inherit;
     white-space: nowrap;
   }
 
   button:hover {
+    border-color: var(--border-strong);
     background: var(--selection);
     color: var(--text);
   }

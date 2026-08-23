@@ -55,3 +55,14 @@ export function isUnder(path: string, root: string): boolean {
   const r = normalizePath(root)
   return p === r || p.startsWith(r.endsWith('/') ? r : r + '/')
 }
+
+/** `path` written against `root`: the part below it, no leading slash. Null when the path
+ *  does not sit under the root at all - the caller's cue to show it whole rather than to
+ *  print a string of `../`. The root itself answers the empty string. */
+export function relativeTo(path: string, root: string): string | null {
+  const p = normalizePath(path)
+  const r = normalizePath(root)
+  if (!isUnder(p, r)) return null
+  if (p === r) return ''
+  return p.slice(r.endsWith('/') ? r.length : r.length + 1)
+}

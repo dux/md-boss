@@ -26,6 +26,7 @@
       this.state.dragging = null
       this.state.root = null
       this.state.file = null
+      this.state.docPath = null
       // Which renderer the rendered pane shows: the file's own answer (documentKind), not a
       // mode the viewer is in.
       this.state.kind = null
@@ -56,6 +57,7 @@
       const manager = MdBoss.manager
       this.state.root = manager.activeRoot
       this.state.file = manager.document ? manager.abbreviateHome(manager.document.path) : null
+      this.state.docPath = manager.documentPath
       this.state.kind = manager.document ? MdBoss.documentKind(manager.document.path) : null
       this.state.dirty = manager.isDirty
       this.state.noteCount = manager.notes.noteCount(manager.document ? manager.document.path : null)
@@ -167,18 +169,45 @@
     color: var(--text);
   }
 
+  /* The label and the controls both keep their width; the path between them is the one
+     thing that gives way, which is what makes the clipping below predictable. */
+  .panel-head .label {
+    flex: none;
+  }
+
+  /* The open file, written against the root that holds it. Head-truncated like the footer's
+     copy: the tail is the half that tells two files apart, so a long path loses its start
+     rather than its name. The rtl container does the clipping, the bdi keeps the text
+     itself reading left to right. */
+  .panel-head .doc-path {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl;
+    text-align: left;
+    color: var(--muted);
+  }
+
+  .panel-head .doc-path bdi {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
   .panel-head .count {
     color: var(--muted);
   }
 
-  /* The panel's own controls, right of its label - Back and the measure arrows rather than
-     floating over the page they act on. Borderless: the strip is already a surface, so a
-     boxed control on it reads as a second bar. */
+  /* The panel's own controls, right of its label - Back, copy path and the measure arrows
+     rather than floating over the page they act on. They carry their own borders, so the
+     gap is wide enough that two outlines side by side do not read as one smudged control.
+     They never shrink, so the path to their left is what a narrow panel takes it out of. */
   .panel-head .tools {
+    flex: none;
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 5px;
   }
 
   .collapsed > .panel-head {
@@ -414,9 +443,14 @@
   <div class={'pane preview' + (state.file ? '' : ' gone') + (state.panes.includes('preview') ? '' : ' collapsed')}>
     <div class="panel-head pointer" title={fez.hint('preview')} onclick="fez.toggle('preview')">
       <span class="label text-title">Preview</span>
+      {#if state.docPath && state.panes.includes('preview')}
+        <span class="doc-path text-small" title={state.file}><bdi>{state.docPath}</bdi></span>
+      {/if}
       {#if state.file && state.panes.includes('preview')}
         <div class="tools" onclick="fez.stop(event)">
           <back-button></back-button>
+          <!-- Not inside the markdown test below: a .csv has a path worth copying too. -->
+          <copy-path></copy-path>
           <!-- The measure is the rendered column's, so a table has no use for it. -->
           {#if state.kind === 'markdown'}
             <measure-controls></measure-controls>
