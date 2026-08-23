@@ -26,7 +26,9 @@ APP_VERSION ||= JSON.parse(File.read('package.json'))['version']
 
 # What the payload and the bundle carry besides the shell binary. The server runs from
 # source - bun runs TypeScript - so there is nothing to compile on that side.
-PAYLOAD_DIRS ||= %w[server dist].freeze
+# src/models rides along because server/ imports parsers from it (`../src/models/notes` and
+# friends); it resolves in the checkout but not in the bundle unless it is staged too.
+PAYLOAD_DIRS ||= %w[server dist src/models].freeze
 
 helpers do
   def host_os
@@ -64,8 +66,14 @@ helpers do
     end
   end
 
+  # Each entry keeps its path under the staging dir - a nested one like src/models has to
+  # land as src/models, not as a bare models/, or the server's `../src/models` misses it.
   def stage_payload(dir)
-    PAYLOAD_DIRS.each { |d| FileUtils.cp_r d, dir }
+    PAYLOAD_DIRS.each do |d|
+      dest = File.join(dir, d)
+      FileUtils.mkdir_p File.dirname(dest)
+      FileUtils.cp_r d, dest
+    end
     File.write File.join(dir, 'version.txt'), "#{APP_VERSION}\n"
   end
 
