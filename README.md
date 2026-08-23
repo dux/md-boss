@@ -28,6 +28,10 @@ Return continues a list, a quote or a task - unchecked, whatever the line above 
 empty item sheds its marker rather than growing another. Inside a fenced block Return is just
 a newline. ⌥Return always is.
 
+Right-click in the raw pane and pick Insert to drop in anything the preview draws - headings,
+the three task states, the five alerts, a table, a fenced block. A `/` at the start of an
+empty line opens the same list at the caret, and what you type after it narrows it down.
+
 ⇧⌘F searches every document in the folder, ⌘P jumps to one by name. Both take the sidebar
 over rather than opening a pane, and Esc gives it back.
 Search is case-insensitive until you type a capital.

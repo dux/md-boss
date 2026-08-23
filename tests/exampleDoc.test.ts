@@ -80,6 +80,11 @@ describe('what the example page demonstrates', () => {
     expect(lines.indexOf('---', 1)).toBeGreaterThan(0)
   })
 
+  test('points at the Insert menu and the `/` list, the two ways not to type this out', () => {
+    expect(exampleText).toContain('pick Insert')
+    expect(exampleText).toContain('at the start of an empty line')
+  })
+
   test('carries all three task states, including the spinner md-boss adds', () => {
     expect(exampleText).toContain('- [ ] not started')
     expect(exampleText).toContain('- [o] in progress')

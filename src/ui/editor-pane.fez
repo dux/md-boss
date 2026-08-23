@@ -84,6 +84,7 @@
           onChange: (text, edit) => MdBoss.manager.setDocumentText(text, edit),
           onCursor: (line, text, navigated) => MdBoss.manager.reportCursor(line, text, navigated),
           onContextMenu: (x, y, line) => this.contextMenu(x, y, line),
+          onInsertMenu: (request) => this.insertMenu(request),
           onScroll: (line) => this.scrolled(line),
           dropText: () => MdBoss.manager.linksFor(MdBoss.manager.draggedFile ? [MdBoss.manager.draggedFile] : []),
         })
@@ -154,12 +155,41 @@
       if (!doc) return
       manager.reportCursorLine(line)
       const hasNote = manager.hasNoteAtCursor
-      MdBoss.menus.open(x, y, [
+      const items = []
+      // Nothing in a CSV is markdown, so there is nothing there worth inserting.
+      if (MdBoss.documentKind(doc.path) === 'markdown') {
+        items.push({ label: 'Insert', items: this.insertItems('', line) }, { separator: true })
+      }
+      items.push(
         { label: hasNote ? 'Edit Note…' : 'Add Note…', action: () => manager.addNoteAtCursor() },
         { separator: true },
         { label: 'Copy Path', action: () => manager.copyText(doc.path, 'Path copied') },
         { label: 'Copy Path with Line', action: () => manager.copyText(manager.notes.key(doc.path) + ':' + line, 'Path copied') },
-      ])
+      )
+      MdBoss.menus.open(x, y, items)
+    }
+
+    /** One construct per row, from the model's catalogue. `line` is the line the right-click
+     *  was on; the `/` menu passes none, and the editor swallows the typed query instead. */
+    insertItems(query, line) {
+      return MdBoss.insertRows(query).map((row) => row.separator
+        ? { separator: true }
+        : { label: row.label, action: () => this.local.editor.insert(row.snippet, line) })
+    }
+
+    /** The `/` menu: the list the right-click carries, drawn at the slash and narrowed by
+     *  what has been typed after it. Nothing matching closes it - the slash was prose. */
+    insertMenu(request) {
+      if (!request) {
+        MdBoss.menus.close()
+        return
+      }
+      const items = this.insertItems(request.query, undefined)
+      if (!items.length) {
+        MdBoss.menus.close()
+        return
+      }
+      MdBoss.menus.open(request.x, request.y, items, request.query.length > 0)
     }
 
     /** Recorded before the sync and unconditionally: the sync drops the move unless both

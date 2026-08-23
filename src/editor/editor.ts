@@ -4,11 +4,12 @@
 
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { openSearchPanel, search, searchKeymap } from '@codemirror/search'
-import { Annotation, Compartment, EditorState, type Extension } from '@codemirror/state'
-import { drawSelection, dropCursor, EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
-import { markdownHighlight } from './highlight'
+import { Annotation, Compartment, EditorSelection, EditorState, type Extension } from '@codemirror/state'
+import { drawSelection, dropCursor, EditorView, highlightActiveLine, keymap, lineNumbers, type ViewUpdate } from '@codemirror/view'
+import { highlightPlugin, markdownHighlight } from './highlight'
 import { applyFormat, type Format, markdownKeymap } from './markdownKeymap'
 import { notesExtension, setLandingLine, setNotes } from './notesGutter'
+import { insertEdit, slashQuery } from '../models/markdownInsert'
 import type { Edit } from '../models/noteShift'
 
 export interface EditorOptions {
@@ -28,6 +29,10 @@ export interface EditorOptions {
   onCursor(line: number, text: string, navigated: boolean): void
   /** A right-click, in viewport coordinates, on a line. */
   onContextMenu(x: number, y: number, line: number): void
+  /** The `/` menu: what has been typed after a slash that opens a line, and where to draw
+   *  the menu, in viewport coordinates. Null takes it down - the caret left, the slash
+   *  went, or the query stopped being one. */
+  onInsertMenu(request: { query: string; x: number; y: number } | null): void
   /** The user scrolled: the source line at the top of the viewport, fractional within
    *  that line; one past the last line at the very end. Not fired while following. */
   onScroll(line: number): void
@@ -57,6 +62,9 @@ export interface Editor {
   openSearch(): void
   /** Bold / Italic / Link from the menu bar; the keys go through the keymap directly. */
   format(format: Format): void
+  /** A construct from the Insert menu. `line` is the line that was right-clicked; without
+   *  one the caret's line, and a `/` query still standing there is swallowed. */
+  insert(snippet: string, line?: number): void
   /** A native (OS) file drag over the pane, in viewport coordinates: the caret follows the
    *  pointer while it is over the text, as the NSTextView's did, and goes back where it
    *  was if the drag leaves without dropping. */
@@ -223,6 +231,45 @@ export function createEditor(options: EditorOptions): Editor {
   const font = new Compartment()
   const highlight = new Compartment()
   let suppressUntil = 0
+  /** Where the `/` that opened the insert menu sits, null when none is up. Held rather than
+   *  read off the line each time: a caret moved onto a line that happens to start with a
+   *  slash - a path, a date - must not open a menu nobody asked for. */
+  let slashAt: number | null = null
+  let menuOpen = false
+
+  /** The `/` menu, after every edit and every caret move. Markdown only, on the highlighter
+   *  the way Return is: in a CSV a leading slash is a value. */
+  function reportInsertMenu(update: ViewUpdate): void {
+    const { state } = update
+    const { main } = state.selection
+    const line = state.doc.lineAt(main.head)
+    if (slashAt !== null && !(slashAt >= line.from && slashAt < line.to && state.doc.sliceString(slashAt, slashAt + 1) === '/')) {
+      slashAt = null
+    }
+    if (slashAt === null && update.docChanged && main.empty && update.view.plugin(highlightPlugin)) {
+      let typed = ''
+      let at = -1
+      let changes = 0
+      update.changes.iterChanges((_fromA, _toA, fromB, _toB, inserted) => {
+        changes += 1
+        at = fromB
+        typed = inserted.toString()
+      })
+      if (changes === 1 && typed === '/' && main.head === at + 1 && slashQuery(line.text, main.head - line.from) === '') {
+        slashAt = at
+      }
+    }
+    const query = slashAt === null || !main.empty ? null : slashQuery(line.text, main.head - line.from)
+    const coords = query === null || slashAt === null ? null : update.view.coordsAtPos(slashAt)
+    if (query === null || !coords) {
+      slashAt = null
+      if (menuOpen) options.onInsertMenu(null)
+      menuOpen = false
+      return
+    }
+    menuOpen = true
+    options.onInsertMenu({ query, x: coords.left, y: coords.bottom + 4 })
+  }
   const view = new EditorView({
     parent: options.parent,
     state: EditorState.create({
@@ -260,6 +307,7 @@ export function createEditor(options: EditorOptions): Editor {
             // A whole-text swap selects nothing by hand: it is setText's transaction.
             options.onCursor(line.number, line.text, !update.transactions.some((tr) => tr.annotation(swapAnnotation)))
           }
+          if (update.docChanged || update.selectionSet) reportInsertMenu(update)
         }),
         EditorView.domEventHandlers({
           contextmenu(event, view) {
@@ -338,6 +386,24 @@ export function createEditor(options: EditorOptions): Editor {
     },
     format(format) {
       applyFormat(view, format)
+      view.focus()
+    },
+    insert(snippet, line) {
+      // A line asked for by hand wins over the `/` session: a right-click elsewhere while
+      // one is open is about the line under the pointer, not about the query.
+      const slash = line === undefined ? slashAt : null
+      const caret = view.state.selection.main.head
+      const number = slash === null
+        ? Math.min(Math.max(1, line ?? view.state.doc.lineAt(caret).number), view.state.doc.lines)
+        : view.state.doc.lineAt(slash).number
+      const target = view.state.doc.line(number)
+      const edit = insertEdit({ from: target.from, text: target.text }, snippet, slash === null ? null : caret - target.from)
+      view.dispatch({
+        changes: { from: edit.from, to: edit.to, insert: edit.text },
+        selection: EditorSelection.cursor(edit.caret),
+        scrollIntoView: true,
+        userEvent: 'input',
+      })
       view.focus()
     },
     dragOver(x, y) {

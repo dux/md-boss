@@ -5,6 +5,7 @@ import { SettingsStore } from './models/settingsStore'
 import { TypeAhead } from './models/typeAhead'
 import { Updater } from './models/updater'
 import { documentKind } from './models/fileKinds'
+import { insertRows } from './models/markdownInsert'
 import { FONT_SETTINGS, PANE_TITLE, PANES, visiblePanes } from './models/settings'
 import { panelShortcut } from './models/appMenu'
 import { Panels } from './ui/panels'
@@ -34,6 +35,8 @@ export async function createApp() {
     TypeAhead,
     createEditor,
     documentKind,
+    /** The Insert menu's rows, filtered by what has been typed after a `/`. */
+    insertRows,
     visiblePanes,
     PANES,
     PANE_TITLE,

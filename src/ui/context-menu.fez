@@ -1,45 +1,166 @@
 <script>
   // One in-window context menu for the whole app, positioned at the click and kept on
-  // screen. Closes on a pick, a click anywhere else, Escape, or a scroll.
+  // screen. Closes on a pick, a click anywhere else, Escape, or a scroll. An item carrying
+  // items of its own draws a submenu beside its row - the raw pane's Insert list - and the
+  // whole thing takes arrows and Return, since the `/` menu is opened with the hands on the
+  // keyboard and the caret still in the text.
   class {
     init() {
       this.state.open = false
       this.state.x = 0
       this.state.y = 0
       this.state.items = []
+      this.state.sub = false
+      this.state.subOwner = null
+      this.state.subX = 0
+      this.state.subY = 0
+      this.state.subItems = []
+      this.state.active = -1
     }
 
     onMount() {
       this.local.unsubscribe = MdBoss.menus.onOpen((request) => this.show(request))
       this.on(document, 'mousedown', (event) => {
-        if (this.state.open && !this.root.contains(event.target)) this.state.open = false
+        if (this.state.open && !this.root.contains(event.target)) this.close()
       }, { capture: true })
-      this.on(document, 'keydown', (event) => {
-        if (!this.state.open || event.key !== 'Escape') return
-        event.preventDefault()
-        event.stopPropagation()
-        this.state.open = false
-      }, { capture: true })
-      this.on(window, 'blur', () => { this.state.open = false })
+      this.on(document, 'keydown', (event) => this.keyDown(event), { capture: true })
+      this.on(window, 'blur', () => this.close())
     }
 
     onDestroy() {
       if (this.local.unsubscribe) this.local.unsubscribe()
     }
 
+    afterRender() {
+      // The Insert list is long enough to scroll; the keyboard must not walk off the end of
+      // what is drawn.
+      const active = this.find('.item.active')
+      if (active) active.scrollIntoView({ block: 'nearest' })
+    }
+
+    /** Null takes it down without a pick - the `/` menu, gone as soon as what was typed
+     *  stops naming anything. */
     show(request) {
-      this.local.items = request.items
-      this.state.items = request.items.map((item, index) => ({ index, ...item }))
+      if (!request) {
+        this.close()
+        return
+      }
+      this.local.flat = []
+      this.state.items = this.rows(request.items)
+      this.state.subItems = []
+      this.state.sub = false
+      this.state.subOwner = null
+      this.state.active = request.preselect ? this.firstUsable(this.state.items) : -1
       // Kept inside the window: a menu opened near the right or bottom edge flips back.
       this.state.x = Math.min(request.x, window.innerWidth - 220)
-      this.state.y = Math.min(request.y, window.innerHeight - 24 * request.items.length - 16)
+      this.state.y = Math.min(request.y, this.topFor(request.items.length))
       this.state.open = true
     }
 
-    pick(index) {
-      const item = this.local.items[Number(index)]
+    close() {
       this.state.open = false
-      if (item && item.action && !item.disabled) item.action()
+      this.state.sub = false
+      this.state.subOwner = null
+      this.state.active = -1
+    }
+
+    /** One row per item, the items themselves kept aside: a row carries what the template
+     *  draws, and `index` addresses both lists at once, submenu included. */
+    rows(items) {
+      return items.map((item) => {
+        const index = this.local.flat.length
+        this.local.flat.push(item)
+        return {
+          index,
+          label: item.label,
+          separator: !!item.separator,
+          disabled: !!item.disabled,
+          sub: !!(item.items && item.items.length),
+        }
+      })
+    }
+
+    /** The lowest top a menu of `count` rows can take and still show its last one. */
+    topFor(count) {
+      return Math.max(8, window.innerHeight - 24 * count - 16)
+    }
+
+    firstUsable(rows) {
+      const row = rows.find((one) => !one.separator && !one.disabled)
+      return row ? row.index : -1
+    }
+
+    /** The submenu, beside the row that owns it. It stays up while the pointer crosses the
+     *  other rows on its way over - closing on the way there is the one thing a submenu
+     *  must not do - so only a pick or a new menu takes it down. */
+    openSub(index) {
+      const item = this.local.flat[Number(index)]
+      if (!item || !item.items || this.state.subOwner === Number(index)) return
+      const row = this.find('.item[data-index="' + Number(index) + '"]')
+      const box = this.find('.menu').getBoundingClientRect()
+      const top = row ? row.getBoundingClientRect().top : this.state.y
+      this.state.subOwner = Number(index)
+      this.state.subItems = this.rows(item.items)
+      this.state.subX = Math.min(box.right - 4, window.innerWidth - 220)
+      this.state.subY = Math.max(8, Math.min(top - 4, this.topFor(item.items.length)))
+      this.state.sub = true
+    }
+
+    hover(index) {
+      const at = Number(index)
+      if (this.state.active !== at) this.state.active = at
+      this.openSub(at)
+    }
+
+    pick(index) {
+      const item = this.local.flat[Number(index)]
+      if (!item || item.disabled) return
+      if (item.items) {
+        this.openSub(index)
+        return
+      }
+      this.close()
+      if (item.action) item.action()
+    }
+
+    /** Arrows, Return and Escape while it is up, taken on the way down so the editor under
+     *  the `/` menu never sees them. Return with nothing picked is the exception: that is a
+     *  newline, and the menu was only ever an offer. */
+    keyDown(event) {
+      if (!this.state.open) return
+      const rows = this.state.sub ? this.state.subItems : this.state.items
+      const usable = rows.filter((row) => !row.separator && !row.disabled)
+      const stop = () => {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      if (event.key === 'Escape') {
+        stop()
+        this.close()
+      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        stop()
+        if (!usable.length) return
+        const at = usable.findIndex((row) => row.index === this.state.active)
+        const step = event.key === 'ArrowDown' ? 1 : -1
+        const next = at < 0 ? (step > 0 ? 0 : usable.length - 1) : (at + step + usable.length) % usable.length
+        this.state.active = usable[next].index
+      } else if (event.key === 'ArrowRight') {
+        const row = rows.find((one) => one.index === this.state.active)
+        if (!row || !row.sub) return
+        stop()
+        this.openSub(row.index)
+        this.state.active = this.firstUsable(this.state.subItems)
+      } else if (event.key === 'ArrowLeft') {
+        if (!this.state.sub) return
+        stop()
+        this.state.active = this.state.subOwner
+        this.state.sub = false
+        this.state.subOwner = null
+      } else if (event.key === 'Enter') {
+        if (this.state.active < 0) return
+        stop()
+        this.pick(this.state.active)
+      }
     }
   }
 </script>
@@ -56,7 +177,9 @@
     position: fixed;
     z-index: 30;
     min-width: 180px;
+    max-height: calc(100vh - 16px);
     padding: 4px;
+    overflow-y: auto;
     border: 1px solid var(--border-strong);
     border-radius: 6px;
     background: var(--bg);
@@ -64,7 +187,10 @@
   }
 
   .item {
-    display: block;
+    display: flex;
+    gap: 16px;
+    justify-content: space-between;
+    align-items: center;
     width: 100%;
     padding: 3px 10px;
     border: 0;
@@ -76,11 +202,16 @@
     white-space: nowrap;
   }
 
-  .item:hover {
+  .item:hover,
+  .item.active {
     background: var(--selection);
   }
 
   .item:disabled {
+    color: var(--muted);
+  }
+
+  .arrow {
     color: var(--muted);
   }
 
@@ -97,7 +228,26 @@
       {#if item.separator}
         <div class="separator"></div>
       {:else}
-        <button class="item text-default pointer" disabled={!!item.disabled} onclick="fez.pick({item.index})">{item.label}</button>
+        <button class={'item text-default pointer' + (item.index === state.active ? ' active' : '')} data-index={item.index} disabled={!!item.disabled} onclick="fez.pick({item.index})" onmouseenter="fez.hover({item.index})">
+          <span>{item.label}</span>
+          {#if item.sub}
+            <span class="arrow">›</span>
+          {/if}
+        </button>
+      {/if}
+    {/each}
+  {/if}
+</div>
+
+<div class={'menu submenu' + (state.open && state.sub ? '' : ' hidden')} style="left: {state.subX}px; top: {state.subY}px">
+  {#if state.open && state.sub}
+    {#each state.subItems as item}
+      {#if item.separator}
+        <div class="separator"></div>
+      {:else}
+        <button class={'item text-default pointer' + (item.index === state.active ? ' active' : '')} data-index={item.index} disabled={!!item.disabled} onclick="fez.pick({item.index})" onmouseenter="fez.hover({item.index})">
+          <span>{item.label}</span>
+        </button>
       {/if}
     {/each}
   {/if}

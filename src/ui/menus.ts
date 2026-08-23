@@ -8,23 +8,33 @@ export interface MenuItem {
   action?: () => void
   separator?: boolean
   disabled?: boolean
+  /** A submenu, drawn beside its row. An item carrying one has no action of its own. */
+  items?: MenuItem[]
 }
 
 export interface MenuRequest {
   x: number
   y: number
   items: MenuItem[]
+  /** Whether the first row starts picked - the raw pane's `/` menu, which is driven from
+   *  the keyboard with the caret still in the text. */
+  preselect: boolean
 }
 
 export class ContextMenus {
-  private readonly listeners = new Set<(request: MenuRequest) => void>()
+  private readonly listeners = new Set<(request: MenuRequest | null) => void>()
 
-  onOpen(listener: (request: MenuRequest) => void): () => void {
+  onOpen(listener: (request: MenuRequest | null) => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
   }
 
-  open(x: number, y: number, items: MenuItem[]): void {
-    for (const l of this.listeners) l({ x, y, items })
+  open(x: number, y: number, items: MenuItem[], preselect = false): void {
+    for (const l of this.listeners) l({ x, y, items, preselect })
+  }
+
+  /** Down without a pick - the `/` menu, when what was typed stops naming anything. */
+  close(): void {
+    for (const l of this.listeners) l(null)
   }
 }

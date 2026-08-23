@@ -11,6 +11,9 @@ tags:
 This document is the reference sheet. It shows every construct md-boss renders, with the
 source next to the result, so you can copy what you need and see what it does.
 
+Nothing here has to be typed out: right-click in the raw pane and pick Insert, or type a `/`
+at the start of an empty line, and every construct on this page is one pick away.
+
 It is a system page: **edits are not kept**. Pick Example from the folder box again and it
 comes back exactly as it is here, whatever you did to it. That makes it a safe place to try
 things out.
