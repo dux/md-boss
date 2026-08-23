@@ -7,6 +7,7 @@ import { AnnotationStore, FALLBACK_FILE_NAME } from './annotationStore'
 import { launchPaths } from './cli'
 import { DirectoryWatcher } from './directoryWatcher'
 import { OpenDocument } from './document'
+import { EXAMPLE_DIR_NAME, EXAMPLE_FILE_NAME, exampleText } from './exampleDoc'
 import { documentName, isDocument } from './fileKinds'
 import { checkMove, checkRename, moveMessage, renameMessage } from './fileMove'
 import { FileTreeModel } from './fileTreeModel'
@@ -33,6 +34,10 @@ export class Manager {
   readonly settings: SettingsStore
   readonly folders: RootFolders
   readonly home: string
+  /** The example page's folder and the file in it. A real folder under the config dir, so
+   *  it is a root like any other - the tree, the search and the notes need no special case. */
+  readonly exampleDir: string
+  readonly examplePath: string
   /** Raw and preview following each other. Here rather than in a pane, because a move is
    *  dropped unless both are up, and the settings know that. */
   readonly scrollSync: ScrollSync
@@ -103,6 +108,8 @@ export class Manager {
     this.settings = settings
     this.folders = folders
     this.home = home
+    this.exampleDir = `${configDir}/${EXAMPLE_DIR_NAME}`
+    this.examplePath = `${this.exampleDir}/${EXAMPLE_FILE_NAME}`
     this.notes = new AnnotationStore(folders, `${configDir}/${FALLBACK_FILE_NAME}`, home)
     void this.notes.reload()
     this.tree = new FileTreeModel(settings.data.expandedPaths)
@@ -638,6 +645,38 @@ export class Manager {
 
   removeRoot(root: string): void {
     this.folders.remove(root)
+  }
+
+  /** Whether `root` is the example folder. The folder box pins it at the head of the list
+   *  instead of listing it among the folders you have opened. */
+  isExampleRoot(root: string): boolean {
+    return root === this.exampleDir
+  }
+
+  /** The Example entry in the folder box. The page is laid down again on every pick, which
+   *  is what makes it safe to type into: whatever you did to it is gone next time, saved or
+   *  not. Deliberately not routed through `open` when it is already the open document - the
+   *  path has not changed, so `open` would see the document it is already holding and do
+   *  nothing, and the reset is the whole point of picking it again. */
+  async openExample(): Promise<void> {
+    const { fs } = native()
+    try {
+      await fs.mkdir(this.exampleDir)
+      await fs.write(this.examplePath, exampleText)
+    } catch (err) {
+      this.showError(`Could not write the example page: ${String(err)}`)
+      return
+    }
+    // Straight to the folders rather than through `addRoot`: this is not a folder the user
+    // picked, so it has no business becoming the one the open panel starts in.
+    this.folders.add(this.exampleDir, true)
+    const doc = this.document
+    if (doc?.path === this.examplePath) {
+      await doc.reloadFromDisk()
+      this.emit()
+      return
+    }
+    await this.open(this.examplePath)
   }
 
   /** Cmd-Shift-O. One file; its folder is added to the sidebar when no listed root holds it. */

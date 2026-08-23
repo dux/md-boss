@@ -1,4 +1,6 @@
 <script>
+  const EXAMPLE_LABEL = 'Example'
+
   // The sidebar's root-folder select box. Hand-rolled rather than a <select>: system popup
   // chrome cannot be forced to the paper palette, and this box sits directly on the sidebar
   // where any mismatch shows. The dropped-open list covers the tree instead of pushing it
@@ -10,6 +12,11 @@
   // The box also stands for the root folder itself, which has no row in the tree: it is
   // where a cut or dragged file goes to come back up to the top - right-click "Move Here",
   // or a drop on the box.
+  //
+  // The list is not only folders: Example is pinned at the head and "Add a folder" sits at
+  // the foot. Both are rows like any other so the keyboard walk covers them, and both are
+  // why the list opens even when nothing has been opened yet - on a first run they are the
+  // only two things there are to pick.
   //
   // Alongside it, at the right edge of the row, the re-read button: the tree is watched and
   // polled, so this is for the times you already know something changed and do not want to
@@ -57,12 +64,9 @@
           this.state.cursor = Math.max(0, this.state.cursor - 1)
           break
         case 'Enter':
-        case ' ': {
-          const item = this.state.recent[this.state.cursor]
-          if (item) this.pick(item.path)
-          this.state.open = false
+        case ' ':
+          this.pickAt(this.state.cursor)
           break
-        }
         default:
           return
       }
@@ -70,30 +74,52 @@
       event.stopPropagation()
     }
 
-    pull() {
+    /** One row. `name` is given only where the path's last component is not what to call it -
+     *  the example folder is `example` on disk and Example in the box. */
+    row(kind, path, name) {
       const manager = MdBoss.manager
-      const active = manager.activeRoot
-      this.state.active = active
-      this.state.activeName = active ? active.slice(active.lastIndexOf('/') + 1) : ''
-      this.state.recent = manager.folders.recent.map((path) => ({
+      return {
+        kind,
         path,
-        name: path.slice(path.lastIndexOf('/') + 1),
+        name: name || path.slice(path.lastIndexOf('/') + 1),
         parent: manager.abbreviateHome(path.slice(0, path.lastIndexOf('/')) || '/'),
-        isActive: path === active,
-      }))
-    }
-
-    boxClicked() {
-      if (!this.state.active) MdBoss.manager.addFolders()
-      else {
-        this.state.cursor = 0
-        this.state.open = !this.state.open
+        isActive: path === manager.activeRoot,
       }
     }
 
-    pick(path) {
-      MdBoss.manager.selectRoot(path)
+    pull() {
+      const manager = MdBoss.manager
+      const active = manager.activeRoot
+      const onExample = active !== null && manager.isExampleRoot(active)
+      this.state.active = active
+      this.state.activeName = onExample ? EXAMPLE_LABEL : active ? active.slice(active.lastIndexOf('/') + 1) : ''
+      // The example is filtered out of the folders and pinned instead: it is a listed root
+      // like any other once picked, and listing it twice would read as two of them.
+      this.state.recent = [
+        this.row('example', manager.exampleDir, EXAMPLE_LABEL),
+        ...manager.folders.recent
+          .filter((path) => !manager.isExampleRoot(path))
+          .map((path) => this.row('root', path)),
+        { kind: 'add', path: null, name: 'Add a folder…', parent: '', isActive: false },
+      ]
+    }
+
+    boxClicked() {
+      this.state.cursor = 0
+      this.state.open = !this.state.open
+    }
+
+    /** By index, not by path: two of the rows stand for an action rather than a folder, and
+     *  a path is not safe to carry through an attribute anyway - one with a quote in it
+     *  would end the handler early. */
+    pickAt(index) {
+      const item = this.state.recent[index]
       this.state.open = false
+      if (!item) return
+      const manager = MdBoss.manager
+      if (item.kind === 'add') manager.addFolders()
+      else if (item.kind === 'example') manager.openExample()
+      else manager.selectRoot(item.path)
     }
 
     /** The whole tree from disk again. A local root comes back before the glyph has turned
@@ -353,6 +379,15 @@
   .row.active .name {
     font-weight: 600;
   }
+
+  /* Not a folder and with no path to show: the line is what keeps "Add a folder" from
+     reading as one more entry in the list above it. No padding - the row's height is a
+     content box, so padding would push the text off its own centre. */
+  .row.add {
+    margin-top: 4px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+  }
 </style>
 
 <div class={'box text-default pointer' + (state.active ? '' : ' empty') + (state.open ? ' open' : '') + (state.drop ? ' drop' : '')} title={state.active || 'Add a folder (⌘O)'} onclick="fez.boxClicked()" oncontextmenu="fez.menu(event)" ondragover="fez.dragOver(event)" ondragleave="fez.dragLeave()" ondrop="fez.drop(event)">
@@ -364,7 +399,7 @@
 {#if state.open}
   <div class="list">
     {#each state.recent as item, index}
-      <div class={'row text-default' + (item.isActive ? ' active' : '') + (index === state.cursor ? ' cursor' : '')} title={item.path} onclick="fez.pick('{item.path}')">
+      <div class={'row text-default' + (item.isActive ? ' active' : '') + (index === state.cursor ? ' cursor' : '') + (item.kind === 'add' ? ' add' : '')} title={item.path || ''} onclick="fez.pickAt({index})">
         <span class="check">{item.isActive ? '✓' : ''}</span>
         <span class="name">{item.name}</span>
         <span class="parent text-small"><bdi>{item.parent}</bdi></span>
