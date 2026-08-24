@@ -1,3 +1,6 @@
+import fezJS from '@dinoreic/fez?raw'
+import type { InstalledMarkdownComponent } from '../models/markdownComponents'
+import type { TypedBlock } from '../models/typedBlocks'
 import markedJS from './marked.min.js?raw'
 import highlightJS from './highlight.min.js?raw'
 import previewJS from './preview.js?raw'
@@ -15,6 +18,10 @@ export interface PreviewPageOptions {
   baseURL: string | null
   /** Where local images are served from - `Native.shell.assetBase()`. Empty for none. */
   assetBase: string
+  /** Fez source read from the installed config folder and compiled inside this iframe. */
+  components: InstalledMarkdownComponent[]
+  /** Closed typed blocks in markdown, with absolute source lines and parsed props. */
+  typedBlocks: TypedBlock[]
 }
 
 /** A JSON string literal is a JS string literal; `</` is escaped so a document holding
@@ -32,12 +39,19 @@ function nonce(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+/** Source pasted into a script element rather than represented as a JS value. */
+function inlineScript(source: string): string {
+  return source.replace(/<\/script/gi, '<\\/script')
+}
+
 // Markdown may carry raw HTML and this page talks back to the pane, so the policy blocks
 // remote fetches, tracking pixels in READMEs, document-authored <script> and inline
-// onerror=/onload= handlers while allowing the four nonce-tagged scripts below and images
-// from the asset base. A custom scheme (asset:) is allowed whole - it is the app's own -
-// but an http host (Windows serves assets from http://asset.localhost) only by host, since
-// `http:` would let every remote image through.
+// onerror=/onload= handlers while allowing the nonce-tagged packaged scripts below and
+// images from the asset base. Fez compiles installed local component source with
+// `new Function`, which is the narrow reason unsafe-eval is present; unsafe-inline stays
+// absent, so document HTML cannot turn an event attribute into code. A custom scheme
+// (asset:) is allowed whole - it is the app's own - but an http host (Windows serves assets
+// from http://asset.localhost) only by host, since `http:` would let remote images through.
 function csp(n: string, assetBase: string): string {
   const scheme = assetBase.split(':')[0]
   const images = assetBase ? [assetBase, ...(/^https?$/.test(scheme) ? [] : [scheme + ':'])] : []
@@ -45,7 +59,7 @@ function csp(n: string, assetBase: string): string {
     "default-src 'none'",
     `img-src ${[...images, 'data:'].join(' ')}`,
     "style-src 'unsafe-inline'",
-    `script-src 'nonce-${n}'`,
+    `script-src 'nonce-${n}' 'unsafe-eval'`,
     "connect-src 'none'",
     "frame-src 'none'",
     "object-src 'none'",
@@ -55,6 +69,9 @@ function csp(n: string, assetBase: string): string {
 /** The whole preview document as a string, for an iframe's srcdoc. */
 export function buildPreviewPage(o: PreviewPageOptions): string {
   const n = nonce()
+  const installed = o.components
+    .map((component) => `Fez.compile(${jsLiteral(component.tag)}, ${jsLiteral(component.source)});`)
+    .join('\n')
   return `<!DOCTYPE html>
 <html data-asset-base="${escapeAttribute(o.assetBase)}">
 <head>
@@ -70,8 +87,10 @@ ${o.baseURL === null ? '' : `<base id="base" href="${escapeAttribute(o.baseURL)}
 <div id="content"></div>
 <script nonce="${n}">${markedJS}</script>
 <script nonce="${n}">${highlightJS}</script>
+<script nonce="${n}">${inlineScript(fezJS)}</script>
+<script nonce="${n}">${installed}</script>
 <script nonce="${n}">${previewJS}</script>
-<script nonce="${n}">mdRender(${jsLiteral(o.markdown)});</script>
+<script nonce="${n}">mdRender(${jsLiteral(o.markdown)}, ${jsLiteral(o.typedBlocks)});</script>
 </body>
 </html>`
 }

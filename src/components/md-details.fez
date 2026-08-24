@@ -1,0 +1,38 @@
+<info>
+  <p>Collapsible supporting information for an md-boss typed Markdown block.</p>
+</info>
+
+<demo>
+  <md-details title="Implementation details"><p>Longer optional explanation.</p></md-details>
+</demo>
+
+<style>
+  display: block;
+  margin: 1.4em 0;
+
+  details {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+
+  summary {
+    padding: 0.7em 0.9em;
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .fez-slot {
+    padding: 0 0.9em 0.8em;
+
+    & > :last-child {
+      margin-bottom: 0;
+    }
+  }
+</style>
+
+<details>
+  <summary>{props.title || 'Details'}</summary>
+  <slot />
+</details>

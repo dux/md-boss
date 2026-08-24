@@ -7,7 +7,7 @@ import { AnnotationStore, FALLBACK_FILE_NAME } from './annotationStore'
 import { launchPaths } from './cli'
 import { DirectoryWatcher } from './directoryWatcher'
 import { OpenDocument } from './document'
-import { EXAMPLE_DIR_NAME, EXAMPLE_FILE_NAME, exampleText } from './exampleDoc'
+import { EXAMPLE_DIR_NAME, EXAMPLE_FILE_NAME, exampleTextWithComponents } from './exampleDoc'
 import { documentName, isDocument } from './fileKinds'
 import { checkMove, checkRename, moveMessage, renameMessage } from './fileMove'
 import { FileTreeModel } from './fileTreeModel'
@@ -25,6 +25,7 @@ import { canChangeFontSize, defaultSettings, FONT_SETTINGS, fontDefault, type Fo
 import { SettingsStore } from './settingsStore'
 import { SidebarSearch } from './sidebarSearch'
 import { Toast } from './toast'
+import type { InstalledMarkdownComponent } from './markdownComponents'
 import { flippedTheme, selectingTheme, type Theme, type ThemeChoice, type ThemeID, themeChoice, themeNamed } from '../theme/theme'
 
 export type Format = 'bold' | 'italic' | 'link'
@@ -104,7 +105,13 @@ export class Manager {
   static readonly pollIntervalMs = 30_000
 
   /** `configDir` is where the fallback store for files outside every root lives. */
-  constructor(settings: SettingsStore, folders: RootFolders, home: string, configDir = `${home}/.config/md-boss`) {
+  constructor(
+    settings: SettingsStore,
+    folders: RootFolders,
+    home: string,
+    configDir = `${home}/.config/md-boss`,
+    private readonly exampleComponents: () => readonly InstalledMarkdownComponent[] = () => [],
+  ) {
     this.settings = settings
     this.folders = folders
     this.home = home
@@ -672,9 +679,10 @@ export class Manager {
    *  nothing, and the reset is the whole point of picking it again. */
   async openExample(): Promise<void> {
     const { fs } = native()
+    const text = exampleTextWithComponents(this.exampleComponents())
     try {
       await fs.mkdir(this.exampleDir)
-      await fs.write(this.examplePath, exampleText)
+      await fs.write(this.examplePath, text)
     } catch (err) {
       this.showError(`Could not write the example page: ${String(err)}`)
       return

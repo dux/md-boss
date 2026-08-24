@@ -125,6 +125,8 @@ const syntax = EditorView.theme({
   '.md-quoteMarker': { color: 'var(--quote-bar)' },
   '.md-quoteText': { color: 'var(--quote-text)', fontStyle: 'italic' },
   '.md-listMarker, .md-taskMarker': { color: 'var(--accent)' },
+  '.md-componentMarker, .md-componentAttribute': { color: 'var(--muted)' },
+  '.md-componentType': { color: 'var(--accent)', fontWeight: 'bold' },
   '.md-rule': { color: 'var(--rule)' },
   '.md-emphasis': { fontStyle: 'italic' },
   '.md-strong': { fontWeight: 'bold' },

@@ -21,6 +21,10 @@ describe('the catalogue', () => {
     for (const marker of ['[ ]', '[o]', '[x]']) {
       expect(INSERT_MENU.some((row) => !isSeparator(row) && row.snippet.includes(marker))).toBe(true)
     }
+    for (const type of ['info', 'warning', 'details']) {
+      expect(snippet(`component-${type}`)).toContain(`:::${type}`)
+      expect(exampleText).toContain(`:::${type}`)
+    }
   })
 
   test('places the caret exactly once in every row', () => {

@@ -25,6 +25,13 @@ const alert = (kind: string, label: string): Insertion => ({
   terms: 'alert info block callout',
 })
 
+const component = (type: string, label: string, attributes = ''): Insertion => ({
+  id: `component-${type}`,
+  label,
+  snippet: `:::${type}${attributes}\n${CARET}\n:::`,
+  terms: 'typed fez component block callout',
+})
+
 /** The catalogue, in the order the menu draws it. Separators are the groups; a filtered
  *  list drops them. */
 export const INSERT_MENU: InsertRow[] = [
@@ -45,6 +52,10 @@ export const INSERT_MENU: InsertRow[] = [
   alert('IMPORTANT', 'Important'),
   alert('WARNING', 'Warning'),
   alert('CAUTION', 'Caution'),
+  { separator: true },
+  component('info', 'Info component'),
+  component('warning', 'Warning component'),
+  component('details', 'Details component', ' title="Details"'),
   { separator: true },
   { id: 'table', label: 'Table', snippet: `| ${CARET} |  |\n|---|---|\n|  |  |`, terms: 'columns grid' },
   { id: 'code', label: 'Code block', snippet: '```' + CARET + '\n\n```', terms: 'fence pre language' },

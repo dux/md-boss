@@ -59,6 +59,25 @@ describe('fences', () => {
   })
 })
 
+describe('typed components', () => {
+  test('an opener paints its punctuation, type and props separately', () => {
+    expect(spans(':::details title="Implementation details"')).toEqual([
+      ['componentMarker', ':::'],
+      ['componentType', 'details'],
+      ['componentAttribute', 'title="Implementation details"'],
+    ])
+  })
+
+  test('the compact opener and closer are markers too', () => {
+    expect(spans('::info')).toEqual([['componentMarker', '::'], ['componentType', 'info']])
+    expect(spans(':::')).toEqual([['componentMarker', ':::']])
+  })
+
+  test('directive-looking code stays code', () => {
+    expect(spans(':::warning', ticks)).toEqual([['codeBlock', ':::warning']])
+  })
+})
+
 describe('inline', () => {
   test('a code span closes on a run of its own length', () => {
     expect(texts('a `code` b', 'codeSpan')).toEqual(['`code`'])
@@ -137,6 +156,7 @@ describe('spans are well formed', () => {
   const lines = [
     '# Heading', '## The **plan** and `code`', '> quoted [link](./a.md)',
     '- [ ] task with *emphasis*', '```swift', 'let x = 1', '```', '---',
+    ':::details title="More"', ':::',
     '![img](a.png) and ~~gone~~', '', '    indented', 'plain prose',
     '1. numbered', 'snake_case and 2 * 3', '\\*escaped\\*', 'a ``tick ` in`` b',
   ]

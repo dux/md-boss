@@ -119,6 +119,40 @@ Five kinds, each in its own colour. The marker is the first line of a quote.
 > [!CAUTION]
 > Something with consequences that are hard to undo.
 
+## Typed Fez components
+
+A typed block renders through an editable Fez component in
+`~/.config/md-boss/components`. The filename carries an `md-` prefix: `md-info.fez` renders `::info` or
+`:::info`, and opening-line attributes become component props.
+The Example page ends with a live gallery generated from every installed component's required
+`<info>` and `<demo>` blocks.
+
+```md
+::info
+Use this for contextual information.
+:::
+
+:::warning
+Use this for destructive operations, security implications, or irreversible actions.
+:::
+
+:::details title="Implementation details"
+Longer optional explanation.
+:::
+```
+
+::info
+Use this for contextual information.
+:::
+
+:::warning
+Use this for destructive operations, security implications, or irreversible actions.
+:::
+
+:::details title="Implementation details"
+Longer optional explanation.
+:::
+
 ## Tables
 
 Pipes make the columns; the second row sets the alignment - `:--` left, `:-:` centre,

@@ -52,6 +52,7 @@
         MdBoss.manager.onChange(() => this.pull()),
         MdBoss.manager.notes.onChange(() => this.pushNotes()),
         MdBoss.manager.onCursorChange(() => this.pushHighlight()),
+        MdBoss.components.onChange(() => this.reloadComponents()),
         // Told which theme to use, never left to prefers-color-scheme: the page swaps its
         // <style id=theme> in place, so the scroll position and the rendered DOM survive.
         MdBoss.manager.settings.onChange((data) => {
@@ -175,6 +176,20 @@
       this.frame.contentWindow.mdSetBase(MdBoss.documentBaseURL(this.local.path))
     }
 
+    /** Component classes and their scoped CSS live in the iframe. Replacing srcdoc gives
+     *  an edited class a clean registry and drops CSS that a removed component injected. */
+    reloadComponents() {
+      const doc = MdBoss.manager.document
+      if (!doc || MdBoss.documentKind(doc.path) !== 'markdown') return
+      if (this.local.typing) clearTimeout(this.local.typing)
+      this.local.typing = null
+      this.local.restoreTo = MdBoss.manager.scrollMemory.place(doc.path).line ?? 1
+      this.local.loaded = false
+      this.local.pending = null
+      this.local.basePath = doc.path
+      this.render(this.source(doc))
+    }
+
     /** What the page renders for a document: markdown as it is, JSON inside a fence so it
      *  reads as code rather than as one long paragraph. */
     source(doc) {
@@ -187,7 +202,7 @@
       if (this.local.loaded) {
         this.local.pending = null
         this.pushBase()
-        this.frame.contentWindow.mdRender(markdown)
+        this.frame.contentWindow.mdRender(markdown, MdBoss.typedBlocks(markdown))
         this.pushNotes()
         if (this.local.restoreTo !== null) {
           this.frame.contentWindow.mdScrollToLine(this.local.restoreTo)
@@ -209,6 +224,8 @@
         measure: MdBoss.manager.settings.data.previewMeasure,
         baseURL: this.local.path ? MdBoss.documentBaseURL(this.local.path) : null,
         assetBase: MdBoss.native().shell.assetBase(),
+        components: MdBoss.components.items,
+        typedBlocks: MdBoss.typedBlocks(markdown),
       })
     }
   }

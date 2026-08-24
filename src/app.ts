@@ -20,6 +20,8 @@ import { native } from './native/bridge'
 import { buildPreviewPage } from './preview/page'
 import { buildCSVPage } from './preview/csvPage'
 import { parseCSV } from './models/csvTable'
+import { MarkdownComponents } from './models/markdownComponents'
+import { typedBlocks } from './models/typedBlocks'
 import { rootCSS, THEMES, themeNamed } from './theme/theme'
 
 // What .fez components may reach. Fez compiles them at runtime, so they cannot import
@@ -29,7 +31,12 @@ export async function createApp() {
   const folders = await RootFolders.load()
   const home = await native().paths.home()
   const configDir = await native().paths.config()
-  const manager = new Manager(settings, folders, home, configDir)
+  const components = await MarkdownComponents.load(configDir)
+  await components.start()
+  const manager = new Manager(settings, folders, home, configDir, () => components.items)
+  components.onChange(() => {
+    if (manager.document?.path === manager.examplePath && !manager.isDirty) void manager.openExample()
+  })
   return {
     native,
     TypeAhead,
@@ -54,6 +61,7 @@ export async function createApp() {
     buildPreviewPage,
     buildCSVPage,
     parseCSV,
+    typedBlocks,
     documentBaseURL,
     isInside,
     /** The sidebar row's glyph - folder, page, table, image - as an inline SVG string. */
@@ -66,6 +74,7 @@ export async function createApp() {
     THEMES,
     themeNamed,
     settings,
+    components,
     manager,
     /** Self-update: the launch check and the Help item. Restart runs quit's guard first. */
     updater: new Updater(native().updater, manager.toast, () => manager.prepareToExit()),

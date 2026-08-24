@@ -11,6 +11,7 @@
       this.state.themes = []
       this.state.sizes = []
       this.state.isDefault = true
+      this.state.componentCount = 0
     }
 
     onMount() {
@@ -19,6 +20,7 @@
           if (panel === 'settings') this.state.open = !this.state.open
         }),
         MdBoss.manager.settings.onChange(() => this.pull()),
+        MdBoss.components.onChange(() => this.pull()),
       ]
       // Escape closes, in the capture phase so the tree behind it does not see the key.
       this.on(document, 'keydown', (event) => {
@@ -56,6 +58,7 @@
         canGrow: manager.canChangeFontSize(setting, 1),
       }))
       this.state.isDefault = manager.fontSizesAreDefault
+      this.state.componentCount = MdBoss.components.items.length
     }
 
     close() {
@@ -73,6 +76,26 @@
 
     reset() {
       MdBoss.manager.resetFontSizes()
+    }
+
+    async openComponents() {
+      try {
+        await MdBoss.components.openFolder()
+      } catch (error) {
+        MdBoss.manager.showError('Could not open Fez components: ' + String(error))
+      }
+    }
+
+    async openFezGuide() {
+      try {
+        await MdBoss.native().shell.openURL(MdBoss.components.guideURL)
+      } catch (error) {
+        MdBoss.manager.showError('Could not open the Fez guide: ' + String(error))
+      }
+    }
+
+    copyStarter() {
+      void MdBoss.manager.copyText(MdBoss.components.starterPrompt(), 'Component starter copied')
     }
   }
 </script>
@@ -95,12 +118,14 @@
   }
 
   .panel {
-    width: 360px;
+    width: 420px;
+    max-height: calc(100vh - 40px);
     box-sizing: border-box;
     padding: 20px;
     display: flex;
     flex-direction: column;
     gap: 14px;
+    overflow-y: auto;
     border: 1px solid var(--border-strong);
     border-radius: 8px;
     background: var(--bg);
@@ -247,6 +272,39 @@
     opacity: 0.4;
     cursor: default;
   }
+
+  .components {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .component-copy {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  .component-link {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--link);
+    font: inherit;
+    text-align: left;
+  }
+
+  .starter {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    text-align: center;
+  }
 </style>
 
 <div class={'overlay' + (state.open ? '' : ' hidden')} onclick!="fez.close()">
@@ -280,6 +338,14 @@
             </div>
           </div>
         {/each}
+      </div>
+      <hr>
+      <div class="text-title">Fez components</div>
+      <div class="components">
+        <button class="component-link text-buttons pointer" onclick="fez.openComponents()">Installed Fez components ({state.componentCount})</button>
+        <p class="component-copy text-small"><span class="text-mono">md-type.fez</span> renders <span class="text-mono">::type</span> and <span class="text-mono">:::type</span> blocks. Each component requires <span class="text-mono">&lt;info&gt;</span> and <span class="text-mono">&lt;demo&gt;</span> blocks.</p>
+        <button class="component-link text-buttons pointer" onclick="fez.openFezGuide()">Fez authoring guide ↗</button>
+        <button class="starter text-buttons pointer" onclick="fez.copyStarter()">LLM / AI components starter</button>
       </div>
       <hr>
       <div class="foot">

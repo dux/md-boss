@@ -17,6 +17,15 @@ Rendering is GitHub-flavored markdown - tables, task lists, code highlighting, a
 alerts in five colours - done entirely offline by a bundled `marked.js` in an embedded web view.
 No network, no telemetry, no account.
 
+Typed blocks such as `:::info`, `:::warning` and `:::details title="More"` render through
+editable Fez components installed in `~/.config/md-boss/components`.
+The component filename carries an `md-` prefix: `md-info.fez` renders `::info` or `:::info`, and
+attributes on the opening line become component props.
+Every component requires non-empty `<info>` and `<demo>` blocks; the Example page uses them to
+show a live gallery of every installed component.
+The packaged app carries the Fez runtime and the three initial components inside `dist`, so
+rendering never installs a package or fetches code at runtime.
+
 A leading `---` block is read as front matter and drawn as a dimmed key/value block above the
 document, rather than as the horizontal rule and giant heading markdown would make of it.
 
@@ -260,6 +269,10 @@ On Windows and Linux read ⌘ as Ctrl and ⌥ as Alt; the shortcuts are the menu
 Settings live in `~/.config/md-boss/settings.json` and the sidebar's root folders in
 `~/.config/md-boss/roots.txt`, one absolute path per line - the same path on every OS.
 Both are plain text and meant to be edited by hand.
+Typed-block components live in `~/.config/md-boss/components`, with links to that folder and
+the Fez authoring guide in Settings.
+The **LLM / AI components starter** button copies a prompt that can be pasted into a local
+LLM harness to build and validate another component in that folder.
 An update unpacks into `~/.config/md-boss/app/`, and the shell runs that copy in preference
 to the one inside the bundle.
 

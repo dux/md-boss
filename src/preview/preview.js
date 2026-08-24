@@ -33,6 +33,9 @@
   var notes = {};
   // The source line a note jump landed on, or null.
   var targetLine = null;
+  // [{key, line}] for typed blocks Fez may have replaced with its own root node.
+  var typedLines = [];
+  var typedRender = 0;
 
   function post(message) {
     // srcdoc is same-origin with the pane, so the target origin is ours.
@@ -298,6 +301,81 @@
     return '<dl class="md-front" data-line="1">' + rows.join('') + '</dl>';
   }
 
+  // MARK: typed Fez blocks
+
+  // A comment token is its own Markdown block without adding a source line. Replacing the
+  // typed markers with inert comments before lexing lets everything between them remain
+  // ordinary Markdown, then the DOM pass below swaps each pair for its installed Fez tag.
+  function markTypedSource(source, lineOffset, typed) {
+    var lines = source.split('\n');
+    typed.forEach(function (block, index) {
+      var open = block.openLine - lineOffset - 1;
+      var close = block.closeLine - lineOffset - 1;
+      if (open < 0 || close <= open || close >= lines.length) { return; }
+      lines[open] = '<!--mdboss-typed-open-' + index + '-->';
+      lines[close] = '<!--mdboss-typed-close-' + index + '-->';
+    });
+    return lines.join('\n');
+  }
+
+  function commentNamed(name) {
+    var walker = document.createTreeWalker(content, NodeFilter.SHOW_COMMENT);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (node.nodeValue === name) { return node; }
+    }
+    return null;
+  }
+
+  function restoreTypedLines() {
+    typedLines.forEach(function (entry) {
+      var node = content.querySelector('[fez-key="' + entry.key + '"]');
+      if (node) { node.setAttribute('data-line', String(entry.line)); }
+    });
+  }
+
+  function mountTypedBlocks(typed) {
+    typedRender += 1;
+    typedLines = [];
+    // Smallest spans first, so a nested child becomes one node the parent can move.
+    var ordered = typed.map(function (block, index) {
+      return { block: block, index: index };
+    }).sort(function (a, b) {
+      return (a.block.closeLine - a.block.openLine) - (b.block.closeLine - b.block.openLine);
+    });
+
+    ordered.forEach(function (entry) {
+      var block = entry.block;
+      var open = commentNamed('mdboss-typed-open-' + entry.index);
+      var close = commentNamed('mdboss-typed-close-' + entry.index);
+      if (!open || !close || open.parentNode !== close.parentNode) { return; }
+
+      var component = document.createElement('md-' + block.type);
+      Object.keys(block.attributes || {}).forEach(function (name) {
+        component.setAttribute(name, block.attributes[name]);
+      });
+      var key = 'md-typed-' + typedRender + '-' + entry.index;
+      component.setAttribute('fez-key', key);
+      component.setAttribute('data-line', String(block.openLine));
+
+      var node = open.nextSibling;
+      while (node && node !== close) {
+        var next = node.nextSibling;
+        component.appendChild(node);
+        node = next;
+      }
+      open.parentNode.insertBefore(component, open);
+      open.remove();
+      close.remove();
+      typedLines.push({ key: key, line: block.openLine });
+    });
+
+    // A connected Fez component replaces its custom tag synchronously once the document is
+    // loaded. During initial srcdoc loading that replacement waits for a frame, so this is
+    // called both now and from mdRender's post-mount frame.
+    restoreTypedLines();
+  }
+
   // MARK: source lines
 
   function newlines(text) {
@@ -328,11 +406,12 @@
     return html.replace(/^(\s*<[a-z][a-z0-9]*)/i, '$1 data-line="' + line + '"');
   }
 
-  function toHTML(source) {
+  function toHTML(source, typed) {
     // Front matter is not markdown and never reaches the lexer; the counter starts past it so
     // every anchor below still names its own source line.
     var front = splitFront(source);
-    var body = expandTasks(front ? front.body : source);
+    var bodySource = front ? front.body : source;
+    var body = expandTasks(markTypedSource(bodySource, front ? front.lines : 0, typed));
 
     var tokens = marked.lexer(body);
     var stamped = [];
@@ -371,6 +450,7 @@
     blocks = null;
     markTasks();
     tagListItems(stamped);
+    mountTypedBlocks(typed);
   }
 
   // A thirty-item bullet list is a single token, and one anchor for thirty lines is the
@@ -559,12 +639,13 @@
 
   // MARK: Swift -> page
 
-  window.mdRender = function (source) {
+  window.mdRender = function (source, typed) {
     var scroller = document.scrollingElement;
     var previousTop = scroller.scrollTop;
+    typed = typed || [];
 
     marked.setOptions({ gfm: true, breaks: false, pedantic: false });
-    toHTML(source);
+    toHTML(source, typed);
 
     // After toHTML, so the anchors are already stamped and nothing here can move them.
     markAlerts();
@@ -575,6 +656,16 @@
     // innerHTML threw both of these away with the old nodes.
     applyNotes();
     markTarget();
+
+    // Initial srcdoc compilation connects Fez elements on a frame. Put source anchors and
+    // note state back on the replacement roots after that layout-changing pass completes.
+    requestAnimationFrame(function () {
+      restoreTypedLines();
+      blocks = null;
+      applyNotes();
+      markTarget();
+      invalidate();
+    });
 
     // An image that has not arrived yet is still zero-height, so every anchor below it is
     // measured in the wrong place until it loads.

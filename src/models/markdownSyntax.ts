@@ -11,6 +11,7 @@ import {
   skippingCodeSpan, type Fence,
 } from './markdownScan'
 import { markerEnd, taskEnd } from './markdownList'
+import { typedBlockMarker } from './typedBlocks'
 
 export const KINDS = [
   'headingMarker', 'headingText',
@@ -19,6 +20,7 @@ export const KINDS = [
   'imageBang', 'linkBracket', 'linkText', 'linkDestination',
   'quoteMarker', 'quoteText',
   'listMarker', 'taskMarker',
+  'componentMarker', 'componentType', 'componentAttribute',
   'rule',
 ] as const
 
@@ -51,6 +53,16 @@ export function scan(line: string, fence: Fence | null, spans: Span[]): Fence | 
     append(spans, 0, i, 'fenceMarker')
     append(spans, i, line.length, 'fenceInfo')
     return opened
+  }
+
+  const component = typedBlockMarker(line)
+  if (component) {
+    append(spans, component.markerStart, component.markerEnd, 'componentMarker')
+    if (component.kind === 'open') {
+      append(spans, component.typeStart, component.typeEnd, 'componentType')
+      if (component.attributesStart !== null) append(spans, component.attributesStart, line.trimEnd().length, 'componentAttribute')
+    }
+    return null
   }
 
   const prose = blockPrefix(line, spans)

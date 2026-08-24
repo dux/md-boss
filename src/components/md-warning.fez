@@ -1,0 +1,34 @@
+<info>
+  <p>High-consequence information for an md-boss typed Markdown block.</p>
+</info>
+
+<demo>
+  <md-warning><p>This action cannot be undone.</p></md-warning>
+</demo>
+
+<style>
+  display: block;
+  margin: 1.4em 0;
+  padding: 0.8em 1em;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--alert-caution);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--alert-caution) 7%, var(--bg));
+
+  .label {
+    margin-bottom: 0.35em;
+    color: var(--alert-caution);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .fez-slot {
+    & > :last-child {
+      margin-bottom: 0;
+    }
+  }
+</style>
+
+<div class="label">Warning</div>
+<slot />
