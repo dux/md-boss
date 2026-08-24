@@ -2,6 +2,7 @@
 // The port of MarkdownDocument.swift minus the disk watching, which the Manager does.
 
 import { native } from '../native/bridge'
+import { completedTaskIndexes } from './taskCompletion'
 
 /** Identifies a version of the file on disk. Size as well as mtime because volumes with
  *  one-second timestamp resolution - SMB, some FUSE mounts - hide a rewrite that lands
@@ -19,6 +20,11 @@ export type ExternalChange =
 
 export type SyncOutcome = 'unchanged' | 'reloaded' | 'conflict' | 'detached'
 
+export interface TaskCompletionEvent {
+  id: number
+  indexes: number[]
+}
+
 const sameStamp = (a: Stamp, b: Stamp) => a.mtime === b.mtime && a.size === b.size
 
 export class OpenDocument {
@@ -33,9 +39,12 @@ export class OpenDocument {
   /** Bumped only on open and on an external reload. The editor pushes the string into
    *  CodeMirror only when this changes, so typing never resets the selection. */
   reloadToken = 0
+  /** Set only when a clean buffer accepts an external disk version that completed tasks. */
+  taskCompletion: TaskCompletionEvent | null = null
   externalChange: ExternalChange | null = null
   /** The version we are holding, used to tell our own writes from someone else's. */
   private lastKnownStamp: Stamp
+  private taskCompletionID = 0
 
   constructor(path: string, raw: string, stamp: Stamp = { mtime: null, size: null }) {
     this.path = path
@@ -138,7 +147,9 @@ export class OpenDocument {
         this.externalChange = null
         return 'unchanged'
       }
+      const completed = completedTaskIndexes(this.text, raw)
       this.replaceFromDisk(raw, current)
+      if (completed.length) this.taskCompletion = { id: ++this.taskCompletionID, indexes: completed }
       return 'reloaded'
     }
     this.externalChange = 'conflict'

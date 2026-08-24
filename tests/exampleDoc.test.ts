@@ -129,6 +129,10 @@ describe('what the example page demonstrates', () => {
     }
   })
 
+  test('explains the applied external completion celebration', () => {
+    expect(exampleText).toContain('the applied checkbox celebrates with a small confetti burst')
+  })
+
   test('carries all five alert kinds', () => {
     for (const kind of ['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION']) {
       expect(exampleText).toContain(`> [!${kind}]`)

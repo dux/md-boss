@@ -64,4 +64,23 @@ describe('the Markdown preview page', () => {
     expect(page).toContain('/>\\s+</g')
     expect(page).not.toContain('/>\\s+<\\/g')
   })
+
+  test('carries the one-shot task celebration and reduced-motion guard', () => {
+    const page = buildPreviewPage({
+      markdown: '- [x] done',
+      themeCSS: '',
+      fontSize: 17,
+      measure: 48,
+      baseURL: null,
+      assetBase: '',
+      components: [],
+      typedBlocks: [],
+    })
+
+    expect(page).toContain('function celebrateTasks(indexes)')
+    expect(page).toContain("matchMedia('(prefers-reduced-motion: reduce)')")
+    expect(page).toContain('var count = 20')
+    expect(page).toContain('md-confetti-ring')
+    expect(page).toContain('md-confetti-pop')
+  })
 })

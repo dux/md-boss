@@ -140,6 +140,20 @@ describe('external changes', () => {
     expect(await doc.syncWithDisk()).toBe('unchanged')
   })
 
+  test('only an applied external reload publishes completed tasks', async () => {
+    installNative(memoryNative({ '/w/a.md': '- [o] first\n- [ ] second' }))
+    const doc = await OpenDocument.load('/w/a.md')
+
+    await native().fs.write('/w/a.md', '- [x] first\n- [x] second')
+    expect(await doc.syncWithDisk()).toBe('reloaded')
+    expect(doc.taskCompletion).toEqual({ id: 1, indexes: [0] })
+
+    doc.text = '- [o] local'
+    await native().fs.write('/w/a.md', '- [x] local')
+    expect(await doc.syncWithDisk()).toBe('conflict')
+    expect(doc.taskCompletion).toEqual({ id: 1, indexes: [0] })
+  })
+
   test('a missing file detaches rather than closing, and reattaches when it comes back', async () => {
     const files: Record<string, string> = { '/w/a.md': 'one' }
     installNative(memoryNative(files))

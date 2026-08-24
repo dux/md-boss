@@ -9,8 +9,10 @@
     init() {
       this.local.loaded = false
       this.local.pending = null
+      this.local.pendingCompletions = []
       this.local.path = null
       this.local.reloadToken = -1
+      this.local.taskCompletionID = 0
       this.local.typing = null
       // Where to land once the next render is in: the remembered place of a file that
       // just arrived. Restored after the render, which is when the page has anchors.
@@ -26,7 +28,9 @@
         if (msg.kind === 'anchorMiss') MdBoss.manager.showError('No heading: ' + msg.id)
         if (msg.kind === 'ready') {
           this.local.loaded = true
-          if (this.local.pending !== null) this.render(this.local.pending)
+          if (this.local.pending !== null) {
+            this.render(this.local.pending, this.local.pendingCompletions)
+          }
           this.followAnchorRequest()
         }
         // The page suppresses its own echo after mdScrollToLine, so what arrives here is
@@ -150,12 +154,18 @@
       if (fresh) {
         if (this.local.typing) clearTimeout(this.local.typing)
         this.local.typing = null
-        if (doc.path !== this.local.path) {
+        const sameDocument = doc.path === this.local.path
+        if (!sameDocument) {
           this.local.restoreTo = MdBoss.manager.scrollMemory.place(doc.path).line ?? 1
         }
+        const completion = doc.taskCompletion
+        const completed = sameDocument && completion && completion.id !== this.local.taskCompletionID
+          ? completion.indexes
+          : []
         this.local.path = doc.path
         this.local.reloadToken = doc.reloadToken
-        this.render(this.source(doc))
+        this.local.taskCompletionID = completion?.id ?? 0
+        this.render(this.source(doc), completed)
         this.followAnchorRequest()
         return
       }
@@ -186,6 +196,7 @@
       this.local.restoreTo = MdBoss.manager.scrollMemory.place(doc.path).line ?? 1
       this.local.loaded = false
       this.local.pending = null
+      this.local.pendingCompletions = []
       this.local.basePath = doc.path
       this.render(this.source(doc))
     }
@@ -198,11 +209,12 @@
       return `${fence}json\n${doc.text}\n${fence}\n`
     }
 
-    render(markdown) {
+    render(markdown, completed = []) {
       if (this.local.loaded) {
         this.local.pending = null
+        this.local.pendingCompletions = []
         this.pushBase()
-        this.frame.contentWindow.mdRender(markdown, MdBoss.typedBlocks(markdown))
+        this.frame.contentWindow.mdRender(markdown, MdBoss.typedBlocks(markdown), completed)
         this.pushNotes()
         if (this.local.restoreTo !== null) {
           this.frame.contentWindow.mdScrollToLine(this.local.restoreTo)
@@ -213,9 +225,11 @@
       if (this.local.pending !== null) {
         // page still loading - the latest text wins when it says ready
         this.local.pending = markdown
+        this.local.pendingCompletions = completed
         return
       }
       this.local.pending = markdown
+      this.local.pendingCompletions = completed
       this.local.basePath = this.local.path
       this.frame.srcdoc = MdBoss.buildPreviewPage({
         markdown,

@@ -194,6 +194,49 @@
     });
   }
 
+  // The indexes name tasks in the same document order markTasks uses. Particles are siblings
+  // of the input so they can radiate around it without changing the task's layout or tick.
+  function celebrateTasks(indexes) {
+    if (!indexes || !indexes.length) { return; }
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { return; }
+    var tasks = content.querySelectorAll('li.md-task');
+
+    indexes.forEach(function (index) {
+      var task = tasks[index];
+      if (!task) { return; }
+      var box = task.querySelector('input[type="checkbox"]:checked');
+      if (!box || box.closest('li') !== task) { return; }
+
+      var burst = document.createElement('span');
+      burst.className = 'md-confetti-burst';
+      burst.setAttribute('aria-hidden', 'true');
+      var count = 20;
+      for (var i = 0; i < count; i += 1) {
+        var angle = (Math.PI * 2 * i / count) - Math.PI / 2;
+        var distance = 1.8 + (i % 4) * 0.35;
+        var x = Math.cos(angle) * distance;
+        var y = Math.sin(angle) * distance + 0.45;
+        var turn = (i % 2 ? 1 : -1) * (150 + i * 23);
+        var particle = document.createElement('i');
+        particle.className = 'md-confetti-particle md-confetti-color-' + (i % 6)
+          + (i % 4 === 0 ? ' md-confetti-round' : '');
+        particle.style.setProperty('--confetti-x', x.toFixed(2) + 'em');
+        particle.style.setProperty('--confetti-y', y.toFixed(2) + 'em');
+        particle.style.setProperty('--confetti-mid-x', (x * 0.62).toFixed(2) + 'em');
+        particle.style.setProperty('--confetti-mid-y', (y * 0.62).toFixed(2) + 'em');
+        particle.style.setProperty('--confetti-turn', turn + 'deg');
+        particle.style.setProperty('--confetti-mid-turn', Math.round(turn * 0.55) + 'deg');
+        particle.style.setProperty('--confetti-delay', ((i % 5) * 12) + 'ms');
+        particle.style.setProperty('--confetti-duration', (760 + (i % 4) * 70) + 'ms');
+        burst.appendChild(particle);
+      }
+      box.insertAdjacentElement('afterend', burst);
+      var remove = function () { burst.remove(); };
+      burst.lastChild.addEventListener('animationend', remove, { once: true });
+      window.setTimeout(remove, 1200);
+    });
+  }
+
   // MARK: alerts
 
   // `> [!NOTE]` and its four siblings. A DOM pass after render rather than a lexer extension,
@@ -639,13 +682,14 @@
 
   // MARK: Swift -> page
 
-  window.mdRender = function (source, typed) {
+  window.mdRender = function (source, typed, completed) {
     var scroller = document.scrollingElement;
     var previousTop = scroller.scrollTop;
     typed = typed || [];
 
     marked.setOptions({ gfm: true, breaks: false, pedantic: false });
     toHTML(source, typed);
+    celebrateTasks(completed);
 
     // After toHTML, so the anchors are already stamped and nothing here can move them.
     markAlerts();

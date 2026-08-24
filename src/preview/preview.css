@@ -169,6 +169,73 @@ li.md-task { list-style: none; }
   transform: rotate(43deg);
 }
 
+/* A one-shot burst when an externally applied edit finishes a task. The zero-size sibling
+   sits after the checkbox, then reaches back to its centre without moving the task text. */
+.md-confetti-burst {
+  position: relative;
+  display: inline-block;
+  left: -0.95em;
+  top: -0.45em;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.md-confetti-burst::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0.7em;
+  height: 0.7em;
+  border: 0.12em solid var(--accent);
+  border-radius: 50%;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.25);
+  animation: md-confetti-ring 520ms ease-out forwards;
+}
+
+.md-confetti-particle {
+  --confetti-x: 0;
+  --confetti-y: -1em;
+  --confetti-mid-x: 0;
+  --confetti-mid-y: -0.62em;
+  --confetti-turn: 90deg;
+  --confetti-mid-turn: 50deg;
+  --confetti-delay: 0ms;
+  --confetti-duration: 850ms;
+  position: absolute;
+  left: -0.09em;
+  top: -0.18em;
+  width: 0.18em;
+  height: 0.4em;
+  border-radius: 0.05em;
+  background: var(--accent);
+  opacity: 0;
+  animation: md-confetti-pop var(--confetti-duration) cubic-bezier(0.16, 0.8, 0.28, 1) var(--confetti-delay) forwards;
+}
+
+.md-confetti-round { width: 0.26em; height: 0.26em; border-radius: 50%; }
+.md-confetti-color-0 { background: var(--accent); }
+.md-confetti-color-1 { background: var(--link); }
+.md-confetti-color-2 { background: var(--alert-tip); }
+.md-confetti-color-3 { background: var(--alert-important); }
+.md-confetti-color-4 { background: var(--alert-warning); }
+.md-confetti-color-5 { background: var(--alert-caution); }
+
+@keyframes md-confetti-ring {
+  0% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.25); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(3.3); }
+}
+
+@keyframes md-confetti-pop {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0) scale(0.35); }
+  8% { opacity: 1; }
+  42% { opacity: 1; transform: translate(var(--confetti-mid-x), var(--confetti-mid-y)) rotate(var(--confetti-mid-turn)) scale(1.15); }
+  100% { opacity: 0; transform: translate(var(--confetti-x), var(--confetti-y)) rotate(var(--confetti-turn)) scale(0.75); }
+}
+
 /* `[o]` - started, not finished. A ring rather than a box, because the point is that it is
    still turning. Stroke widths are in the 16-unit viewBox, so they scale with the em the
    marker is sized in rather than staying at a fixed pixel weight. */
@@ -191,7 +258,11 @@ li.md-task { list-style: none; }
 @keyframes md-spin { to { transform: rotate(360deg); } }
 
 /* The ring alone still reads as "in progress" - the motion is decoration. */
-@media (prefers-reduced-motion: reduce) { .md-spinner-head { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .md-spinner-head { animation: none; }
+  .md-confetti-burst::before,
+  .md-confetti-particle { display: none; }
+}
 
 /* Quotes */
 

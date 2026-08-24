@@ -89,6 +89,7 @@ Each line below is written with the marker it names, so you can see the two side
 
 Return on a task line continues the list with an empty box, whatever the line above was.
 An item with nothing written on it sheds its marker instead of growing another.
+When another tool changes an in-progress task to done in this open document, the applied checkbox celebrates with a small confetti burst.
 
 ## Quotes
 
