@@ -1,7 +1,8 @@
 <script>
   // A one-field prompt - a note's body, a rename - answered in the window, the yes/no
-  // for something the app cannot take back (Move to Trash), and the Save / Don't Save /
-  // Cancel before unsaved edits would go. Installs itself as the manager's prompt handlers
+  // for something the app cannot take back (Move to Trash), the Save / Don't Save /
+  // Cancel before unsaved edits would go, and a compact checklist of boolean choices.
+  // Installs itself as the manager's prompt handlers
   // on mount; Escape cancels, Return confirms a single-line field, Cmd-Return a multi-line
   // one. In the confirm shape Return cancels: the destructive button is never one keystroke
   // away, which is the convention everywhere else on the system - Cancel holds the focus
@@ -16,15 +17,18 @@
       this.state.confirm = 'Save'
       this.state.multiline = false
       this.state.placeholder = ''
+      this.state.items = []
     }
 
     onMount() {
       this.local.handler = (options) => this.ask(options)
       this.local.confirmHandler = (options) => this.askConfirm(options)
       this.local.discardHandler = (options) => this.askDiscard(options)
+      this.local.checklistHandler = (options) => this.askChecklist(options)
       MdBoss.manager.prompts.handler = this.local.handler
       MdBoss.manager.prompts.confirmHandler = this.local.confirmHandler
       MdBoss.manager.prompts.discardHandler = this.local.discardHandler
+      MdBoss.manager.prompts.checklistHandler = this.local.checklistHandler
       this.on(document, 'keydown', (event) => {
         if (!this.state.open) return
         if (event.key === 'Escape') {
@@ -40,7 +44,7 @@
           if (focused && focused.tagName === 'BUTTON' && this.root.contains(focused)) return
           event.preventDefault()
           event.stopPropagation()
-          this.finish(this.state.kind === 'confirm' ? false : 'save')
+          this.finish(this.defaultAnswer())
         } else if (event.metaKey || event.ctrlKey || !this.state.multiline) {
           event.preventDefault()
           event.stopPropagation()
@@ -54,11 +58,19 @@
       if (prompts.handler === this.local.handler) prompts.handler = null
       if (prompts.confirmHandler === this.local.confirmHandler) prompts.confirmHandler = null
       if (prompts.discardHandler === this.local.discardHandler) prompts.discardHandler = null
+      if (prompts.checklistHandler === this.local.checklistHandler) prompts.checklistHandler = null
     }
 
     cancelValue() {
       if (this.state.kind === 'confirm') return false
       if (this.state.kind === 'discard') return 'cancel'
+      return null
+    }
+
+    defaultAnswer() {
+      if (this.state.kind === 'confirm') return false
+      if (this.state.kind === 'discard') return 'save'
+      if (this.state.kind === 'checklist') return this.checklistValue()
       return null
     }
 
@@ -74,6 +86,7 @@
       this.state.confirm = options.confirm || 'Save'
       this.state.multiline = !!options.multiline
       this.state.placeholder = options.placeholder || ''
+      this.state.items = []
       this.local.value = options.value
       this.state.open = true
       return new Promise((resolve) => {
@@ -97,11 +110,36 @@
       this.state.confirm = confirm
       this.state.multiline = false
       this.state.placeholder = ''
+      this.state.items = []
       this.local.value = ''
       this.state.open = true
       return new Promise((resolve) => {
         this.local.resolve = resolve
       })
+    }
+
+    askChecklist(options) {
+      if (this.local.resolve) this.finish(this.cancelValue())
+      this.state.kind = 'checklist'
+      this.state.title = options.title
+      this.state.message = options.message
+      this.state.confirm = options.confirm
+      this.state.multiline = false
+      this.state.placeholder = ''
+      this.state.items = options.items.map((item) => ({ ...item, checked: !!item.checked }))
+      this.local.value = ''
+      this.state.open = true
+      return new Promise((resolve) => {
+        this.local.resolve = resolve
+      })
+    }
+
+    checklistValue() {
+      const answer = {}
+      for (const input of this.root.querySelectorAll('[data-checklist-id]')) {
+        answer[input.dataset.checklistId] = input.checked
+      }
+      return answer
     }
 
     afterRender() {
@@ -113,8 +151,12 @@
         field.focus()
         field.select()
       }
-      // The button Return lands on holds the focus: Cancel for a confirm, Save for a discard.
-      const focus = this.find(this.state.kind === 'confirm' ? '.cancel' : '.primary')
+      // A checklist starts on its first choice so Space toggles it. Button-only shapes put
+      // focus on their safe default: Cancel for a confirm, Save for a discard.
+      const focusSelector = this.state.kind === 'checklist'
+        ? '[data-checklist-id]'
+        : this.state.kind === 'confirm' ? '.cancel' : '.primary'
+      const focus = this.find(focusSelector)
       if (this.state.kind !== 'text' && focus && !focus.dataset.primed) {
         focus.dataset.primed = '1'
         focus.focus()
@@ -131,6 +173,7 @@
     confirm() {
       if (this.state.kind === 'confirm') return this.finish(true)
       if (this.state.kind === 'discard') return this.finish('save')
+      if (this.state.kind === 'checklist') return this.finish(this.checklistValue())
       this.finish(this.field().value)
     }
 
@@ -197,6 +240,41 @@
     min-height: 96px;
   }
 
+  .checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .choice {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+
+  .choice:hover {
+    border-color: var(--border-strong);
+  }
+
+  .choice input {
+    margin: 2px 0 0;
+    accent-color: var(--accent);
+  }
+
+  .choice-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .choice-description {
+    color: var(--muted);
+  }
+
   .buttons {
     display: flex;
     justify-content: flex-end;
@@ -236,7 +314,7 @@
 
 <div class={'overlay' + (state.open ? '' : ' hidden')}>
   {#if state.open}
-    <div class="panel">
+    <div class="panel" role="dialog" aria-modal="true" aria-label={state.title}>
       <div class="title text-default">{state.title}</div>
       <div class={'message text-small' + (state.kind === 'text' ? ' text-mono' : '')}>{state.message}</div>
       {#if state.kind === 'text'}
@@ -245,6 +323,19 @@
         {:else}
           <input class="field text-default" type="text" spellcheck="false" placeholder={state.placeholder}>
         {/if}
+      {/if}
+      {#if state.kind === 'checklist'}
+        <div class="checklist">
+          {#each state.items as item}
+            <label class="choice pointer">
+              <input type="checkbox" data-checklist-id={item.id} checked={item.checked}>
+              <span class="choice-copy">
+                <span class="text-default">{item.title}</span>
+                <span class="choice-description text-small">{item.description}</span>
+              </span>
+            </label>
+          {/each}
+        </div>
       {/if}
       <div class="buttons">
         {#if state.kind === 'discard'}

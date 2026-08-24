@@ -36,11 +36,31 @@ export type DiscardAnswer = 'save' | 'discard' | 'cancel'
 
 export type DiscardHandler = (options: DiscardOptions) => Promise<DiscardAnswer>
 
+/** A compact set of independent yes/no choices. The prompt panel reads the checked DOM
+ *  values only when confirmed, so clicking a native checkbox does not re-render the form. */
+export interface ChecklistItem {
+  id: string
+  title: string
+  description: string
+  checked?: boolean
+}
+
+export interface ChecklistOptions {
+  title: string
+  message: string
+  items: readonly ChecklistItem[]
+  confirm: string
+}
+
+export type ChecklistAnswer = Record<string, boolean>
+export type ChecklistHandler = (options: ChecklistOptions) => Promise<ChecklistAnswer | null>
+
 export class Prompts {
   /** Null until a panel mounts; a prompt with nobody to answer it is cancelled. */
   handler: TextPromptHandler | null = null
   confirmHandler: ConfirmHandler | null = null
   discardHandler: DiscardHandler | null = null
+  checklistHandler: ChecklistHandler | null = null
 
   /** The text entered, or null when cancelled. Single-line answers are trimmed and an empty
    *  one reads as cancel - a blank title is not a title. */
@@ -64,5 +84,12 @@ export class Prompts {
   async discard(options: DiscardOptions): Promise<DiscardAnswer> {
     if (!this.discardHandler) return 'cancel'
     return this.discardHandler(options)
+  }
+
+  /** The checked values, or null when cancelled. Unknown ids are left out by the panel and
+   *  callers read only the ids they supplied. */
+  async checklist(options: ChecklistOptions): Promise<ChecklistAnswer | null> {
+    if (!this.checklistHandler) return null
+    return this.checklistHandler(options)
   }
 }

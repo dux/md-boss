@@ -1,0 +1,62 @@
+<script>
+  // Copies a self-contained md-boss authoring handoff after the shared prompt panel asks
+  // how a possible tasks file should be arranged. The full path stays in the generated
+  // prompt; this small header control only needs it for its tooltip and visibility.
+  class {
+    init() {
+      this.state.path = null
+    }
+
+    onMount() {
+      this.local.unsubscribe = MdBoss.manager.onChange(() => this.pull())
+      this.pull()
+    }
+
+    onDestroy() {
+      if (this.local.unsubscribe) this.local.unsubscribe()
+    }
+
+    pull() {
+      this.state.path = MdBoss.manager.document?.path || null
+    }
+
+    start() {
+      void MdBoss.manager.copyAIStartPrompt()
+    }
+  }
+</script>
+
+<style>
+  display: block;
+
+  .ai-start.hidden {
+    display: none;
+  }
+
+  /* The same light face as Back, Copy Path and the measure controls in this strip. */
+  button {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    height: calc(var(--font-buttons) + 8px);
+    padding: 0 7px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--muted);
+    font-family: inherit;
+    white-space: nowrap;
+  }
+
+  button:hover {
+    border-color: var(--border-strong);
+    background: var(--selection);
+    color: var(--text);
+  }
+</style>
+
+<div class={'ai-start' + (state.path ? '' : ' hidden')}>
+  {#if state.path}
+    <button class="text-buttons pointer" title={'Copy an AI authoring prompt for ' + state.path} onclick="fez.start()">AI start</button>
+  {/if}
+</div>

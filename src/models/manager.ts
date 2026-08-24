@@ -4,6 +4,7 @@
 
 import { native, type OpenRequest, type RewriteOutcome, type SearchHit } from '../native/bridge'
 import { AnnotationStore, FALLBACK_FILE_NAME } from './annotationStore'
+import { buildAIStartPrompt } from './aiStart'
 import { launchPaths } from './cli'
 import { DirectoryWatcher } from './directoryWatcher'
 import { OpenDocument } from './document'
@@ -353,6 +354,38 @@ export class Manager {
   async copyText(text: string, label = 'Copied'): Promise<void> {
     await native().clipboard.writeText(text)
     this.toast.success(label)
+  }
+
+  /** Preview's AI start button. The shared prompt panel supplies the two booleans; this
+   *  command owns the document and installed-component snapshot that go to the clipboard. */
+  async copyAIStartPrompt(): Promise<void> {
+    const doc = this.document
+    if (!doc) return
+    const answer = await this.prompts.checklist({
+      title: 'Prepare AI prompt',
+      message: 'Choose how a separate tasks file should be organized when one is useful.',
+      confirm: 'Copy prompt',
+      items: [
+        {
+          id: 'groupTasksByTopic',
+          title: 'Group tasks by topic',
+          description: 'Organize related tasks under clear topic headings.',
+          checked: true,
+        },
+        {
+          id: 'splitTasksByAgent',
+          title: 'Break tasks down by agent',
+          description: 'Assign independent task groups to parallel agents after the list is written.',
+          checked: false,
+        },
+      ],
+    })
+    if (!answer) return
+    const prompt = buildAIStartPrompt(doc.path, this.exampleComponents(), {
+      groupTasksByTopic: answer.groupTasksByTopic ?? false,
+      splitTasksByAgent: answer.splitTasksByAgent ?? false,
+    })
+    await this.copyText(prompt, 'AI prompt copied')
   }
 
   /** Cmd-S and the Save button. */

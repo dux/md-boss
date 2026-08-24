@@ -453,6 +453,7 @@
           <copy-path></copy-path>
           <!-- The measure is the rendered column's, so a table has no use for it. -->
           {#if state.kind === 'markdown'}
+            <ai-start></ai-start>
             <measure-controls></measure-controls>
           {/if}
         </div>
