@@ -1,0 +1,5 @@
+style,mode,id,background,accent
+Default,Light,paper,#FBF7EF,#9A5B34
+Default,Dark,dark,#1E1C1A,#E0996A
+Compact,Light,compact-light,#FBF7EF,#9A5B34
+Compact,Dark,compact-dark,#1E1C1A,#E0996A

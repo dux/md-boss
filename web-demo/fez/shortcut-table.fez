@@ -5,25 +5,33 @@
     init() {
       this.state.groups = [
         { name: 'Panes and layout', rows: [
-          { keys: '⌥⌘R  ⌥⌘V  ⌥⌘N', what: 'toggle the raw, preview and notes panes' },
-          { keys: '⌘\\', what: 'preview and raw side by side' },
-          { keys: '⌘0', what: 'show or hide the sidebar' },
-          { keys: '⇧⌘D', what: 'switch between light and dark' },
-          { keys: '⌘+  ⌘-  ⌥⌘0', what: 'text size, and reset the column width' }
+          { keys: ['⌘1', '⌘2', '⌘3', '⌘4'], what: 'fold the files, preview, raw and notes panels in or out' },
+          { keys: ['⌘←', '⌘→'], what: 'narrow and widen the reading column' },
+          { keys: ['⌘\\'], what: 'raw and preview side by side' },
+          { keys: ['⇧⌘D'], what: 'switch between light and dark, keeping Default or Compact' },
+          { keys: ['⌘+', '⌘-', '⌥⌘0'], what: 'text size; ⌥⌘0 also resets the column width' }
         ]},
         { name: 'Files', rows: [
-          { keys: '⌘N', what: 'new file in the sidebar folder' },
-          { keys: '⌘O', what: 'add folders to the sidebar' },
-          { keys: '⇧⌘O', what: 'open a single file' },
-          { keys: '⇧⌘R', what: 'reveal the selection in Finder' },
-          { keys: '⌘S', what: 'save' },
-          { keys: '⎋', what: 'cancel a pending Cut in the sidebar' }
+          { keys: ['⌘N'], what: 'new file in the sidebar folder' },
+          { keys: ['⌘O'], what: 'add folders to the sidebar' },
+          { keys: ['⇧⌘O'], what: 'open a single file' },
+          { keys: ['⇧⌘R'], what: 'reveal the selection in Finder, Explorer or the file manager' },
+          { keys: ['⌘⌫'], what: 'move the selected file to the Trash' },
+          { keys: ['⌘S'], what: 'save' },
+          { keys: ['⎋'], what: 'cancel a pending Cut in the sidebar' }
+        ]},
+        { name: 'Find and format', rows: [
+          { keys: ['⇧⌘F'], what: 'find in every document under the sidebar folder' },
+          { keys: ['⌘P'], what: 'go to a file by name' },
+          { keys: ['⌘F'], what: 'find in the open document' },
+          { keys: ['⌘B', '⌘I'], what: 'bold or italic the selection, or the word under the caret' },
+          { keys: ['⌘K'], what: 'make a link - a URL on the clipboard becomes the destination' }
         ]},
         { name: 'Notes and navigation', rows: [
-          { keys: '⇧⌘K', what: 'add or edit a note on the current line' },
-          { keys: '⇧⌘⌫', what: 'delete the note on the current line' },
-          { keys: '⌘F', what: 'find' },
-          { keys: '↑ ↓ ← →', what: 'move through the sidebar - or type a name to jump to it' }
+          { keys: ['⇧⌘K'], what: 'add or edit a note on the current line' },
+          { keys: ['⇧⌘⌫'], what: 'delete the note on the current line' },
+          { keys: ['⌫', '⌘['], what: 'go back to the document you came from' },
+          { keys: ['↑', '↓', '←', '→'], what: 'move through the sidebar - or type a name to jump to it' }
         ]}
       ]
     }
@@ -58,9 +66,21 @@
   }
 
   td.keys {
-    width: 190px;
+    width: 230px;
     padding: 11px 18px;
     white-space: nowrap;
+  }
+
+  @media (max-width: 640px) {
+    td.keys {
+      width: 38%;
+      white-space: normal;
+      padding: 11px 10px 11px 14px;
+    }
+
+    td.what { padding: 11px 14px 11px 8px; }
+
+    kbd { margin-bottom: 4px; }
   }
 
   td.what {
@@ -78,6 +98,7 @@
     border-bottom-width: 2px;
     border-radius: 5px;
     padding: 2px 7px;
+    margin-right: 4px;
   }
 </style>
 
@@ -89,7 +110,11 @@
       </tr>
       {#each g.rows as row}
         <tr class="row">
-          <td class="keys"><kbd>{row.keys}</kbd></td>
+          <td class="keys">
+            {#each row.keys as k}
+              <kbd>{k}</kbd>
+            {/each}
+          </td>
           <td class="what">{row.what}</td>
         </tr>
       {/each}

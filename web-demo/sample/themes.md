@@ -1,32 +1,34 @@
-# Themes
+# Appearance
 
-Eight palettes, two of them the house pair and six ports of schemes people
-already recognise. ⇧⌘D switches between light and dark rather than cycling
-through all eight: it remembers the last theme used on each side of the line, so
-Nord to Paper and back lands on Nord again.
+Two display styles share the same house palette, and each has a light and dark variant.
+Default is the original paper-like reading layout.
+Compact fits more on screen with smaller chrome and document text, tighter line spacing,
+reduced page padding, and denser code blocks and tables.
 
-| Theme | Background | Body text | Accent |
-|---|---|---|---|
-| Paper | `#FBF7EF` | `#2B2723` | `#9A5B34` |
-| Dark | `#1E1C1A` | `#E6E0D6` | `#E0996A` |
-| Solarized Light | `#FDF6E3` | `#073642` | `#CB4B16` |
-| Solarized Dark | `#002B36` | `#EEE8D5` | `#CB4B16` |
-| GitHub Light | `#FFFFFF` | `#1F2328` | `#0969DA` |
-| Nord | `#2E3440` | `#ECEFF4` | `#88C0D0` |
-| Dracula | `#282A36` | `#F8F8F2` | `#FF79C6` |
-| Gruvbox Dark | `#282828` | `#EBDBB2` | `#FE8019` |
+⇧⌘D changes only light and dark, so Default stays Default and Compact stays Compact.
+
+| Appearance | ID | Background | Body text | Accent |
+|---|---|---|---|---|
+| Default Light | `paper` | `#FBF7EF` | `#2B2723` | `#9A5B34` |
+| Default Dark | `dark` | `#1E1C1A` | `#E6E0D6` | `#E0996A` |
+| Compact Light | `compact-light` | `#FBF7EF` | `#2B2723` | `#9A5B34` |
+| Compact Dark | `compact-dark` | `#1E1C1A` | `#E6E0D6` | `#E0996A` |
 
 ## One list, one palette
 
-Every colour in the app is a token, and the token's raw value is the CSS custom
-property name - so the SwiftUI chrome and the preview web page read the same
-palette. The test suite fails if a token exists in the enum but not in every
-palette, or the other way round.
+Every colour in the app is a token, and the token's name is the CSS custom
+property both the chrome and the preview page read.
+The test suite fails if a token exists in one palette and not the other.
+
+Compact changes density only.
+It uses the same colours and typefaces as Default, so changing style does not
+make the app look like a different product.
 
 > [!TIP]
 > A theme's light or dark polarity is derived from the luminance of its own
-> background rather than declared. A flag that disagrees with the palette it
-> describes is a bug that cannot happen if the flag does not exist.
+> background rather than declared.
+> A flag that disagrees with the palette it describes is a bug that cannot happen
+> if the flag does not exist.
 
 ## Contrast
 
@@ -36,6 +38,4 @@ palette, or the other way round.
 | secondary text | 4.5:1 | captions, paths, note titles |
 | the five alerts | 4.5:1 | each one draws its own title in its own hue |
 
-Solarized's blue sits at 3.4:1 on its own background and its yellow at 3.0:1.
-Both are lifted along lightness with hue and saturation held, which keeps the
-scheme recognisable while making it readable at length.
+See [doc/THEMES.md](../../doc/THEMES.md) in the checkout for the full rules.

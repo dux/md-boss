@@ -5,12 +5,11 @@
     init() {
       this.state.active = 0
       this.state.images = [
-        { src: 'assets/paper.png', title: 'Paper', desc: 'Folders on the left, the rendered document on the right, front matter drawn as a dimmed key/value block above the title' },
+        { src: 'assets/paper.png', title: 'Default Light', desc: 'Folders on the left, the rendered document on the right, front matter drawn as a dimmed key/value block above the title' },
         { src: 'assets/split.png', title: 'Raw and preview', desc: 'Both panes side by side, scrolling together on source lines rather than on percentages' },
         { src: 'assets/notes.png', title: 'Notes', desc: 'Right-click a line in either pane to mark it - notes live in a .md-boss file you can commit next to the documents' },
-        { src: 'assets/tasks.png', title: 'Task lists', desc: 'Three states rather than two: done, open, and the one you are in the middle of' },
-        { src: 'assets/dark.png', title: 'Dark', desc: 'The same hue family rotated dark - warm charcoal, not black, and never a blue-black' },
-        { src: 'assets/nord.png', title: 'Ported schemes', desc: 'Nord, Dracula, Gruvbox, GitHub and both Solarizeds, each lifted to a reading contrast' }
+        { src: 'assets/tasks.png', title: 'Task lists', desc: 'Three states rather than two: not started, in progress as a spinner, and done. [o] is md-boss\'s own' },
+        { src: 'assets/dark.png', title: 'Default Dark', desc: 'The same hue family rotated dark - warm charcoal, not black, and never a blue-black. Compact keeps this palette and tightens the type' }
       ]
     }
 

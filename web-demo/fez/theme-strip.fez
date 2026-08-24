@@ -4,17 +4,14 @@
 
     init() {
       // Copied out of src/theme/theme.ts, which is the only place in the app
-      // a hex literal is allowed to live. Each card is drawn in its own palette, so the
-      // strip is the picker rather than a description of it.
+      // a hex literal is allowed to live. Compact reuses the same palette and
+      // only changes density, so the two compact cards draw tighter type rather
+      // than a different colour.
       this.state.themes = [
-        { name: 'Paper',           bg: '#FBF7EF', surface: '#F3EDE1', border: '#E3D9C6', text: '#2B2723', muted: '#756C61', accent: '#9A5B34' },
-        { name: 'Dark',            bg: '#1E1C1A', surface: '#26231F', border: '#38342E', text: '#E6E0D6', muted: '#9A9287', accent: '#E0996A' },
-        { name: 'Solarized Light', bg: '#FDF6E3', surface: '#EEE8D5', border: '#E0D9C2', text: '#073642', muted: '#586E75', accent: '#CB4B16' },
-        { name: 'Solarized Dark',  bg: '#002B36', surface: '#073642', border: '#0E4451', text: '#EEE8D5', muted: '#93A1A1', accent: '#CB4B16' },
-        { name: 'GitHub Light',    bg: '#FFFFFF', surface: '#F6F8FA', border: '#D0D7DE', text: '#1F2328', muted: '#656D76', accent: '#0969DA' },
-        { name: 'Nord',            bg: '#2E3440', surface: '#3B4252', border: '#3B4252', text: '#ECEFF4', muted: '#98A3B7', accent: '#88C0D0' },
-        { name: 'Dracula',         bg: '#282A36', surface: '#343746', border: '#363948', text: '#F8F8F2', muted: '#9BA3C4', accent: '#FF79C6' },
-        { name: 'Gruvbox Dark',    bg: '#282828', surface: '#32302F', border: '#3C3836', text: '#EBDBB2', muted: '#A89984', accent: '#FE8019' }
+        { name: 'Default Light', id: 'paper', compact: false, bg: '#FBF7EF', surface: '#F3EDE1', border: '#E3D9C6', text: '#2B2723', muted: '#756C61', accent: '#9A5B34' },
+        { name: 'Default Dark', id: 'dark', compact: false, bg: '#1E1C1A', surface: '#26231F', border: '#38342E', text: '#E6E0D6', muted: '#9A9287', accent: '#E0996A' },
+        { name: 'Compact Light', id: 'compact-light', compact: true, bg: '#FBF7EF', surface: '#F3EDE1', border: '#E3D9C6', text: '#2B2723', muted: '#756C61', accent: '#9A5B34' },
+        { name: 'Compact Dark', id: 'compact-dark', compact: true, bg: '#1E1C1A', surface: '#26231F', border: '#38342E', text: '#E6E0D6', muted: '#9A9287', accent: '#E0996A' }
       ]
     }
   }
@@ -65,6 +62,12 @@
     width: 62%;
   }
 
+  .swatch.compact {
+    .name { font-size: 13px; margin-bottom: 6px; }
+    .line { height: 5px; margin-bottom: 4px; }
+    .rule { margin-bottom: 8px; }
+  }
+
   .chip {
     margin-top: 12px;
     border-radius: 6px;
@@ -73,15 +76,21 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
   }
+
+  .swatch.compact .chip {
+    margin-top: 8px;
+    padding: 3px 6px;
+    font-size: 10px;
+  }
 </style>
 
 {#each state.themes as t}
-  <div class="swatch" style={'background: ' + t.bg + '; border-color: ' + t.border}>
+  <div class={t.compact ? 'swatch compact' : 'swatch'} style={'background: ' + t.bg + '; border-color: ' + t.border}>
     <div class="rule" style={'background: ' + t.accent}></div>
     <div class="name" style={'color: ' + t.text}>{t.name}</div>
     <div class="line" style={'background: ' + t.text}></div>
     <div class="line" style={'background: ' + t.muted}></div>
     <div class="line short" style={'background: ' + t.muted}></div>
-    <div class="chip" style={'background: ' + t.surface + '; border-color: ' + t.border + '; color: ' + t.accent}>{t.bg}</div>
+    <div class="chip" style={'background: ' + t.surface + '; border-color: ' + t.border + '; color: ' + t.accent}>{t.id}</div>
   </div>
 {/each}

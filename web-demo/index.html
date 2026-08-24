@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>md-boss - Markdown that reads like paper</title>
-  <meta name="description" content="A macOS markdown viewer and editor with a warm paper theme, offline GitHub-flavored rendering, line-anchored scroll sync and notes you can commit.">
+  <meta name="description" content="A markdown viewer and editor that looks like paper, for macOS, Windows and Linux. Offline GitHub-flavored rendering, line-anchored scroll sync, typed Fez blocks, and notes you can commit.">
   <link rel="icon" href="../icons/AppIcon.svg">
   <script type="module">
     import PostWind from 'https://dux.github.io/postwind/dist/postwind.js'
@@ -15,6 +15,7 @@
   <script fez="fez/feature-card.fez"></script>
   <script fez="fez/theme-strip.fez"></script>
   <script fez="fez/shortcut-table.fez"></script>
+  <script fez="fez/construct-gallery.fez"></script>
   <style>
     /* The page is painted out of the app's own Paper palette - the same hex values that
        live in src/theme/theme.ts. Tailwind is used for layout only, so a
@@ -32,6 +33,14 @@
       --night-ink: #E6E0D6;
       --night-muted: #9A9287;
       --night-accent: #E0996A;
+      --border-strong: #CFC4AE;
+      --code-bg: #F2EADA;
+      --code-border: #E0D5BF;
+      --alert-note: #2F5D8C;
+      --alert-tip: #4C6B3C;
+      --alert-important: #6D4C9F;
+      --alert-warning: #8A5A20;
+      --alert-caution: #A03E52;
     }
 
     html { scroll-behavior: smooth; }
@@ -41,7 +50,10 @@
       background: var(--paper);
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow-x: hidden;
     }
+
+    img { max-width: 100%; height: auto; }
 
     .u-serif { font-family: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Georgia, serif; }
     .u-mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -81,6 +93,12 @@
       border-radius: 12px;
       overflow-x: auto;
     }
+
+    .u-code > div { white-space: nowrap; }
+
+    @media (max-width: 640px) {
+      .u-code > div { white-space: pre-wrap; overflow-wrap: anywhere; }
+    }
   </style>
 </head>
 <body>
@@ -94,8 +112,9 @@
       </a>
       <div class="flex items-center gap-6 text-sm">
         <a href="#screenshots" class="u-nav-link transition-colors hidden md:inline">Screenshots</a>
+        <a href="#constructs" class="u-nav-link transition-colors hidden md:inline">Constructs</a>
         <a href="#features" class="u-nav-link transition-colors hidden md:inline">Features</a>
-        <a href="#themes" class="u-nav-link transition-colors hidden md:inline">Themes</a>
+        <a href="#themes" class="u-nav-link transition-colors hidden md:inline">Appearance</a>
         <a href="#keys" class="u-nav-link transition-colors hidden md:inline">Keys</a>
         <a href="https://github.com/dux/md-boss" class="u-btn u-btn-primary px-4 py-2 text-sm">GitHub</a>
       </div>
@@ -108,15 +127,15 @@
       Markdown that reads<br>like paper
     </h1>
     <p class="u-serif text-lg md:text-xl u-muted mb-8">
-      A macOS viewer and editor for the documents you keep. Warm cream stock, a serif at a
-      fixed reading measure, and GitHub-flavored rendering done entirely offline.
-      No network, no telemetry, no account.
+      A viewer and editor for the documents you keep, on macOS, Windows and Linux.
+      Warm cream stock, a serif at a fixed reading measure, and GitHub-flavored
+      rendering done entirely offline. No network, no telemetry, no account.
     </p>
     <div class="flex flex-col md:flex-row gap-3 justify-center items-center mb-4">
       <a href="#install" class="u-btn u-btn-primary px-6 py-3">Install</a>
       <a href="#screenshots" class="u-btn u-btn-quiet px-6 py-3">See it</a>
     </div>
-    <p class="text-sm u-muted">Requires macOS 14</p>
+    <p class="text-sm u-muted">macOS, Windows and Linux. Needs <span class="u-mono">bun</span> on PATH.</p>
   </section>
 
   <!-- Screenshots -->
@@ -124,52 +143,69 @@
     <screenshot-gallery></screenshot-gallery>
   </section>
 
+  <!-- Constructs -->
+  <section id="constructs" class="u-surface border-y u-rule py-12 md:py-20">
+    <div class="max-w-5xl mx-auto px-4 md:px-6">
+      <h2 class="u-serif text-2xl md:text-3xl font-bold text-center mb-4">Every construct, written and drawn</h2>
+      <p class="u-muted text-center mb-8 md:mb-12 max-w-2xl mx-auto">
+        The Example page in the folder box is the reference sheet.
+        Three task states, five alerts, typed Fez blocks, and a live gallery of
+        every Fez component you have installed.
+      </p>
+      <construct-gallery></construct-gallery>
+    </div>
+  </section>
+
   <!-- Features -->
-  <section id="features" class="u-surface border-y u-rule py-12 md:py-20">
+  <section id="features" class="py-12 md:py-20">
     <div class="max-w-5xl mx-auto px-4 md:px-6">
       <h2 class="u-serif text-2xl md:text-3xl font-bold text-center mb-4">Built for reading, not for demoing</h2>
       <p class="u-muted text-center mb-8 md:mb-12 max-w-xl mx-auto">
         Every part of it answers a question a markdown reader actually runs into.
       </p>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <feature-card icon="&#x1F4C4;" title="Paper theme" desc="A serif body at a 48em measure on warm cream stock, with a burnt-sienna accent. The sidebar, the editor and the web page are all the same colour."></feature-card>
-        <feature-card icon="&#x1F3A8;" title="Eight themes" desc="Paper and Dark, plus Solarized light and dark, GitHub, Nord, Dracula and Gruvbox. Shift-Cmd-D stays a light/dark switch rather than a cycle."></feature-card>
+        <feature-card icon="&#x1F4C4;" title="Paper theme" desc="A serif body at a 48em measure on warm cream stock, with a burnt-sienna accent. The sidebar, the editor and this page are all the same colour."></feature-card>
+        <feature-card icon="&#x1F4D0;" title="Default and Compact" desc="Two densities, one palette. Default is the original paper layout. Compact fits more on screen with smaller type and tighter spacing. Shift-Cmd-D flips light and dark without changing the style."></feature-card>
         <feature-card icon="&#x2708;&#xFE0F;" title="Entirely offline" desc="marked.js and highlight.js are bundled into the app, not fetched. A document opens the same on a plane as it does at a desk."></feature-card>
         <feature-card icon="&#x1F517;" title="Scroll sync on source lines" desc="Every rendered block carries its source line, so a tall fenced block or an image never pulls the two panes out of step. Percentages cannot do this."></feature-card>
-        <feature-card icon="&#x1F4CC;" title="Notes you can commit" desc="Right-click any line in either pane to mark it. Notes live in a pretty-printed .md-boss file at the root of the folder, and an edit above one takes it along."></feature-card>
-        <feature-card icon="&#x1F4D0;" title="Three panes, not three modes" desc="Preview, raw and notes are toggles that sit side by side. The preview sizes itself to its reading measure; raw takes the rest."></feature-card>
+        <feature-card icon="&#x1F4CC;" title="Notes you can commit" desc="Right-click any line in either pane to mark it. Notes live in a .md-boss file at the folder root, and an edit above one takes it along."></feature-card>
+        <feature-card icon="&#x1F5C3;&#xFE0F;" title="Four panels that fold" desc="Files, preview, raw and notes sit side by side, each under its own label. Click a label and the panel folds to a rail; click the rail and it comes back. Cmd-1 to Cmd-4 are the four in order."></feature-card>
         <feature-card icon="&#x1F4CB;" title="Front matter, drawn" desc="A leading --- block is split off before the lexer and drawn as a dimmed key/value card, instead of rendering as a rule and one enormous heading."></feature-card>
-        <feature-card icon="&#x2705;" title="Task lists in three states" desc="Done, open, and the one you are in the middle of. Bare [x] lines count too, and the bullet is dropped so a checklist reads as a checklist."></feature-card>
-        <feature-card icon="&#x1F6A8;" title="Alerts in five hues" desc="NOTE, TIP, IMPORTANT, WARNING and CAUTION each draw their own title in their own colour, held to 4.5:1 in every one of the eight palettes."></feature-card>
-        <feature-card icon="&#x1F4C1;" title="A sidebar of documents" desc="It lists .md, .markdown and .txt, and hides folders with no documents anywhere below them - so pointing it at a source repo shows the docs, not the tree."></feature-card>
+        <feature-card icon="&#x2705;" title="Task lists in three states" desc="Not started, in progress, and done. [o] draws a turning spinner. When another tool ticks a task you have open, the checkbox celebrates with a small confetti burst."></feature-card>
+        <feature-card icon="&#x1F6A8;" title="Alerts in five hues" desc="NOTE, TIP, IMPORTANT, WARNING and CAUTION each draw their own title in their own colour, held to 4.5:1 in both palettes."></feature-card>
+        <feature-card icon="&#x1F9EA;" title="Typed Fez blocks" desc=":::info, :::warning and :::details render through editable Fez components. Opening-line attributes become props."></feature-card>
+        <feature-card icon="&#x1F4DD;" title="Insert, or type a slash" desc="Right-click in the raw pane and pick Insert, or type / at the start of an empty line. Headings, the three task states, the five alerts, the typed blocks, a table, a fence - every construct is one pick away."></feature-card>
+        <feature-card icon="&#x1F4C3;" title="The Example page" desc="A system page that shows every construct written and drawn, plus a live gallery of every installed component. Edits are not kept, so it is a safe place to try things."></feature-card>
+        <feature-card icon="&#x1F4C1;" title="A sidebar of documents" desc="It lists .md, .markdown, .txt and .csv, and hides folders with no documents anywhere below them. A .csv opens as a table and scrolls sideways to meet its columns."></feature-card>
         <feature-card icon="&#x1F69A;" title="Moving a file fixes its links" desc="Drop a file on a folder and every [text](path) under the active folder that pointed at it is repointed. A link inside a fenced block is left alone."></feature-card>
-        <feature-card icon="&#x2328;&#xFE0F;" title="Command line and keyboard" desc="md-boss . adds the current folder to the sidebar. Arrow keys walk the tree, typing a name jumps to it, and every pane has a shortcut."></feature-card>
+        <feature-card icon="&#x2328;&#xFE0F;" title="Command line and keyboard" desc="md-boss . adds the current folder to the sidebar. Arrow keys walk the tree, typing a name jumps to it, and every pane has a shortcut. On Windows and Linux read Cmd as Ctrl."></feature-card>
       </div>
     </div>
   </section>
 
   <!-- Themes -->
-  <section id="themes" class="py-12 md:py-20">
+  <section id="themes" class="u-surface border-y u-rule py-12 md:py-20">
     <div class="max-w-5xl mx-auto px-4 md:px-6">
-      <h2 class="u-serif text-2xl md:text-3xl font-bold text-center mb-4">Eight palettes, one list</h2>
+      <h2 class="u-serif text-2xl md:text-3xl font-bold text-center mb-4">One palette, two densities</h2>
       <p class="u-muted text-center mb-8 md:mb-12 max-w-2xl mx-auto">
-        Every colour in the app is a token, and the token's name is the CSS custom property
-        the preview page reads - so the window chrome and the document are never two
-        palettes pretending to be one. Body text is held to 7:1 contrast against its own
-        background by the test suite, which is why the ported schemes are lifted rather
-        than copied.
+        Default is the original paper-like reading layout.
+        Compact fits more on screen with smaller chrome and document text, tighter
+        line spacing, reduced page padding, and denser code blocks and tables.
+        Pick the style and the colour mode independently; ⇧⌘D changes only light
+        and dark, so Default stays Default and Compact stays Compact.
+        Body text is held to 7:1 contrast against its own background by the test suite.
       </p>
       <theme-strip></theme-strip>
     </div>
   </section>
 
   <!-- Keyboard -->
-  <section id="keys" class="u-surface border-y u-rule py-12 md:py-20">
+  <section id="keys" class="py-12 md:py-20">
     <div class="max-w-3xl mx-auto px-4 md:px-6">
       <h2 class="u-serif text-2xl md:text-3xl font-bold text-center mb-4">Keyboard</h2>
       <p class="u-muted text-center mb-8 md:mb-12">
-        The pane toggles are Option-Command, because a menu shortcut is matched before the
-        responder chain and plain Cmd-V would have taken Paste out of the editor.
+        On Windows and Linux read ⌘ as Ctrl and ⌥ as Alt.
+        The pane numbers follow the window: files, preview, raw, notes.
       </p>
       <div class="u-paper rounded-xl border u-rule overflow-hidden">
         <shortcut-table></shortcut-table>
@@ -182,18 +218,22 @@
     <div class="max-w-3xl mx-auto px-4 md:px-6 text-center">
       <h2 class="u-serif text-2xl md:text-3xl font-bold mb-4">Install</h2>
       <p class="u-night-muted mb-8">
-        There is no prebuilt download right now - the app was rebuilt on a new shell and the
-        release pipeline is being redone. Build it from the checkout; it takes a minute.
+        No administrator, no installer, nothing added outside your home folder except
+        <span class="u-mono">/Applications/MdBoss.app</span> on macOS.
+        The script checks the release checksum and tells you if <span class="u-mono">bun</span>
+        is missing.
       </p>
-      <div class="u-code u-mono p-5 text-left text-sm mb-6 space-y-2">
-        <div><span class="u-night-muted">$</span><span class="u-night-accent"> git clone https://github.com/dux/md-boss &amp;&amp; cd md-boss</span></div>
-        <div><span class="u-night-muted">$</span><span class="u-night-accent"> hammer install &amp;&amp; hammer build</span></div>
-        <div><span class="u-night-muted">$</span><span class="u-night-accent"> hammer install_app</span><span class="u-night-muted">  # MdBoss.app into /Applications</span></div>
+      <p class="u-night-muted text-left text-sm mb-2">macOS and Linux</p>
+      <div class="u-code u-mono p-5 text-left text-sm mb-6">
+        <div><span class="u-night-muted">$</span><span class="u-night-accent"> curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh | sh</span></div>
       </div>
-      <p class="u-night-muted text-sm">
-        <span class="u-mono">hammer link</span> puts a <span class="u-mono">md-boss</span>
-        command into <span class="u-mono">~/bin</span>, so <span class="u-mono">md-boss .</span>
-        opens the current folder in the sidebar.
+      <p class="u-night-muted text-left text-sm mb-2">Windows, in PowerShell</p>
+      <div class="u-code u-mono p-5 text-left text-sm mb-6">
+        <div><span class="u-night-accent">irm https://raw.githubusercontent.com/dux/md-boss/main/install.ps1 | iex</span></div>
+      </div>
+      <p class="u-night-muted text-sm max-w-xl mx-auto">
+        Uninstall with the same script plus --uninstall.
+        The config folder is left alone.
       </p>
     </div>
   </section>
@@ -222,7 +262,7 @@
       <div class="flex gap-6">
         <a href="https://github.com/dux/md-boss" class="u-nav-link transition-colors">GitHub</a>
         <a href="https://github.com/dux/md-boss/issues" class="u-nav-link transition-colors">Issues</a>
-        <a href="https://github.com/dux/md-boss/blob/main/doc/THEMES.md" class="u-nav-link transition-colors">Themes doc</a>
+        <a href="https://github.com/dux/md-boss/blob/main/doc/THEMES.md" class="u-nav-link transition-colors">Appearance doc</a>
       </div>
     </div>
   </footer>

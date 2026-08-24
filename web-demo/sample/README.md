@@ -1,7 +1,7 @@
 ---
 title: The Paper Theme
 author: md-boss
-date: 2026-08-09
+date: 2026-08-24
 tags:
   - reading
   - markdown
@@ -17,7 +17,7 @@ same on a plane as it does at a desk.
 ## Emphasis and links
 
 Text can be *italic*, **bold**, ***both***, ~~struck through~~ or `inline code`.
-Links reach [the web](https://apple.com), [a sibling file](./themes.md) and
+Links reach [the web](https://example.com), [a sibling file](./themes.md) and
 [a heading further down](#the-reading-measure).
 
 > A blockquote sits quieter than the body around it, italic behind a warm rule.
@@ -27,8 +27,25 @@ Links reach [the web](https://apple.com), [a sibling file](./themes.md) and
 > because the colour is the whole point of an alert.
 
 > [!WARNING]
-> Every palette is held to 7:1 contrast for body text by the test suite, so a
-> scheme ported from a terminal is lifted rather than copied.
+> Both palettes are held to 7:1 contrast for body text by the test suite.
+
+## Task lists
+
+Three states, not two.
+`[o]` is md-boss's own; GitHub has no such marker.
+
+- [ ] not started
+- [o] in progress
+- [x] done
+
+## Typed blocks
+
+A typed block renders through an editable Fez component in
+`~/.config/md-boss/components`.
+
+::info
+Use this for contextual information.
+:::
 
 ## The reading measure
 
@@ -39,11 +56,11 @@ It starts at 48em of the body serif, which lands around 82 characters a line.
 |---|---|---|
 | `previewMeasure` | `48` | `~/.config/md-boss/settings.json` |
 | `previewFontSize` | `17` | the same file, or ⌘+ and ⌘- |
-| `themeID` | `paper` | Settings, or View > Theme |
+| `themeID` | `paper` | Settings, or Appearance. Compact is `compact-light` / `compact-dark` |
 
 ## Front matter
 
 The block at the top of this file is YAML front matter, and it never reaches the
 lexer - markdown reads its closing `---` as a setext underline and renders the
-whole thing as one enormous heading. It is split off instead and drawn as the
-dimmed key/value block above the title.
+whole thing as one enormous heading.
+It is split off instead and drawn as the dimmed key/value block above the title.

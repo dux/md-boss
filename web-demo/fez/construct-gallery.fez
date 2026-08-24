@@ -1,0 +1,267 @@
+<script>
+  class {
+    FAST = true
+  }
+</script>
+
+<style>
+  display: block;
+  background: var(--paper, #FBF7EF);
+  border: 1px solid var(--rule, #E3D9C6);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(43, 39, 35, 0.08);
+  padding: 28px 32px 32px;
+  font-family: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  color: var(--ink, #2B2723);
+  line-height: 1.7;
+
+  .front {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.15em 1em;
+    margin: 0 0 1.4em;
+    padding-bottom: 1em;
+    border-bottom: 1px solid var(--rule, #E3D9C6);
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 0.8em;
+    line-height: 1.5;
+    color: var(--muted, #756C61);
+  }
+
+  .front dt { font-weight: 600; }
+  .front dd { margin: 0; }
+
+  h3 {
+    margin: 0 0 0.7em;
+    font-size: 1.5em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+  }
+
+  .lead {
+    margin: 0 0 1.1em;
+    color: var(--muted, #756C61);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+
+  @media (min-width: 768px) {
+    .grid {
+      grid-template-columns: 1fr 1fr;
+      gap: 28px 36px;
+    }
+  }
+
+  h4 {
+    margin: 0 0 0.55em;
+    font-size: 1.05em;
+    font-weight: 600;
+  }
+
+  ul.tasks {
+    margin: 0;
+    padding-left: 1.5em;
+  }
+
+  li.task {
+    list-style: none;
+    margin: 0.3em 0;
+  }
+
+  .box, .spinner {
+    display: inline-block;
+    font: inherit;
+    width: 1em;
+    height: 1em;
+    margin: 0 0.45em 0 -1.45em;
+    vertical-align: -0.12em;
+  }
+
+  .box {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    border: 1.5px solid var(--border-strong, #CFC4AE);
+    border-radius: 0.25em;
+    background: transparent;
+  }
+
+  .box.done {
+    background: var(--accent, #9A5B34);
+    border-color: var(--accent, #9A5B34);
+  }
+
+  .box.done::after {
+    content: "";
+    position: absolute;
+    left: 0.29em;
+    top: 0.1em;
+    width: 0.2em;
+    height: 0.44em;
+    border: solid var(--paper, #FBF7EF);
+    border-width: 0 0.13em 0.13em 0;
+    transform: rotate(43deg);
+  }
+
+  .spinner { overflow: visible; }
+
+  .spinner-track {
+    fill: none;
+    stroke: var(--border-strong, #CFC4AE);
+    stroke-width: 2;
+  }
+
+  .spinner-head {
+    fill: none;
+    stroke: var(--accent, #9A5B34);
+    stroke-width: 2;
+    stroke-linecap: round;
+    transform-origin: 50% 50%;
+    animation: spin 0.9s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner-head { animation: none; }
+  }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.88em;
+    background: var(--code-bg, #F2EADA);
+    border: 1px solid var(--code-border, #E0D5BF);
+    border-radius: 4px;
+    padding: 0.1em 0.35em;
+  }
+
+  .alert {
+    --alert: var(--alert-note, #2F5D8C);
+    margin: 0 0 0.7em;
+    padding: 0.1em 0 0.1em 1.1em;
+    border-left: 3px solid var(--alert);
+    color: var(--ink, #2B2723);
+  }
+
+  .alert.tip { --alert: var(--alert-tip, #4C6B3C); }
+  .alert.important { --alert: var(--alert-important, #6D4C9F); }
+  .alert.warning { --alert: var(--alert-warning, #8A5A20); }
+  .alert.caution { --alert: var(--alert-caution, #A03E52); }
+
+  .alert-title {
+    margin: 0 0 0.2em;
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 0.75em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--alert);
+  }
+
+  .alert p { margin: 0; font-size: 0.95em; }
+
+  .typed {
+    margin: 0 0 0.8em;
+    padding: 0.8em 1em;
+    border: 1px solid var(--rule, #E3D9C6);
+    border-left: 3px solid var(--alert-note, #2F5D8C);
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--alert-note, #2F5D8C) 7%, var(--paper, #FBF7EF));
+  }
+
+  .typed.warn {
+    border-left-color: var(--alert-caution, #A03E52);
+    background: color-mix(in srgb, var(--alert-caution, #A03E52) 7%, var(--paper, #FBF7EF));
+  }
+
+  .typed-label {
+    margin-bottom: 0.35em;
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-size: 0.75em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--alert-note, #2F5D8C);
+  }
+
+  .typed.warn .typed-label { color: var(--alert-caution, #A03E52); }
+
+  .typed p { margin: 0; font-size: 0.95em; }
+
+  details {
+    margin: 0;
+    border: 1px solid var(--rule, #E3D9C6);
+    border-radius: 6px;
+    background: var(--surface, #F3EDE1);
+  }
+
+  summary {
+    padding: 0.7em 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  details p {
+    margin: 0;
+    padding: 0 0.9em 0.8em;
+    font-size: 0.95em;
+  }
+</style>
+
+<dl class="front">
+  <dt>title</dt><dd>Markdown Example</dd>
+  <dt>tags</dt><dd>reference, sample</dd>
+</dl>
+
+<h3>What the preview draws</h3>
+<p class="lead">
+  Every construct below is also on the Example page in the folder box, written next to
+  the result so you can copy it. Right-click in the raw pane and pick Insert, or type
+  <code>/</code> at the start of an empty line.
+</p>
+
+<div class="grid">
+  <div>
+    <h4>Task lists</h4>
+    <ul class="tasks">
+      <li class="task"><span class="box"></span><code>[ ]</code> not started</li>
+      <li class="task">
+        <svg class="spinner" viewBox="0 0 16 16" role="img" aria-label="in progress">
+          <circle class="spinner-track" cx="8" cy="8" r="6.4"></circle>
+          <path class="spinner-head" d="M8 1.6a6.4 6.4 0 0 1 6.4 6.4"></path>
+        </svg>
+        <code>[o]</code> in progress
+      </li>
+      <li class="task"><span class="box done"></span><code>[x]</code> done</li>
+    </ul>
+  </div>
+  <div>
+    <h4>Alerts</h4>
+    <div class="alert"><div class="alert-title">Note</div><p>Something worth knowing.</p></div>
+    <div class="alert tip"><div class="alert-title">Tip</div><p>A better way round.</p></div>
+    <div class="alert warning"><div class="alert-title">Warning</div><p>Something that will bite.</p></div>
+  </div>
+  <div>
+    <h4>Typed Fez blocks</h4>
+    <div class="typed">
+      <div class="typed-label">Info</div>
+      <p>Use <code>:::info</code> for contextual information.</p>
+    </div>
+    <div class="typed warn">
+      <div class="typed-label">Warning</div>
+      <p>Use <code>:::warning</code> for irreversible actions.</p>
+    </div>
+  </div>
+  <div>
+    <h4>Details</h4>
+    <details>
+      <summary>Implementation details</summary>
+      <p>Longer optional explanation, with rendered markdown still drawn inside.</p>
+    </details>
+  </div>
+</div>

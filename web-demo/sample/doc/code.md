@@ -3,27 +3,18 @@
 Highlighting is `highlight.js`, bundled rather than fetched, so a fenced block
 renders with no network and inside the same palette as everything around it.
 
-```swift
-struct Theme: Sendable, Equatable, Identifiable {
-    let id: ThemeID
-    let title: String
-    let hex: [ThemeToken: String]
+```ts
+export const THEME_IDS = ['paper', 'dark', 'compact-light', 'compact-dark'] as const
 
-    /// Missing tokens resolve to magenta rather than crashing - a palette hole
-    /// should be loud on screen and caught by the tests, not fatal at runtime.
-    func value(_ token: ThemeToken) -> String { hex[token] ?? "#FF00FF" }
-}
+/** Missing tokens resolve to magenta rather than throwing - a palette hole should
+ *  be loud on screen and caught by the tests, not fatal at runtime. */
+export const tokenValue = (theme: Theme, token: Token) => theme.hex[token] ?? '#FF00FF'
 ```
 
-```ruby
-task :build do
-  desc 'Lint, test, build, assemble .app bundle and install to /Applications'
-  opt :release, type: :boolean
-  proc do |opts|
-    cfg = opts[:release] ? 'release' : 'debug'
-    sh "swift build -c #{cfg}"
-  end
-end
+```rust
+fn main() {
+    println!("{}", (1..=10).sum::<u32>());
+}
 ```
 
 ```js
@@ -38,8 +29,9 @@ function anchor(token, cursor, src) {
 An unfenced block scrolls inside itself rather than widening the page:
 
 ```
-app/ ──> Models/ ──> AppSettings ──> ~/.config/md-boss/settings.json ──> disk ──> forever
+app/ ──> Models/ ──> SettingsStore ──> ~/.config/md-boss/settings.json ──> disk ──> forever
 ```
 
-Numbers in prose are set with oldstyle figures: 1234567890 in 2026.
-Press <kbd>⌥⌘R</kbd> for the raw pane, <kbd>⇧⌘D</kbd> to switch theme.
+Press <kbd>⌘3</kbd> for the raw pane, <kbd>⇧⌘D</kbd> to switch light and dark.
+A `/` at the start of an empty line opens Insert, so you never have to type a fence
+by hand.
