@@ -10,7 +10,7 @@ The edges of the files and notes columns drag; preview and raw split what is lef
 them.
 Raw and preview scroll together, anchored on source lines rather than on percentages, so a
 tall fenced block or an image does not pull the two out of step.
-⇧⌘D switches between light and dark, out of eight themes.
+⇧⌘D switches between the light and dark variants of the active display style.
 The `<` and `>` arrows narrow and widen the reading column.
 
 Rendering is GitHub-flavored markdown - tables, task lists, code highlighting, and `> [!NOTE]`
@@ -171,19 +171,18 @@ Files written before bookmarks and comments became one thing are read as they ar
 rewritten in this shape the next time you touch them. A line that carried both becomes one
 note with a title and a body.
 
-## Themes
+## Appearance
 
-Eight of them: Paper and Dark, plus Solarized light and dark, GitHub, Nord, Dracula and
-Gruvbox.
-Pick one from the grid in Settings or from the Theme menu.
+Two display styles share the same house palette and each has a light and dark variant.
+Default is the original paper-like reading layout.
+Compact fits more on screen with smaller chrome and document text, tighter line spacing,
+reduced page padding, and denser code blocks and tables.
 
-⇧⌘D stays a light/dark switch rather than a cycle through all eight: it remembers the last
-theme you used on each side of the line, so Nord to Paper and back lands on Nord again.
+Pick the style and colour mode independently in Settings or from the Appearance menu.
+⇧⌘D changes only light/dark mode, so Default stays Default and Compact stays Compact.
 
-Every palette is gated by the test suite at 7:1 contrast for body text and 4.5:1 for
-secondary text against its own background.
-Several of the ported schemes ship a contrast tuned for a terminal, which is not a
-long-form reading one, and those values are lifted rather than copied.
+Both palettes are gated by the test suite at 7:1 contrast for body text and 4.5:1 for
+secondary text against their own backgrounds.
 
 See [doc/THEMES.md](doc/THEMES.md).
 
@@ -279,6 +278,6 @@ to the one inside the bundle.
 ## Docs
 
 * [TODO.md](TODO.md) - where the build stands, phase by phase
-* [doc/THEMES.md](doc/THEMES.md) - the palettes and the rules around them
+* [doc/THEMES.md](doc/THEMES.md) - the display styles, palettes and rules around them
 * [doc/ai-claude-integration-plan.todo.md](doc/ai-claude-integration-plan.todo.md) - the planned chat pane
 * [web-demo/](web-demo/) - the demo page, its sample documents and `hammer demo`

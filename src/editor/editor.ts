@@ -91,10 +91,10 @@ const chrome = EditorView.theme({
   '&': { height: '100%', backgroundColor: 'var(--bg)', color: 'var(--text)' },
   '.cm-scroller': {
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-    lineHeight: '1.5',
+    lineHeight: 'var(--editor-line-height)',
     overflow: 'auto',
   },
-  '.cm-content': { padding: '20px 0', caretColor: 'var(--accent)' },
+  '.cm-content': { padding: 'var(--editor-padding-y) 0', caretColor: 'var(--accent)' },
   '.cm-line': { padding: '0 24px 0 12px' },
   '&.cm-focused': { outline: 'none' },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
@@ -138,14 +138,14 @@ const syntax = EditorView.theme({
 
 /** The find panel, at the top of the pane where the NSTextView find bar was, in the
  *  chrome's sans and sizes rather than the editor's mono. CodeMirror's own panel colours
- *  are the `&light` / `&dark` greys, which match none of the eight palettes; every one
+ *  are the `&light` / `&dark` greys, which match neither house palette; every one
  *  is replaced with a token. Matches are an accent wash, the current one a stronger one. */
 const searchPanel = EditorView.theme({
   '.cm-panels': {
     backgroundColor: 'var(--surface)',
     color: 'var(--text)',
     fontFamily: '-apple-system, system-ui, sans-serif',
-    fontSize: 'var(--font-buttons)',
+    fontSize: 'calc(var(--font-buttons) + var(--chrome-font-offset))',
   },
   '.cm-panels.cm-panels-top': { borderBottom: '1px solid var(--border)' },
   '.cm-panel.cm-search': { padding: '5px 28px 5px 10px' },
@@ -178,7 +178,7 @@ const searchPanel = EditorView.theme({
 })
 
 const fontSizeTheme = (size: number): Extension =>
-  EditorView.theme({ '&': { fontSize: `${size}px` } })
+  EditorView.theme({ '&': { fontSize: `calc(${size}px + var(--editor-font-offset))` } })
 
 const highlightExtension = (on: boolean): Extension => (on ? [markdownHighlight(), syntax] : [])
 

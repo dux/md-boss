@@ -27,9 +27,9 @@ describe('settings store', () => {
   })
 
   test('an existing file is merged over the defaults on load', async () => {
-    installNative(memoryNative({ '/home/dev/.config/md-boss/settings.json': '{"themeID":"nord"}' }))
+    installNative(memoryNative({ '/home/dev/.config/md-boss/settings.json': '{"themeID":"compact-dark"}' }))
     const store = await SettingsStore.load()
-    expect(store.data.themeID).toBe('nord')
+    expect(store.data.themeID).toBe('compact-dark')
     expect(store.data.sidebarWidth).toBe(260)
   })
 

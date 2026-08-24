@@ -18,8 +18,8 @@ html, body {
 
 body {
   font-family: var(--serif);
-  font-size: var(--body-size);
-  line-height: 1.7;
+  font-size: calc(var(--body-size) + var(--document-font-offset));
+  line-height: var(--document-line-height);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -38,7 +38,7 @@ body {
 #content {
   max-width: var(--measure);
   margin: 0 auto;
-  padding: 40px 32px var(--tail, 45vh);
+  padding: var(--document-padding-y) var(--document-padding-x) var(--tail, 45vh);
 }
 
 /* Headings - spacing does the work, no underline rules. */
@@ -48,7 +48,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   letter-spacing: -0.01em;
   line-height: 1.25;
-  margin: 1.7em 0 0.55em;
+  margin: calc(var(--document-block-space) + 0.3em) 0 0.55em;
   /* Tabular on top of the lining figures, so a numbered run of headings puts its titles on
      one column instead of one per digit width. */
   font-variant-numeric: lining-nums tabular-nums;
@@ -62,7 +62,7 @@ h3 { font-size: 1.25em; }
 h4 { font-size: 1.05em; }
 h5, h6 { font-size: 1em; color: var(--muted); }
 
-p { margin: 0 0 1.15em; }
+p { margin: 0 0 calc(var(--document-block-space) - 0.25em); }
 
 a {
   color: var(--link);
@@ -75,7 +75,7 @@ a:hover { text-decoration-thickness: 2px; }
 hr {
   border: 0;
   border-top: 1px solid var(--rule);
-  margin: 2.2em 0;
+  margin: calc(var(--document-block-space) + 0.8em) 0;
 }
 
 /* Front matter - shown, but as a label above the document rather than as part of it. Sans and
@@ -85,7 +85,7 @@ dl.md-front {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 0.15em 1em;
-  margin: 0 0 2em;
+  margin: 0 0 calc(var(--document-block-space) + 0.6em);
   padding-bottom: 1em;
   border-bottom: 1px solid var(--rule);
   font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -104,7 +104,7 @@ dl.md-front + * { margin-top: 0; }
 
 /* Lists */
 
-ul, ol { margin: 0 0 1.15em; padding-left: 1.5em; }
+ul, ol { margin: 0 0 calc(var(--document-block-space) - 0.25em); padding-left: 1.5em; }
 li { margin: 0.25em 0; }
 li > ul, li > ol { margin-bottom: 0; }
 
@@ -196,7 +196,7 @@ li.md-task { list-style: none; }
 /* Quotes */
 
 blockquote {
-  margin: 1.4em 0;
+  margin: var(--document-block-space) 0;
   padding: 0.1em 0 0.1em 1.1em;
   border-left: 3px solid var(--quote-bar);
   color: var(--quote-text);
@@ -250,8 +250,8 @@ pre {
   background: var(--code-bg);
   border: 1px solid var(--code-border);
   border-radius: 6px;
-  padding: 14px 16px;
-  margin: 1.4em 0;
+  padding: var(--document-code-padding-y) var(--document-code-padding-x);
+  margin: var(--document-block-space) 0;
   /* Wide code and ASCII diagrams scroll inside the block; the page never does. */
   overflow-x: auto;
   line-height: 1.5;
@@ -269,7 +269,7 @@ pre code {
 
 table {
   border-collapse: collapse;
-  margin: 1.4em 0;
+  margin: var(--document-block-space) 0;
   font-size: 0.95em;
   display: block;
   overflow-x: auto;
@@ -278,7 +278,7 @@ table {
 
 th, td {
   border: 1px solid var(--border);
-  padding: 7px 12px;
+  padding: var(--document-cell-padding-y) var(--document-cell-padding-x);
   text-align: left;
   vertical-align: top;
 }

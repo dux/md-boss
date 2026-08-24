@@ -26,7 +26,7 @@ import { SettingsStore } from './settingsStore'
 import { SidebarSearch } from './sidebarSearch'
 import { Toast } from './toast'
 import type { InstalledMarkdownComponent } from './markdownComponents'
-import { flippedTheme, selectingTheme, type Theme, type ThemeChoice, type ThemeID, themeChoice, themeNamed } from '../theme/theme'
+import { flippedTheme, isDark, selectingMode, selectingStyle, type StyleID, type Theme, themeNamed } from '../theme/theme'
 
 export type Format = 'bold' | 'italic' | 'link'
 
@@ -538,25 +538,29 @@ export class Manager {
     return themeNamed(this.settings.data.themeID)
   }
 
-  /** The three stored ids as the one value that carries the rules. See ThemeChoice. */
-  get themeChoice(): ThemeChoice {
-    const { themeID, lightThemeID, darkThemeID } = this.settings.data
-    return themeChoice(themeID, lightThemeID, darkThemeID)
+  get styleID(): StyleID {
+    return this.theme.style
   }
 
-  /** The only two ways the theme changes: the settings grid / theme menu, and Cmd-Shift-D,
-   *  which stays a light/dark switch with eight themes installed. */
-  setTheme(id: ThemeID): void {
-    this.applyTheme(selectingTheme(this.themeChoice, id))
+  get darkMode(): boolean {
+    return isDark(this.theme)
+  }
+
+  setStyle(id: StyleID): void {
+    this.applyTheme(selectingStyle(this.theme, id))
+  }
+
+  setThemeMode(darkMode: boolean): void {
+    this.applyTheme(selectingMode(this.theme, darkMode))
   }
 
   toggleLightDark(): void {
-    this.applyTheme(flippedTheme(this.themeChoice))
+    this.applyTheme(flippedTheme(this.theme))
   }
 
-  private applyTheme(choice: ThemeChoice): void {
-    this.settings.patch({ themeID: choice.active, lightThemeID: choice.light, darkThemeID: choice.dark })
-    this.flash(`${themeNamed(choice.active).title} theme`)
+  private applyTheme(theme: Theme): void {
+    this.settings.patch({ themeID: theme.id })
+    this.flash(`${theme.title} appearance`)
     this.emit()
   }
 

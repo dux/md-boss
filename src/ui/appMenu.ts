@@ -1,6 +1,6 @@
 // The menu bar, kept in step with the app. One model (src/models/appMenu.ts) is built
 // from manager state, installed once through Native.menu, and on every change the
-// differences - a label, an enabled flag, the checked theme - go out as patches. Actions
+// differences - a label, an enabled flag, the checked appearance - go out as patches. Actions
 // dispatch to the same manager calls the keys used to; the native accelerators are the
 // shortcuts now, and keys.ts routes only what the menu bar does not carry.
 
@@ -9,7 +9,7 @@ import { type AboutInfo, buildAppMenu, diffMenu, flatItems, GITHUB_URL, matchesA
 import { Manager } from '../models/manager'
 import type { Platform } from '../models/platform'
 import { visiblePanes } from '../models/settings'
-import type { ThemeID } from '../theme/theme'
+import type { StyleID } from '../theme/theme'
 import { native } from '../native/bridge'
 
 export class AppMenu {
@@ -94,10 +94,15 @@ export class AppMenu {
   /** What each item does. Ids are the model's; an unknown one is a programming error. */
   run(id: string): void {
     const { manager, panels } = this.app
-    if (id.startsWith('theme:')) {
-      manager.setTheme(id.slice('theme:'.length) as ThemeID)
-      // A native check item toggles itself on click; picking the theme that is already
+    if (id.startsWith('style:')) {
+      manager.setStyle(id.slice('style:'.length) as StyleID)
+      // A native check item toggles itself on click; picking the style that is already
       // checked would uncheck it while the model still says checked, so it is re-asserted.
+      void native().menu.update({ id, checked: true })
+      return
+    }
+    if (id === 'mode:light' || id === 'mode:dark') {
+      manager.setThemeMode(id === 'mode:dark')
       void native().menu.update({ id, checked: true })
       return
     }

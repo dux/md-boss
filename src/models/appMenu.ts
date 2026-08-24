@@ -1,4 +1,4 @@
-// The menu bar as data: File / Edit / View / Theme / Window / Help, carrying every shortcut
+// The menu bar as data: File / Edit / View / Appearance / Window / Help, carrying every shortcut
 // in the README keyboard table. Built from manager state by src/ui/appMenu.ts, drawn
 // natively by the shell (src/native/bun.ts), and in the browser build the same table is
 // what keys.ts routes keydown through. Pure, so the README table is a test.
@@ -6,7 +6,7 @@
 import type { Platform } from './platform'
 import { revealLabel } from './platform'
 import { type Pane, PANE_TITLE, PANES } from './settings'
-import { THEMES, type ThemeID } from '../theme/theme'
+import { isDark, STYLES, type StyleID, type ThemeID, themeNamed } from '../theme/theme'
 
 export const GITHUB_URL = 'https://github.com/dux/md-boss'
 
@@ -45,7 +45,9 @@ export type MenuAction =
   | 'find' | 'find-in-project' | 'go-to-file' | 'bold' | 'italic' | 'link' | 'add-note' | 'delete-note'
   | 'back' | 'toggle-preview' | 'toggle-raw' | 'toggle-notes' | 'side-by-side' | 'toggle-sidebar'
   | 'narrower' | 'wider'
-  | 'bigger' | 'smaller' | 'actual-size' | 'toggle-light-dark' | `theme:${ThemeID}` | 'check-updates' | 'github' | 'quit'
+  | 'bigger' | 'smaller' | 'actual-size' | 'toggle-light-dark'
+  | `style:${StyleID}` | 'mode:light' | 'mode:dark'
+  | 'check-updates' | 'github' | 'quit'
 
 export interface MenuItemModel {
   kind: 'item'
@@ -57,7 +59,7 @@ export interface MenuItemModel {
    *  take from text fields (see `trash`); the page routes it instead (keys.ts). */
   native: boolean
   enabled: boolean
-  /** Present only on check items (the themes). */
+  /** Present only on appearance check items. */
   checked?: boolean
 }
 
@@ -132,6 +134,7 @@ function item(id: MenuAction, label: string, accelerator: string | null = null, 
 export function buildAppMenu(s: MenuState): MenuModel[] {
   const mac = s.platform === 'macos'
   const menus: MenuModel[] = []
+  const activeTheme = themeNamed(s.themeID)
   // Not the predefined Quit: that one is `terminate:` on macOS and PostQuitMessage on
   // Windows, and neither asks about unsaved edits. Our item runs Manager.quit, which does.
   // The labels are what the predefined one would have shown on each desktop.
@@ -239,9 +242,12 @@ export function buildAppMenu(s: MenuState): MenuModel[] {
   })
 
   menus.push({
-    id: 'theme', label: 'Theme', role: null,
+    id: 'theme', label: 'Appearance', role: null,
     items: [
-      ...THEMES.map((theme): MenuEntry => item(`theme:${theme.id}`, theme.title, null, true, { checked: theme.id === s.themeID })),
+      ...STYLES.map((style): MenuEntry => item(`style:${style.id}`, style.title, null, true, { checked: style.id === activeTheme.style })),
+      separator,
+      item('mode:light', 'Light', null, true, { checked: !isDark(activeTheme) }),
+      item('mode:dark', 'Dark', null, true, { checked: isDark(activeTheme) }),
       separator,
       item('toggle-light-dark', 'Toggle Light/Dark', 'CmdOrCtrl+Shift+D'),
     ],

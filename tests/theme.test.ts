@@ -1,15 +1,15 @@
 import { describe, expect, test } from 'bun:test'
 import { jsLiteral } from '../src/preview/page'
 import {
-  THEMES, THEME_IDS, TOKENS, contrast, flippedTheme, isDark, isValidHex, rootCSS, selectingTheme,
-  themeChoice, themeNamed, tokenValue, type ThemeID,
+  DENSITY_TOKENS, STYLES, STYLE_IDS, THEMES, THEME_IDS, TOKENS, contrast, flippedTheme, isDark,
+  isValidHex, rootCSS, selectingMode, selectingStyle, styleNamed, themeForStyle, themeNamed,
+  tokenValue, type ThemeID,
 } from '../src/theme/theme'
 
 /** Declared rather than derived, so a bad luminance threshold shows up as a failing test
  *  instead of a light theme with a dark titlebar. */
 const expectedPolarity: Record<ThemeID, boolean> = {
-  'paper': false, 'dark': true, 'solarized-light': false, 'solarized-dark': true,
-  'github': false, 'nord': true, 'dracula': true, 'gruvbox': true,
+  'paper': false, 'dark': true, 'compact-light': false, 'compact-dark': true,
 }
 
 const each = THEMES.map((t) => [t.id, t] as const)
@@ -20,12 +20,14 @@ describe('theme', () => {
     for (const token of TOKENS) expect(isValidHex(tokenValue(theme, token))).toBe(true)
   })
 
-  test('no two themes carry the same palette, and every id has exactly one', () => {
-    for (let i = 0; i < THEMES.length; i++) {
-      for (let j = i + 1; j < THEMES.length; j++) expect(THEMES[i].hex).not.toEqual(THEMES[j].hex)
-    }
+  test('every appearance id has exactly one theme', () => {
     for (const id of THEME_IDS) expect(THEMES.filter((t) => t.id === id)).toHaveLength(1)
     expect(THEMES.map((t) => t.id)).toEqual([...THEME_IDS])
+  })
+
+  test('default and compact share the house palettes', () => {
+    expect(themeNamed('compact-light').hex).toEqual(themeNamed('paper').hex)
+    expect(themeNamed('compact-dark').hex).toEqual(themeNamed('dark').hex)
   })
 
   test.each(each)('%s polarity follows the background', (id, theme) => {
@@ -49,6 +51,7 @@ describe('theme', () => {
   test.each(each)('%s rootCSS emits one custom property per token plus a color-scheme', (_, theme) => {
     const css = rootCSS(theme)
     for (const token of TOKENS) expect(css).toContain(`--${token}: ${tokenValue(theme, token)};`)
+    for (const token of DENSITY_TOKENS) expect(css).toContain(`--${token}: ${styleNamed(theme.style).density[token]};`)
     expect(css).toContain(`color-scheme: ${isDark(theme) ? 'dark' : 'light'}`)
   })
 
@@ -72,30 +75,47 @@ describe('theme', () => {
   })
 })
 
-describe('theme choice', () => {
-  test.each(each)('picking %s records it on its own side', (id, theme) => {
-    const choice = selectingTheme(themeChoice(), id)
-    expect(choice.active).toBe(id)
-    expect(isDark(theme) ? choice.dark : choice.light).toBe(id)
+describe('display style', () => {
+  test('the style list contains only Default and Compact', () => {
+    expect(STYLES.map((style) => style.id)).toEqual([...STYLE_IDS])
+    expect(STYLES.map((style) => style.title)).toEqual(['Default', 'Compact'])
   })
 
-  test.each(each)('the toggle flips polarity from %s and twice returns to it', (id, theme) => {
-    const start = selectingTheme(themeChoice(), id)
-    expect(isDark(themeNamed(flippedTheme(start).active))).toBe(!isDark(theme))
-    expect(flippedTheme(flippedTheme(start)).active).toBe(id)
+  test.each(STYLES.map((style) => [style.id, style] as const))('%s defines every density token', (_, style) => {
+    expect(Object.keys(style.density).sort()).toEqual([...DENSITY_TOKENS].sort())
   })
 
-  test('the toggle remembers the last theme used on each side', () => {
-    // Nord, then back to a light theme, then Cmd-Shift-D again lands on Nord - not Dark.
-    const choice = selectingTheme(selectingTheme(themeChoice(), 'nord'), 'solarized-light')
-    expect(flippedTheme(choice).active).toBe('nord')
+  test('Compact is smaller and tighter than Default', () => {
+    expect(styleNamed('compact').density['chrome-font-offset']).toBe('-1px')
+    expect(styleNamed('compact').density['document-font-offset']).toBe('-2px')
+    expect(Number(styleNamed('compact').density['document-line-height'])).toBeLessThan(Number(styleNamed('default').density['document-line-height']))
+  })
+})
+
+describe('appearance choice', () => {
+  test.each(each)('the toggle flips mode from %s, preserves style, and twice returns', (id, theme) => {
+    const flipped = flippedTheme(theme)
+    expect(isDark(flipped)).toBe(!isDark(theme))
+    expect(flipped.style).toBe(theme.style)
+    expect(flippedTheme(flipped).id).toBe(id)
   })
 
-  test('a stored id on the wrong side or unknown is dropped, so the toggle is never a no-op', () => {
-    const corrupt = themeChoice('paper', 'paper', 'github')
-    expect(corrupt.dark).toBe('dark')
-    expect(isDark(themeNamed(flippedTheme(corrupt).active))).toBe(true)
-    expect(themeChoice('mystery', 'mystery', 'mystery')).toEqual({ active: 'paper', light: 'paper', dark: 'dark' })
+  test('selecting a style preserves mode', () => {
+    expect(selectingStyle(themeNamed('paper'), 'compact').id).toBe('compact-light')
+    expect(selectingStyle(themeNamed('dark'), 'compact').id).toBe('compact-dark')
+    expect(selectingStyle(themeNamed('compact-dark'), 'default').id).toBe('dark')
+  })
+
+  test('selecting a mode preserves style', () => {
+    expect(selectingMode(themeNamed('compact-light'), true).id).toBe('compact-dark')
+    expect(selectingMode(themeNamed('compact-dark'), false).id).toBe('compact-light')
+  })
+
+  test('themeForStyle covers both styles and modes', () => {
+    expect(themeForStyle('default', false).id).toBe('paper')
+    expect(themeForStyle('default', true).id).toBe('dark')
+    expect(themeForStyle('compact', false).id).toBe('compact-light')
+    expect(themeForStyle('compact', true).id).toBe('compact-dark')
   })
 })
 

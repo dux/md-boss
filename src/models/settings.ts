@@ -7,10 +7,6 @@ export type Pane = (typeof PANES)[number]
 
 export interface SettingsData {
   themeID: string
-  /** The last theme used on each side of the light/dark line, so Cmd-Shift-D stays a
-   *  polarity switch instead of becoming a cycle through every palette. */
-  lightThemeID: string
-  darkThemeID: string
   /** Which panes the viewer shows, left to right in PANES order. */
   visiblePanes: string[]
   sidebarWidth: number
@@ -39,8 +35,6 @@ export interface SettingsData {
 export function defaultSettings(): SettingsData {
   return {
     themeID: 'paper',
-    lightThemeID: 'paper',
-    darkThemeID: 'dark',
     visiblePanes: ['preview'],
     sidebarWidth: 260,
     notesWidth: 350,

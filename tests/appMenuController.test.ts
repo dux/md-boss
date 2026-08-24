@@ -42,14 +42,15 @@ describe('AppMenu', () => {
     const items = new Map(flatItems(twin.installed!).map((i) => [i.id, i]))
     expect(items.get('new-file')!.enabled).toBe(true)
     expect(items.get('save')!.enabled).toBe(false)
-    expect(items.get('theme:paper')!.checked).toBe(true)
+    expect(items.get('style:default')!.checked).toBe(true)
+    expect(items.get('mode:light')!.checked).toBe(true)
 
     manager.toggleSidebar()
     expect(twin.patches).toEqual([{ id: 'toggle-sidebar', label: 'Expand Files' }])
 
     twin.patches.length = 0
-    manager.setTheme('dark')
-    expect(twin.patches).toEqual([{ id: 'theme:paper', checked: false }, { id: 'theme:dark', checked: true }])
+    manager.setThemeMode(true)
+    expect(twin.patches).toEqual([{ id: 'mode:light', checked: false }, { id: 'mode:dark', checked: true }])
 
     twin.patches.length = 0
     await manager.open(at('a.md'))
@@ -68,10 +69,14 @@ describe('AppMenu', () => {
     twin.click('toggle-raw')
     expect(manager.settings.data.visiblePanes).toEqual(['preview', 'raw'])
 
-    twin.click('theme:nord')
-    expect(manager.theme.id).toBe('nord')
+    twin.click('style:compact')
+    expect(manager.theme.id).toBe('compact-light')
     // The clicked check item is re-asserted, whatever the native toggle did to it.
-    expect(twin.patches.at(-1)).toEqual({ id: 'theme:nord', checked: true })
+    expect(twin.patches.at(-1)).toEqual({ id: 'style:compact', checked: true })
+
+    twin.click('mode:dark')
+    expect(manager.theme.id).toBe('compact-dark')
+    expect(twin.patches.at(-1)).toEqual({ id: 'mode:dark', checked: true })
 
     await manager.open(at('a.md'))
     manager.setDocumentText('changed')

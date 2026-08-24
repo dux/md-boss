@@ -22,7 +22,7 @@ import { buildCSVPage } from './preview/csvPage'
 import { parseCSV } from './models/csvTable'
 import { MarkdownComponents } from './models/markdownComponents'
 import { typedBlocks } from './models/typedBlocks'
-import { rootCSS, THEMES, themeNamed } from './theme/theme'
+import { isDark, rootCSS, STYLES, themeForStyle, themeNamed } from './theme/theme'
 
 // What .fez components may reach. Fez compiles them at runtime, so they cannot import
 // modules; this object is their one import and the explicit list of the app surface.
@@ -70,8 +70,10 @@ export async function createApp() {
     refreshIcon,
     /** "Reveal in Finder" / "Show in Explorer" / "Show in File Manager" - the menus' item. */
     revealLabel: revealLabel(native().platform),
+    isDark,
     rootCSS,
-    THEMES,
+    STYLES,
+    themeForStyle,
     themeNamed,
     settings,
     components,

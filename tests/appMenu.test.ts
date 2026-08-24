@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { aboutInfo, buildAppMenu, diffMenu, flatItems, matchesAccelerator, type MenuEntry, type MenuItemModel, type MenuState } from '../src/models/appMenu'
 import type { Platform } from '../src/models/platform'
-import { THEMES } from '../src/theme/theme'
+import { STYLES } from '../src/theme/theme'
 
 function state(over: Partial<MenuState> = {}): MenuState {
   return {
@@ -100,9 +100,9 @@ describe('the menu carries the README keyboard table', () => {
 
 describe('menu structure', () => {
   test('the six menus, plus the app menu on macOS', () => {
-    expect(buildAppMenu(state()).map((m) => m.label)).toEqual(['md-boss', 'File', 'Edit', 'View', 'Theme', 'Window', 'Help'])
-    expect(buildAppMenu(state({ platform: 'windows' })).map((m) => m.label)).toEqual(['File', 'Edit', 'View', 'Theme', 'Window', 'Help'])
-    expect(buildAppMenu(state({ platform: 'linux' })).map((m) => m.label)).toEqual(['File', 'Edit', 'View', 'Theme', 'Window', 'Help'])
+    expect(buildAppMenu(state()).map((m) => m.label)).toEqual(['md-boss', 'File', 'Edit', 'View', 'Appearance', 'Window', 'Help'])
+    expect(buildAppMenu(state({ platform: 'windows' })).map((m) => m.label)).toEqual(['File', 'Edit', 'View', 'Appearance', 'Window', 'Help'])
+    expect(buildAppMenu(state({ platform: 'linux' })).map((m) => m.label)).toEqual(['File', 'Edit', 'View', 'Appearance', 'Window', 'Help'])
   })
 
   test('macOS: About and Settings in the app menu, the Window and Help menus are told their roles', () => {
@@ -168,12 +168,12 @@ describe('menu structure', () => {
 })
 
 describe('state in the menu', () => {
-  test('the eight themes are check items, the active one checked, in palette order', () => {
-    const theme = buildAppMenu(state({ themeID: 'nord' })).find((m) => m.id === 'theme')!
-    const checks = theme.items.filter((e): e is MenuItemModel => e.kind === 'item' && e.checked !== undefined)
-    expect(checks.map((c) => c.label)).toEqual(THEMES.map((t) => t.title))
-    expect(checks.filter((c) => c.checked).map((c) => c.id)).toEqual(['theme:nord'])
-    expect(labels(theme.items).slice(-2)).toEqual(['-', 'Toggle Light/Dark'])
+  test('style and mode are separate check groups', () => {
+    const appearance = buildAppMenu(state({ themeID: 'compact-dark' })).find((m) => m.id === 'theme')!
+    const checks = appearance.items.filter((e): e is MenuItemModel => e.kind === 'item' && e.checked !== undefined)
+    expect(checks.map((c) => c.label)).toEqual([...STYLES.map((style) => style.title), 'Light', 'Dark'])
+    expect(checks.filter((c) => c.checked).map((c) => c.id)).toEqual(['style:compact', 'mode:dark'])
+    expect(labels(appearance.items).slice(-2)).toEqual(['-', 'Toggle Light/Dark'])
   })
 
   test('panel and note items say what they will do', () => {
@@ -208,13 +208,15 @@ describe('state in the menu', () => {
 describe('diffMenu', () => {
   test('only what changed, by id', () => {
     const before = buildAppMenu(state())
-    const after = buildAppMenu(state({ isDirty: true, themeID: 'dark', visiblePanes: ['preview', 'raw'] }))
+    const after = buildAppMenu(state({ isDirty: true, themeID: 'compact-dark', visiblePanes: ['preview', 'raw'] }))
     expect(diffMenu(before, after)).toEqual([
       { id: 'save', enabled: true },
       { id: 'revert', enabled: true },
       { id: 'toggle-raw', label: 'Collapse Raw' },
-      { id: 'theme:paper', checked: false },
-      { id: 'theme:dark', checked: true },
+      { id: 'style:default', checked: false },
+      { id: 'style:compact', checked: true },
+      { id: 'mode:light', checked: false },
+      { id: 'mode:dark', checked: true },
     ])
     expect(diffMenu(after, after)).toEqual([])
   })

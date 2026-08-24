@@ -26,8 +26,8 @@ body {
   font-family: var(--sans);
   /* The preview's own size, unscaled. Cells are set in sans rather than the reading serif,
      and a size derived from that one would be a second text size to discover and adjust. */
-  font-size: var(--body-size);
-  line-height: 1.45;
+  font-size: calc(var(--body-size) + var(--document-font-offset));
+  line-height: calc(var(--document-line-height) - 0.25);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
@@ -54,7 +54,7 @@ th, td {
   border: 1px solid var(--border);
   border-top: 0;
   border-left: 0;
-  padding: 5px 10px;
+  padding: var(--document-cell-padding-y) var(--document-cell-padding-x);
   text-align: left;
   vertical-align: top;
   max-width: var(--cell-max);
