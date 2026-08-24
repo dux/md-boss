@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAIStartPrompt, tasksPathFor } from '../src/models/aiStart'
+import { buildAIStartPrompt } from '../src/models/aiStart'
 import type { InstalledMarkdownComponent } from '../src/models/markdownComponents'
 import { Manager } from '../src/models/manager'
 import type { ChecklistOptions } from '../src/models/prompts'
@@ -22,12 +22,6 @@ const COMPONENT: InstalledMarkdownComponent = {
 }
 
 describe('AI start prompt', () => {
-  test('names a stable tasks file beside the base document', () => {
-    expect(tasksPathFor('/work/docs/plan.md')).toBe('/work/docs/plan.tasks.md')
-    expect(tasksPathFor('/work/docs/plan.tasks.md')).toBe('/work/docs/plan.tasks.md')
-    expect(tasksPathFor('C:\\work\\docs\\plan.markdown')).toBe('C:/work/docs/plan.tasks.md')
-  })
-
   test('describes extended Markdown and every installed component', () => {
     const prompt = buildAIStartPrompt(BASE, [COMPONENT], {
       groupTasksByTopic: false,
@@ -35,7 +29,6 @@ describe('AI start prompt', () => {
     })
 
     expect(prompt).toContain(`Base file: ${BASE}`)
-    expect(prompt).toContain(`Suggested tasks file: ${ROOT}/plan.tasks.md`)
     expect(prompt).toContain('- [ ] not started')
     expect(prompt).toContain('- [o] in progress')
     expect(prompt).toContain('- [x] done')
