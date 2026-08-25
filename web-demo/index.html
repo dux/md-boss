@@ -16,6 +16,7 @@
   <script fez="fez/theme-strip.fez"></script>
   <script fez="fez/shortcut-table.fez"></script>
   <script fez="fez/construct-gallery.fez"></script>
+  <script fez="fez/fez-extend.fez"></script>
   <style>
     /* The page is painted out of the app's own Paper palette - the same hex values that
        live in src/theme/theme.ts. Tailwind is used for layout only, so a
@@ -113,6 +114,7 @@
       <div class="flex items-center gap-6 text-sm">
         <a href="#screenshots" class="u-nav-link transition-colors hidden md:inline">Screenshots</a>
         <a href="#constructs" class="u-nav-link transition-colors hidden md:inline">Constructs</a>
+        <a href="#fez" class="u-nav-link transition-colors hidden md:inline">Fez</a>
         <a href="#features" class="u-nav-link transition-colors hidden md:inline">Features</a>
         <a href="#themes" class="u-nav-link transition-colors hidden md:inline">Appearance</a>
         <a href="#keys" class="u-nav-link transition-colors hidden md:inline">Keys</a>
@@ -156,8 +158,21 @@
     </div>
   </section>
 
+  <!-- Fez -->
+  <section id="fez" class="py-12 md:py-20">
+    <div class="max-w-5xl mx-auto px-4 md:px-6">
+      <h2 class="u-serif text-2xl md:text-3xl font-bold text-center mb-4">Typed blocks are Fez components you can edit</h2>
+      <p class="u-muted text-center mb-8 md:mb-12 max-w-2xl mx-auto">
+        A <span class="u-mono" style="white-space:nowrap">:::info</span> block is not a special case in the lexer.
+        It is an ordinary Fez component, with a file on disk you can open, change, or replace.
+        The three that ship with the app are the start of that folder, not a closed list.
+      </p>
+      <fez-extend></fez-extend>
+    </div>
+  </section>
+
   <!-- Features -->
-  <section id="features" class="py-12 md:py-20">
+  <section id="features" class="border-t u-rule py-12 md:py-20">
     <div class="max-w-5xl mx-auto px-4 md:px-6">
       <h2 class="u-serif text-2xl md:text-3xl font-bold text-center mb-4">Built for reading, not for demoing</h2>
       <p class="u-muted text-center mb-8 md:mb-12 max-w-xl mx-auto">

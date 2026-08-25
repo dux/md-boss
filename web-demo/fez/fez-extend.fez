@@ -1,0 +1,171 @@
+<script>
+  class {
+    FAST = true
+
+    init() {
+      this.state.steps = [
+        {
+          kicker: 'Where',
+          title: '~/.config/md-boss/components',
+          body: 'Editable .fez files live here, next to settings.json. The app copies the three shipped blocks into that folder on first run, and reloads when you add or edit one. The Fez runtime itself is bundled in dist, so rendering never fetches a package.'
+        },
+        {
+          kicker: 'Naming',
+          title: 'md-type.fez renders :::type',
+          body: 'md-info.fez is ::info or :::info. md-warning.fez is :::warning. Opening-line attributes become string props, so :::details title="More" is props.title. The block body is already rendered Markdown, and belongs in <slot />.'
+        },
+        {
+          kicker: 'Extend',
+          title: 'Drop a file, or copy a starter',
+          body: 'Each component needs a non-empty <info> block and a <demo> block. The Example page builds a live gallery from those. Settings opens the folder, links the Fez authoring guide, and copies an LLM starter you can paste into a local harness.'
+        }
+      ]
+      this.state.markdown = [':::tip', 'A shortcut or a better way round.', ':::'].join('\n')
+      this.state.file = [
+        '<info>',
+        '  <p>A short hint.</p>',
+        '</info>',
+        '',
+        '<demo>',
+        '  <md-tip><p>A shortcut.</p></md-tip>',
+        '</demo>',
+        '',
+        '<style>',
+        '  display: block;',
+        '  padding: 0.8em 1em;',
+        '  border-left: 3px solid var(--alert-tip);',
+        '</style>',
+        '',
+        '<div class="label">Tip</div>',
+        '<slot />',
+      ].join('\n')
+    }
+  }
+</script>
+
+<style>
+  display: block;
+
+  .steps {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+
+  @media (min-width: 768px) {
+    .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+
+  .step {
+    padding: 22px;
+    border: 1px solid #E3D9C6;
+    border-radius: 14px;
+    background: #FBF7EF;
+  }
+
+  .kicker {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: #9A5B34;
+  }
+
+  h3 {
+    margin: 0 0 10px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #2B2723;
+    word-break: break-word;
+  }
+
+  .step p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #756C61;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  @media (min-width: 768px) {
+    .pair { grid-template-columns: 1fr 1.2fr; }
+  }
+
+  .panel {
+    border: 1px solid #E3D9C6;
+    border-radius: 14px;
+    background: #1E1C1A;
+    overflow: hidden;
+  }
+
+  .panel h4 {
+    margin: 0;
+    padding: 12px 16px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #E0996A;
+    background: #26231F;
+    border-bottom: 1px solid #38342E;
+  }
+
+  pre {
+    margin: 0;
+    padding: 16px;
+    overflow-x: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    color: #E6E0D6;
+    white-space: pre;
+  }
+
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    margin-top: 22px;
+    font-size: 14px;
+  }
+
+  .links a {
+    color: #9A5B34;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .links a:hover { text-decoration: underline; }
+</style>
+
+<div class="steps">
+  {#each state.steps as step}
+    <div class="step">
+      <div class="kicker">{step.kicker}</div>
+      <h3>{step.title}</h3>
+      <p>{step.body}</p>
+    </div>
+  {/each}
+</div>
+
+<div class="pair">
+  <div class="panel">
+    <h4>in the document</h4>
+    <pre>{state.markdown}</pre>
+  </div>
+  <div class="panel">
+    <h4>~/.config/md-boss/components/md-tip.fez</h4>
+    <pre>{state.file}</pre>
+  </div>
+</div>
+
+<div class="links">
+  <a href="https://github.com/dux/fez/blob/main/AGENTS.md">Fez authoring guide</a>
+  <a href="sample/components.md">Sample document</a>
+</div>
