@@ -22,6 +22,9 @@ things out.
 
 Six levels, `#` through `######`. The first two carry a rule underneath. Every heading gets
 an anchor, so `[jump](#headings)` links to one.
+A document with at least two `##` headings or at least two `###` headings gets a quiet linked Contents list after its first `#` heading.
+Without a `#` heading, the list sits at the top, below front matter when there is any.
+This Example page has enough sections to draw that list beneath its title.
 
 ```md
 # Heading 1

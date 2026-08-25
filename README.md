@@ -16,6 +16,7 @@ The `<` and `>` arrows narrow and widen the reading column.
 Rendering is GitHub-flavored markdown - tables, task lists, code highlighting, and `> [!NOTE]`
 alerts in five colours - done entirely offline by a bundled `marked.js` in an embedded web view.
 No network, no telemetry, no account.
+Long documents get a quiet linked Contents list from their second- and third-level headings.
 
 Typed blocks such as `:::info`, `:::warning` and `:::details title="More"` render through
 editable Fez components installed in `~/.config/md-boss/components`.

@@ -115,6 +115,12 @@ describe('what the example page demonstrates', () => {
     expect(exampleText).toContain('at the start of an empty line')
   })
 
+  test('explains and qualifies for the automatic Contents list it draws', () => {
+    expect(exampleText).toContain('gets a quiet linked Contents list after its first `#` heading')
+    expect(exampleText).toContain('the list sits at the top, below front matter')
+    expect(exampleText.match(/^## /gm)?.length ?? 0).toBeGreaterThanOrEqual(2)
+  })
+
   test('carries all three task states, including the spinner md-boss adds', () => {
     expect(exampleText).toContain('- [ ] not started')
     expect(exampleText).toContain('- [o] in progress')

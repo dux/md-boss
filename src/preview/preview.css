@@ -62,6 +62,23 @@ h3 { font-size: 1.25em; }
 h4 { font-size: 1.05em; }
 h5, h6 { font-size: 1em; color: var(--muted); }
 
+/* Long documents get a quiet index after their title. It belongs to the reader chrome more
+   than to the document's prose, hence the small system face and muted ink. */
+.md-toc {
+  margin: 0 0 var(--document-block-space);
+  color: var(--muted);
+  font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 0.82em;
+  line-height: 1.5;
+}
+
+.md-toc-title { margin: 0 0 0.3em; font-weight: 600; }
+.md-toc ol { margin: 0; padding: 0; list-style: none; }
+.md-toc li { margin: 0.12em 0; }
+.md-toc-h3 { padding-left: 1.25em; }
+.md-toc a { color: var(--muted); text-decoration: none; }
+.md-toc a:hover { text-decoration: underline; }
+
 p { margin: 0 0 calc(var(--document-block-space) - 0.25em); }
 
 a {

@@ -71,7 +71,7 @@
       var slug = heading.textContent.toLowerCase().trim()
         .replace(/[^\w\- ]+/g, '')
         .replace(/\s+/g, '-');
-      if (!slug) { return; }
+      if (!slug) { slug = 'section'; }
       if (used[slug] === undefined) {
         used[slug] = 0;
       } else {
@@ -80,6 +80,42 @@
       }
       heading.id = slug;
     });
+  }
+
+  // A short document needs no index. Two headings at either supported level is enough to
+  // earn one; H2 and H3 are not added together, so one of each still leaves the page alone.
+  function insertContents() {
+    var headings = Array.from(content.querySelectorAll('h2, h3'));
+    var h2Count = headings.filter(function (heading) { return heading.tagName === 'H2'; }).length;
+    var h3Count = headings.length - h2Count;
+    if (h2Count < 2 && h3Count < 2) { return; }
+
+    var nav = document.createElement('nav');
+    nav.className = 'md-toc';
+    nav.setAttribute('aria-label', 'Contents');
+
+    var title = document.createElement('p');
+    title.className = 'md-toc-title';
+    title.textContent = 'Contents';
+    nav.appendChild(title);
+
+    var list = document.createElement('ol');
+    headings.forEach(function (heading) {
+      var item = document.createElement('li');
+      item.className = heading.tagName === 'H3' ? 'md-toc-h3' : 'md-toc-h2';
+      var link = document.createElement('a');
+      link.href = '#' + encodeURIComponent(heading.id);
+      link.textContent = heading.textContent.trim();
+      item.appendChild(link);
+      list.appendChild(item);
+    });
+    nav.appendChild(list);
+
+    var titleHeading = content.querySelector('h1');
+    var front = content.querySelector(':scope > .md-front');
+    if (titleHeading) titleHeading.insertAdjacentElement('afterend', nav);
+    else if (front) front.insertAdjacentElement('afterend', nav);
+    else content.prepend(nav);
   }
 
   // A page loaded from a string cannot pull file:// subresources, so local images - which
@@ -694,6 +730,7 @@
     // After toHTML, so the anchors are already stamped and nothing here can move them.
     markAlerts();
     assignSlugs();
+    insertContents();
     rewriteLocalImages();
     highlight();
     invalidate();

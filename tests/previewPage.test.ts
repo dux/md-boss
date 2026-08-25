@@ -83,4 +83,25 @@ describe('the Markdown preview page', () => {
     expect(page).toContain('md-confetti-ring')
     expect(page).toContain('md-confetti-pop')
   })
+
+  test('carries the automatic contents policy and its themed presentation', () => {
+    const page = buildPreviewPage({
+      markdown: '# Guide\n\n## One\n\n### Detail\n\n## Two',
+      themeCSS: '',
+      fontSize: 17,
+      measure: 48,
+      baseURL: null,
+      assetBase: '',
+      components: [],
+      typedBlocks: [],
+    })
+
+    expect(page).toContain('function insertContents()')
+    expect(page).toContain("querySelectorAll('h2, h3')")
+    expect(page).toContain('if (h2Count < 2 && h3Count < 2) { return; }')
+    expect(page).toContain("nav.setAttribute('aria-label', 'Contents')")
+    expect(page).toContain("assignSlugs();\n    insertContents();")
+    expect(page).toContain('.md-toc-h3 { padding-left: 1.25em; }')
+    expect(page).toContain('.md-toc a { color: var(--muted);')
+  })
 })
