@@ -1,7 +1,6 @@
 #!/bin/sh
 # The `md-boss` command for the simple-bun build. `md-boss .` adds the current directory
-# (or its git root) to the top of the sidebar, `md-boss notes.md` opens the file, several
-# paths open in turn.
+# to the top of the sidebar, `md-boss notes.md` opens the file, several paths open in turn.
 # Installed to ~/bin by `hammer link`.
 #
 # The binary is exec'd directly rather than through `open -a`: the app resolves relative

@@ -222,7 +222,7 @@ link if it is an image.
 shell's current directory and a second call reaches the running window:
 
 ```sh
-md-boss .              # add this folder (or its git root) to the sidebar, at the top
+md-boss .              # add this folder to the sidebar, at the top
 md-boss notes/x.md     # open a file; the git root, or the file's folder, is listed
 md-boss --help         # the flags, printed here rather than in a window
 ```

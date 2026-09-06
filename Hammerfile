@@ -261,6 +261,7 @@ task :install_app do
   desc "Copy the bundle into #{INSTALL_DIR} (macOS)"
   proc do
     error 'macOS only' unless host_os == :macos
+    hammer :build
     `pkill -x "#{BINARY_NAME}" 2>/dev/null`
     FileUtils.rm_rf "#{INSTALL_DIR}/#{BUNDLE_DIR}"
     FileUtils.cp_r BUNDLE_DIR, INSTALL_DIR

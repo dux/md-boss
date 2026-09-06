@@ -5,7 +5,7 @@
 import { native, type OpenRequest, type RewriteOutcome, type SearchHit } from '../native/bridge'
 import { AnnotationStore, FALLBACK_FILE_NAME } from './annotationStore'
 import { buildAIStartPrompt } from './aiStart'
-import { gitRoot, launchPaths, workspaceRoot } from './cli'
+import { gitRoot, launchPaths } from './cli'
 import { DirectoryWatcher } from './directoryWatcher'
 import { OpenDocument } from './document'
 import { EXAMPLE_DIR_NAME, EXAMPLE_FILE_NAME, exampleTextWithComponents } from './exampleDoc'
@@ -746,10 +746,9 @@ export class Manager {
 
   /** `md-boss <paths>` - the first launch's arguments, or a later launch's forwarded to this
    *  window (src/models/cli.ts makes them absolute). Every path in turn: a folder joins
-   *  the sidebar at the top; a file opens. A git ancestor of the folder (or of the file's
-   *  folder) becomes the root when there is one; otherwise a folder is listed as itself
-   *  and a file's folder is listed only when no root already holds it. What is not there
-   *  is said by name, as AppDelegate did. */
+   *  the sidebar at the top, as typed; a file opens. A git ancestor of the file's folder
+   *  becomes the root when there is one; otherwise the file's folder is listed only when
+   *  no root already holds it. What is not there is said by name, as AppDelegate did. */
   async openFromCLI(request: OpenRequest): Promise<void> {
     for (const path of launchPaths(request.paths, request.cwd, this.home)) await this.openExternal(path)
   }
@@ -762,11 +761,11 @@ export class Manager {
       this.showError(`Not found: ${basename(path)}`)
       return
     }
-    const exists = (p: string) => native().fs.exists(p)
     if (isDir) {
-      this.addRoot(await workspaceRoot(path, exists))
+      this.addRoot(path)
       return
     }
+    const exists = (p: string) => native().fs.exists(p)
     const git = await gitRoot(dirname(path), exists)
     if (git) this.addRoot(git)
     await this.open(path)

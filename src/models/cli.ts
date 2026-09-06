@@ -1,9 +1,9 @@
 // What `md-boss <paths...>` means, as paths. The arguments arrive as typed - `.`,
 // `doc/API.md`, `~/notes`, `/abs/path` - together with the directory they were typed in,
 // and become absolute here; what to do with each (a folder, a file, nothing there) is the
-// manager's call once it has looked at the disk. The sidebar root for a launched path is
-// the nearest ancestor that holds a `.git` entry, or the document's own folder when none
-// of them is a git repo.
+// manager's call once it has looked at the disk. A launched folder is the sidebar root as
+// typed; for a launched file the root is the nearest ancestor that holds a `.git` entry,
+// or the document's own folder when none of them is a git repo.
 
 import { dirname, joinPath, normalizePath } from './paths'
 
@@ -34,12 +34,4 @@ export async function gitRoot(
     if (parent === current || parent === '.') return null
     current = parent
   }
-}
-
-/** The sidebar folder for a launched folder: its git root, or the folder itself. */
-export async function workspaceRoot(
-  dir: string,
-  exists: (path: string) => Promise<boolean>,
-): Promise<string> {
-  return (await gitRoot(dir, exists)) ?? normalizePath(dir)
 }

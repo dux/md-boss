@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { gitRoot, isAbsolutePath, launchPaths, workspaceRoot } from '../src/models/cli'
+import { gitRoot, isAbsolutePath, launchPaths } from '../src/models/cli'
 import { Manager } from '../src/models/manager'
 import { RootFolders } from '../src/models/rootFolders'
 import { SettingsStore } from '../src/models/settingsStore'
@@ -44,7 +44,7 @@ describe('launchPaths', () => {
   })
 })
 
-describe('workspaceRoot', () => {
+describe('gitRoot', () => {
   const gitAt = (...dirs: string[]) => {
     const set = new Set(dirs.map((d) => `${d}/.git`))
     return async (path: string) => set.has(path)
@@ -52,14 +52,12 @@ describe('workspaceRoot', () => {
 
   test('walks up to the folder that holds .git', async () => {
     expect(await gitRoot('/work/repo/doc', gitAt('/work/repo'))).toBe('/work/repo')
-    expect(await workspaceRoot('/work/repo/doc', gitAt('/work/repo'))).toBe('/work/repo')
-    expect(await workspaceRoot('/work/repo', gitAt('/work/repo'))).toBe('/work/repo')
+    expect(await gitRoot('/work/repo', gitAt('/work/repo'))).toBe('/work/repo')
   })
 
-  test('the document folder when no ancestor is a git repo', async () => {
+  test('null when no ancestor is a git repo', async () => {
     expect(await gitRoot('/work/site/docs', gitAt())).toBe(null)
-    expect(await workspaceRoot('/work/site/docs', gitAt())).toBe('/work/site/docs')
-    expect(await workspaceRoot('/', gitAt())).toBe('/')
+    expect(await gitRoot('/', gitAt())).toBe(null)
   })
 
   test('the nearest ancestor wins when several folders have .git', async () => {
@@ -101,15 +99,15 @@ describe('openFromCLI', () => {
     expect(manager.document?.path).toBe(at('a.md'))
   })
 
-  test('a git parent becomes the sidebar root for a folder argument', async () => {
+  test('a folder argument is listed as typed, not as its git parent', async () => {
     const { manager, folders } = await setup({
       [at('a.md')]: '# a',
       '/work/repo/.git/HEAD': 'ref',
       '/work/repo/doc/index.md': '# doc',
     })
     await manager.openFromCLI({ paths: ['.'], cwd: '/work/repo/doc' })
-    expect(folders.roots).toEqual(['/work/repo', ROOT])
-    expect(folders.active).toBe('/work/repo')
+    expect(folders.roots).toEqual(['/work/repo/doc', ROOT])
+    expect(folders.active).toBe('/work/repo/doc')
   })
 
   test('a git parent becomes the sidebar root for a file, and the file opens', async () => {
@@ -145,7 +143,8 @@ describe('openFromCLI', () => {
       '/work/repo/.git': 'gitdir: /elsewhere',
       '/work/repo/doc/index.md': '# doc',
     })
-    await manager.openFromCLI({ paths: ['doc'], cwd: '/work/repo' })
+    await manager.openFromCLI({ paths: ['doc/index.md'], cwd: '/work/repo' })
+    expect(manager.document?.path).toBe('/work/repo/doc/index.md')
     expect(folders.roots).toEqual(['/work/repo', ROOT])
   })
 
