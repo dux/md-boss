@@ -758,6 +758,85 @@
     scroller.scrollTop = previousTop;
   };
 
+  // MARK: copy doc
+
+  // Copy DOC: the rendered document as neutral HTML plus plain text, for pasting into a
+  // word processor. The clone is the render above - alerts, task boxes, tables, links - with
+  // the app's own scaffolding taken out (source-line anchors, ids, classes, the Contents
+  // nav), so what lands is the document and not the page it was drawn on.
+  window.mdExport = function () {
+    var clone = content.cloneNode(true);
+
+    // The Contents nav is a reading aid this page drew; it is not part of the document.
+    clone.querySelectorAll('nav.md-toc, .md-confetti-burst').forEach(function (node) {
+      node.remove();
+    });
+
+    // A disabled checkbox imports as nothing, so the task states become the marks a text
+    // editor draws: a ticked box, an empty box, and the quarter ring for a running task.
+    clone.querySelectorAll('input[type="checkbox"]').forEach(function (box) {
+      box.parentNode.replaceChild(document.createTextNode(box.checked ? '☑ ' : '☐ '), box);
+    });
+    clone.querySelectorAll('svg.md-spinner').forEach(function (spinner) {
+      spinner.parentNode.replaceChild(document.createTextNode('◐ '), spinner);
+    });
+
+    // A local image is served over previewfile:// to this page only; no other app can fetch
+    // it, so the alt text is what the pasted document can honestly carry.
+    clone.querySelectorAll('img').forEach(function (img) {
+      var alt = img.getAttribute('alt') || '';
+      img.parentNode.replaceChild(document.createTextNode(alt ? '[' + alt + ']' : '[image]'), img);
+    });
+
+    clone.querySelectorAll('*').forEach(function (el) {
+      ['data-line', 'fez-key', 'id', 'class'].forEach(function (name) { el.removeAttribute(name); });
+    });
+
+    // The pasted HTML leaves this page, so a table cannot carry the theme through the
+    // clipboard; it gets the light grid inlined instead, which is what a word processor
+    // draws on its own white sheet. Everything else is left to the destination's styles.
+    clone.querySelectorAll('table').forEach(function (table) {
+      table.setAttribute('style', 'border-collapse: collapse;');
+      table.querySelectorAll('th, td').forEach(function (cell) {
+        cell.setAttribute('style', 'border: 1px solid #c9c9c9; padding: 4px 8px;');
+      });
+    });
+
+    // Typed-block markers ride through the lexer as HTML comments; they are not the document.
+    var walker = document.createTreeWalker(clone, NodeFilter.SHOW_COMMENT);
+    var comments = [];
+    while (walker.nextNode()) { comments.push(walker.currentNode); }
+    comments.forEach(function (node) { node.remove(); });
+
+    return { html: clone.innerHTML, text: plainText(clone) };
+  };
+
+  // The plain-text flavor: block elements end a line, list items get a bullet, table cells a
+  // tab - enough shape that a plain-text editor still reads as the document.
+  function plainText(root) {
+    var out = '';
+    function line() {
+      if (out && out.charAt(out.length - 1) !== '\n') { out += '\n'; }
+    }
+    (function walk(node) {
+      if (node.nodeType === 3) { out += node.nodeValue; return; }
+      if (node.nodeType !== 1) { return; }
+      var tag = node.tagName.toLowerCase();
+      if (tag === 'br') { line(); return; }
+      if (tag === 'td' || tag === 'th') {
+        for (var cell = node.firstChild; cell; cell = cell.nextSibling) { walk(cell); }
+        out += '\t';
+        return;
+      }
+      var block = /^(address|article|blockquote|div|dl|dd|dt|figcaption|figure|h[1-6]|li|ol|p|pre|section|table|tr|ul)$/.test(tag);
+      if (block) { line(); }
+      if (tag === 'li') { out += '- '; }
+      for (var child = node.firstChild; child; child = child.nextSibling) { walk(child); }
+      if (block) { line(); }
+    })(root);
+    return out.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   window.mdSetTheme = function (css) {
     document.getElementById('theme').textContent = css;
     invalidate();

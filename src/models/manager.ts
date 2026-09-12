@@ -31,6 +31,12 @@ import { flippedTheme, isDark, selectingMode, selectingStyle, type StyleID, type
 
 export type Format = 'bold' | 'italic' | 'link'
 
+/** A rendered document as neutral rich text plus the plain-text fallback, for Copy DOC. */
+export interface DocExport {
+  html: string
+  text: string
+}
+
 export class Manager {
   readonly tree: FileTreeModel
   readonly settings: SettingsStore
@@ -77,6 +83,9 @@ export class Manager {
   highlightedLine: number | null = null
   private scrollRequestCount = 0
   document: OpenDocument | null = null
+  /** Copy DOC's renderer, injected by the preview pane while its page is up: the rendered
+   *  document as neutral HTML and text. Null in tests and until the pane mounts. */
+  exportDocument: (() => DocExport | null) | null = null
   /** The documents opened before this one, oldest first. The Back button walks it from the
    *  end. Paths rather than documents: a buffer per visited file would hold every file you
    *  have ever looked at in memory, and where you were is what ScrollMemory keeps. */
@@ -354,6 +363,18 @@ export class Manager {
   async copyText(text: string, label = 'Copied'): Promise<void> {
     await native().clipboard.writeText(text)
     this.toast.success(label)
+  }
+
+  /** Copy DOC: the rendered document onto the clipboard as rich text, so pasting into a
+   *  word processor keeps its headings, lists and tables. The preview pane owns the render
+   *  and injects it; this owns the action. The plain-text fallback rides along for an editor
+   *  that cannot read HTML. */
+  async copyDocument(): Promise<void> {
+    if (!this.document || !this.exportDocument) return
+    const exported = this.exportDocument()
+    if (!exported) return
+    await native().clipboard.writeHTML(exported.html, exported.text)
+    this.toast.success('Document copied')
   }
 
   /** Preview's AI start button. The shared prompt panel supplies the two booleans; this

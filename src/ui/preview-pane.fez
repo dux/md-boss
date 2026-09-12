@@ -74,6 +74,13 @@
           }
         }),
       ]
+      // Copy DOC's renderer: the pane owns the rendered page, so it lends the manager the
+      // export rather than the manager reaching into the iframe itself.
+      MdBoss.manager.exportDocument = () => {
+        const page = this.frame.contentWindow
+        if (!this.local.loaded || !page || !page.mdExport) return null
+        return page.mdExport()
+      }
       const data = MdBoss.manager.settings.data
       this.local.themeID = data.themeID
       this.local.fontSize = data.previewFontSize
@@ -85,6 +92,7 @@
       window.removeEventListener('message', this.local.onMessage)
       for (const off of this.local.unsubscribe || []) off()
       if (this.local.typing) clearTimeout(this.local.typing)
+      MdBoss.manager.exportDocument = null
     }
 
     pushNotes() {

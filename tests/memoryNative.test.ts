@@ -21,4 +21,9 @@ describe('in-memory native listing', () => {
   test('documentsUnder skips hidden and skipped folders', async () => {
     expect(await n.commands.documentsUnder('/w', ['node_modules'])).toEqual(['/w/10.md', '/w/9.md', '/w/docs/deep/guide.md', '/w/notes.txt'])
   })
+
+  test('rich clipboard keeps the plain-text fallback readable', async () => {
+    await n.clipboard.writeHTML('<h1>Guide</h1>', '# Guide')
+    expect(await n.clipboard.readText()).toBe('# Guide')
+  })
 })

@@ -84,6 +84,25 @@ describe('the Markdown preview page', () => {
     expect(page).toContain('md-confetti-pop')
   })
 
+  test('carries the Copy DOC export and its neutral cleanup', () => {
+    const page = buildPreviewPage({
+      markdown: '# Guide\n\n- [x] done',
+      themeCSS: '',
+      fontSize: 17,
+      measure: 48,
+      baseURL: null,
+      assetBase: '',
+      components: [],
+      typedBlocks: [],
+    })
+
+    expect(page).toContain('window.mdExport = function ()')
+    expect(page).toContain("'nav.md-toc, .md-confetti-burst'")
+    expect(page).toContain("'☑ '")
+    expect(page).toContain('border: 1px solid #c9c9c9; padding: 4px 8px;')
+    expect(page).toContain('function plainText(root)')
+  })
+
   test('carries the automatic contents policy and its themed presentation', () => {
     const page = buildPreviewPage({
       markdown: '# Guide\n\n## One\n\n### Detail\n\n## Two',

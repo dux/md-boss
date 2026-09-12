@@ -238,6 +238,16 @@ export const bunNative: Native = {
         await shell<void>('clipboard.writeText', text)
       }
     },
+    writeHTML: async (html, text) => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+        })])
+      } catch {
+        await shell<void>('clipboard.writeHTML', html, text)
+      }
+    },
   },
 
   shell: {

@@ -101,6 +101,16 @@ fn handle(ctx: &mut Context, method: &str, params: &Value) -> Result<Value, Stri
                 .map(|_| Value::Null)
                 .map_err(|e| e.to_string())
         }
+        // Rich text for Copy DOC: the HTML flavor plus the plain-text fallback, so an editor
+        // that cannot render HTML still gets the document's words.
+        "clipboard.writeHTML" => {
+            let html = str_arg(0)?;
+            let text = arg(1).as_str().map(String::from);
+            arboard::Clipboard::new()
+                .and_then(|mut c| c.set_html(html, text))
+                .map(|_| Value::Null)
+                .map_err(|e| e.to_string())
+        }
 
         "dialog.openFolders" => {
             let mut dialog = rfd::FileDialog::new().set_title("Choose folders to show in the sidebar");

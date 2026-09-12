@@ -216,6 +216,10 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
       writeText: async (text) => {
         clipboard = text
       },
+      // The twin keeps only the fallback: a browser tab has no rich clipboard to inspect.
+      writeHTML: async (_html, text) => {
+        clipboard = text
+      },
     },
     // Nothing to reveal or open into in a browser tab; a test that cares swaps these in.
     // No asset protocol either: the page leaves a file: image where it is.

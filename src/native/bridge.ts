@@ -168,6 +168,9 @@ export interface NativeClipboard {
   /** Null when the clipboard is empty or not readable. */
   readText(): Promise<string | null>
   writeText(text: string): Promise<void>
+  /** Rich text with a plain-text fallback, for pasting a formatted document into an
+   *  editor that wants HTML - Copy DOC's whole reason. */
+  writeHTML(html: string, text: string): Promise<void>
 }
 
 /** The menu bar (src/models/appMenu.ts is the model, src/ui/appMenu.ts keeps it in step). */
