@@ -11,6 +11,7 @@
 require 'json'
 require 'fileutils'
 require 'rbconfig'
+require 'shellwords'
 
 APP_NAME    ||= 'MdBoss'
 BINARY_NAME ||= 'md-boss'
@@ -100,6 +101,54 @@ helpers do
     true
   end
 
+  # Developer ID with the hardened runtime when the identity is in the environment, ad-hoc
+  # otherwise (a local build, or a fork without the secrets). arm64 needs *a* signature to
+  # run the binary at all, but only a notarized one lets Finder hand md-boss a document that
+  # still carries the download quarantine - which is why this exists.
+  def sign_macos
+    identity = ENV['MACOS_SIGN_IDENTITY'].to_s
+    if identity.empty?
+      say.yellow 'MACOS_SIGN_IDENTITY is not set - ad-hoc signing; a downloaded file will not open from Finder'
+      sh "codesign --force --sign - #{BUNDLE_DIR}"
+      return
+    end
+    sh "codesign --force --options runtime --timestamp --sign #{Shellwords.escape identity} #{BUNDLE_DIR}"
+    notarize_macos
+  end
+
+  # notarytool takes a zip and wants an App Store Connect API key. The key file is the
+  # secret; its path, the key id and the issuer are not, so nothing sensitive is echoed.
+  # The status is read from the JSON rather than trusted to the exit code, and a rejected
+  # submission prints Apple's log before it fails.
+  def notarize_macos
+    key_path = ENV['APPLE_API_KEY_PATH'].to_s
+    key_id   = ENV['APPLE_API_KEY_ID'].to_s
+    issuer   = ENV['APPLE_API_ISSUER'].to_s
+    if [key_path, key_id, issuer].any?(&:empty?)
+      error 'notarization needs APPLE_API_KEY_PATH, APPLE_API_KEY_ID and APPLE_API_ISSUER'
+    end
+    auth = "--key #{Shellwords.escape key_path} --key-id #{key_id} --issuer #{issuer}"
+    FileUtils.mkdir_p 'tmp'
+    zip = File.join('tmp', "#{APP_NAME}-notarize.zip")
+    out = File.join('tmp', "#{APP_NAME}-notarize.json")
+    # --sequesterRsrc keeps the archiver from writing AppleDouble entries notarytool flags.
+    sh "ditto -c -k --keepParent --sequesterRsrc #{BUNDLE_DIR} #{zip}"
+    # `|| true` because notarytool exits non-zero on a rejected submission; without it the
+    # raise would skip the JSON, the status and the log below.
+    sh "xcrun notarytool submit #{zip} --wait --output-format json #{auth} > #{out} || true"
+    result = begin
+      JSON.parse(File.read(out))
+    rescue StandardError
+      {}
+    end
+    unless result['status'] == 'Accepted'
+      sh "xcrun notarytool log #{result['id']} #{auth}" if result['id']
+      error "notarization was not accepted: #{result['status'] || 'no status'}"
+    end
+    sh "xcrun stapler staple #{BUNDLE_DIR}"
+    FileUtils.rm_f [zip, out]
+  end
+
   def package_macos(bin, archive:)
     resources = "#{BUNDLE_DIR}/Contents/Resources"
     FileUtils.rm_rf BUNDLE_DIR
@@ -113,9 +162,7 @@ helpers do
     stage_payload resources
     build_icns "#{resources}/AppIcon.icns"
 
-    # Ad-hoc: arm64 refuses to run unsigned code. A Developer ID is unnecessary because
-    # installs come through curl, which sets no com.apple.quarantine attribute.
-    sh "codesign --force --sign - #{BUNDLE_DIR}"
+    sign_macos
     say.green "built ./#{BUNDLE_DIR}"
     return unless archive
 

@@ -77,9 +77,12 @@ No administrator, no installer, nothing added outside your home folder except
 `/Applications/MdBoss.app` on macOS. The script checks the release checksum, tells you if
 `bun` is missing, and prints the one command that fixes it.
 
-Installing this way rather than from a browser download is deliberate: `curl` sets no
-quarantine attribute and `irm` writes no Mark-of-the-Web, so an unsigned build opens without
-a Gatekeeper or SmartScreen prompt.
+The macOS release is Developer ID signed and notarized (the release workflow lists the
+secrets it needs), so it opens from a browser download like any other app, and Finder will
+hand it a document that still carries the download quarantine.
+On Windows and Linux the build is unsigned, so installing through `curl` or `irm` rather than
+a browser download stays deliberate: no quarantine or Mark-of-the-Web means no Gatekeeper or
+SmartScreen prompt.
 
 `| sh -s -- --uninstall` removes it again, leaving `~/.config/md-boss` alone.
 
@@ -117,6 +120,11 @@ tools.
 
 `hammer build` assembles `MdBoss.app` next to the checkout, `hammer install_app` copies it
 into `/Applications`.
+A local build is ad-hoc signed.
+To produce the notarized release build - the one Finder will open a downloaded document
+with - put a Developer ID Application certificate in the login keychain and set
+`MACOS_SIGN_IDENTITY`, `APPLE_API_KEY_PATH`, `APPLE_API_KEY_ID` and `APPLE_API_ISSUER`.
+The release workflow sets the same variables from repository secrets listed at its top.
 
 Releases go through the same tasks: `.github/workflows/release.yml` installs the `lux-hammer`
 gem on each runner and calls `hammer frontend` once, then `hammer package --release` per
