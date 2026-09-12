@@ -12,6 +12,7 @@
 
 mod ipc;
 mod menu;
+mod open;
 mod paths;
 mod protocol;
 mod server;
@@ -59,6 +60,7 @@ fn main() -> wry::Result<()> {
 
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
+    open::install(proxy.clone());
     let window = WindowBuilder::new()
         .with_title("md-boss")
         .with_inner_size(LogicalSize::new(1200.0, 800.0))
@@ -195,6 +197,17 @@ fn main() -> wry::Result<()> {
                     exit: &exit,
                 };
                 ipc::dispatch(&webview, &mut ctx, &raw);
+            }
+            // A document opened from Finder. tao turns the Apple Event into this; the paths
+            // go to the page the same way `md-boss <path>` does (shell/src/open.rs).
+            #[cfg(target_os = "macos")]
+            Event::Opened { urls } => {
+                let paths = urls
+                    .iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .map(|path| path.display().to_string())
+                    .collect();
+                open::deliver(paths);
             }
             Event::UserEvent(UserEvent::ServerExited(code)) => {
                 eprintln!("md-boss: server exited ({code:?}), restarting");

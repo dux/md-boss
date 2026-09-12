@@ -138,7 +138,16 @@ fn handle(ctx: &mut Context, method: &str, params: &Value) -> Result<Value, Stri
             Ok(Value::Null)
         }
 
-        "cli.launch" => Ok(json!([{ "paths": ctx.argv, "cwd": ctx.cwd }])),
+        "cli.launch" => {
+            // A document opened from Finder before the page asked joins the launch's own
+            // arguments; one that arrives later is pushed as `cli-open` (shell/src/open.rs).
+            let opened = crate::open::take_launch();
+            let mut launches = vec![json!({ "paths": ctx.argv, "cwd": ctx.cwd })];
+            if !opened.is_empty() {
+                launches.push(json!({ "paths": opened, "cwd": ctx.cwd }));
+            }
+            Ok(json!(launches))
+        }
 
         "menu.install" => {
             let models = serde_json::from_value(arg(0)).map_err(|e| format!("menu.install: {e}"))?;
