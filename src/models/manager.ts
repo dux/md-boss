@@ -365,6 +365,13 @@ export class Manager {
     this.toast.success(label)
   }
 
+  /** A path for the clipboard, under home as `~/…` - the form a shell expands, so what
+   *  is pasted into a terminal is the file itself. An optional line appends `:line`. */
+  async copyPath(path: string, line?: number): Promise<void> {
+    const shown = this.abbreviateHome(path)
+    await this.copyText(line === undefined ? shown : `${shown}:${line}`, 'Path copied')
+  }
+
   /** Copy DOC: the rendered document onto the clipboard as rich text, so pasting into a
    *  word processor keeps its headings, lists and tables. The preview pane owns the render
    *  and injects it; this owns the action. The plain-text fallback rides along for an editor

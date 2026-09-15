@@ -109,7 +109,7 @@
         { label: 'Rename…', action: () => manager.renameNote(note) },
       ]
       if (note.body) items.push({ label: 'Copy Text', action: () => manager.copyText(note.body) })
-      items.push({ label: 'Copy Path', action: () => manager.copyText(note.path + ':' + note.line, 'Path copied') })
+      items.push({ label: 'Copy Path', action: () => manager.copyPath(note.path, note.line) })
       items.push({ separator: true })
       items.push({ label: 'Delete', action: () => manager.notes.remove(note) })
       MdBoss.menus.open(event.clientX, event.clientY, items)

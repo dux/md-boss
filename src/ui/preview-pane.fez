@@ -137,8 +137,8 @@
       MdBoss.menus.open(box.left + (msg.x || 0), box.top + (msg.y || 0), [
         { label: hasNote ? 'Edit Note…' : 'Add Note…', action: () => manager.addNoteAtCursor() },
         { separator: true },
-        { label: 'Copy Path', action: () => manager.copyText(doc.path, 'Path copied') },
-        { label: 'Copy Path with Line', action: () => manager.copyText(manager.notes.key(doc.path) + ':' + msg.line, 'Path copied') },
+        { label: 'Copy Path', action: () => manager.copyPath(doc.path) },
+        { label: 'Copy Path with Line', action: () => manager.copyPath(doc.path, msg.line) },
         { label: MdBoss.revealLabel, action: () => manager.showInFileManager(doc.path) },
       ])
     }

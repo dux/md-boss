@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { Manager } from '../src/models/manager'
 import { RootFolders } from '../src/models/rootFolders'
 import { SettingsStore } from '../src/models/settingsStore'
-import { installNative } from '../src/native/bridge'
+import { installNative, native } from '../src/native/bridge'
 import { memoryNative } from '../src/native/memory'
 
 const HOME = '/home/dev'
@@ -432,5 +432,23 @@ describe('files dropped into the raw pane', () => {
     expect(manager.linksFor([at('b.md'), at('sub/img/shot.png'), '/home/dev/Pictures/x.JPG']))
       .toBe('[b.md](../b.md)\n![shot.png](./img/shot.png)\n![x.JPG](../../Pictures/x.JPG)')
     expect(manager.linksFor([])).toBeNull()
+  })
+})
+
+describe('copy path', () => {
+  test('under home reads as ~, an outside path is kept whole, a line appends', async () => {
+    const { manager } = await setup({ [at('a.md')]: '# a' })
+    const copied = () => native().clipboard.readText()
+
+    await manager.copyPath(at('a.md'))
+    expect(await copied()).toBe('~/notes/a.md')
+    await manager.copyPath(at('a.md'), 12)
+    expect(await copied()).toBe('~/notes/a.md:12')
+    await manager.copyPath(HOME)
+    expect(await copied()).toBe('~')
+    await manager.copyPath('/etc/hosts')
+    expect(await copied()).toBe('/etc/hosts')
+    await manager.copyPath('~/notes/a.md')
+    expect(await copied()).toBe('~/notes/a.md')
   })
 })

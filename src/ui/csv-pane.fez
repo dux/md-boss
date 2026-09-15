@@ -92,7 +92,7 @@
       if (!doc) return
       const box = this.frame.getBoundingClientRect()
       MdBoss.menus.open(box.left + (msg.x || 0), box.top + (msg.y || 0), [
-        { label: 'Copy Path', action: () => manager.copyText(doc.path, 'Path copied') },
+        { label: 'Copy Path', action: () => manager.copyPath(doc.path) },
         { label: MdBoss.revealLabel, action: () => manager.showInFileManager(doc.path) },
       ])
     }

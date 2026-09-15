@@ -27,7 +27,7 @@
     }
 
     copy() {
-      if (this.state.path) MdBoss.manager.copyText(this.state.path, 'Path copied')
+      if (this.state.path) MdBoss.manager.copyPath(this.state.path)
     }
   }
 </script>

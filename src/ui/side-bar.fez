@@ -360,7 +360,7 @@
         } })
         items.push({ separator: true })
       }
-      items.push({ label: 'Copy Path', action: () => manager.copyText(path, 'Path copied') })
+      items.push({ label: 'Copy Path', action: () => manager.copyPath(path) })
       items.push({ label: 'Copy Name', action: () => manager.copyText(row.node.name, 'Name copied') })
       if (!row.node.isDir) items.push({ label: 'Copy Text', action: () => manager.copyContents(path) })
       items.push({ separator: true })

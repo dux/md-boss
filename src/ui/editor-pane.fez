@@ -163,8 +163,8 @@
       items.push(
         { label: hasNote ? 'Edit Note…' : 'Add Note…', action: () => manager.addNoteAtCursor() },
         { separator: true },
-        { label: 'Copy Path', action: () => manager.copyText(doc.path, 'Path copied') },
-        { label: 'Copy Path with Line', action: () => manager.copyText(manager.notes.key(doc.path) + ':' + line, 'Path copied') },
+        { label: 'Copy Path', action: () => manager.copyPath(doc.path) },
+        { label: 'Copy Path with Line', action: () => manager.copyPath(doc.path, line) },
       )
       MdBoss.menus.open(x, y, items)
     }

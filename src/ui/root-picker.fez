@@ -152,7 +152,7 @@
         items.push({ label: `Move ${cut.slice(cut.lastIndexOf('/') + 1)} Here`, action: () => manager.moveCut(active) })
         items.push({ separator: true })
       }
-      items.push({ label: 'Copy Path', action: () => manager.copyText(active, 'Path copied') })
+      items.push({ label: 'Copy Path', action: () => manager.copyPath(active) })
       items.push({ label: 'Copy Name', action: () => manager.copyText(this.state.activeName, 'Name copied') })
       items.push({ separator: true })
       items.push({ label: MdBoss.revealLabel, action: () => manager.showInFileManager(active) })
