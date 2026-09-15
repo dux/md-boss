@@ -7,7 +7,9 @@
 // launch's own arguments; later they are pushed as `cli-open`, the event the page already
 // listens on for a second launch.
 
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
+#[cfg(target_os = "macos")]
+use std::sync::OnceLock;
 
 use tao::event_loop::EventLoopProxy;
 

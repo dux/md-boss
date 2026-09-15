@@ -64,6 +64,7 @@ pub struct Model {
     pub id: String,
     pub label: String,
     #[serde(default)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub role: Option<String>,
     pub items: Vec<Entry>,
 }
@@ -202,7 +203,7 @@ fn show(state: &mut MenuState, window: &Window, menu: Menu) -> Result<(), String
     #[cfg(target_os = "windows")]
     {
         use tao::platform::windows::WindowExtWindows;
-        let hwnd = window.hwnd() as isize;
+        let hwnd = window.hwnd();
         if let Some(old) = state.root.take() {
             unsafe { old.remove_for_hwnd(hwnd) }.map_err(|e| e.to_string())?;
         }
@@ -212,7 +213,7 @@ fn show(state: &mut MenuState, window: &Window, menu: Menu) -> Result<(), String
     {
         use tao::platform::unix::WindowExtUnix;
         if let Some(old) = state.root.take() {
-            old.remove_for_gtk_window(window.gtk_window(), window.default_vbox())
+            old.remove_for_gtk_window(window.gtk_window())
                 .map_err(|e| e.to_string())?;
         }
         menu.init_for_gtk_window(window.gtk_window(), window.default_vbox())
