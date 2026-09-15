@@ -75,10 +75,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-14,     target: darwin-arm64 }
-          - { os: macos-13,     target: darwin-x64   }
-          - { os: ubuntu-22.04, target: linux-x64    }
-          - { os: windows-2022, target: windows-x64  }
+          - { os: macos-15,       target: darwin-arm64 }
+          - { os: macos-15-intel, target: darwin-x64   }
+          - { os: ubuntu-22.04,   target: linux-x64    }
+          - { os: windows-2022,   target: windows-x64  }
     runs-on: ${{ matrix.os }}
     # macOS jobs sign with the Developer ID and notarize. All of these may be absent, in
     # which case `hammer package` falls back to an ad-hoc signature and the app still runs

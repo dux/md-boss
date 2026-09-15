@@ -2,6 +2,32 @@
 
 A markdown viewer and editor that looks like paper, for macOS, Windows and Linux.
 
+## Install
+
+macOS and Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh | sh
+```
+
+Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/dux/md-boss/main/install.ps1 | iex
+```
+
+The scripts fetch the latest release, check its SHA256, and install the build for your OS and
+architecture - no administrator, nothing outside your home folder except
+`/Applications/MdBoss.app` on macOS. They tell you if `bun` is missing and print the one
+command that fixes it.
+`curl` and `Invoke-WebRequest` set no download-quarantine or Mark-of-the-Web flag, so the app
+opens without a Gatekeeper or SmartScreen prompt; `install.sh` also strips the flag from a copy
+that came through a browser.
+On macOS the release is Developer ID signed and notarized (the workflow lists the secrets it
+needs), so Finder will hand it a document that still carries the quarantine.
+
+`| sh -s -- --uninstall` removes it again, leaving `~/.config/md-boss` alone.
+
 Folders and files on the left, the rendered document on the right.
 Four panels sit side by side - files, preview, raw, notes - each under its own label.
 Click a label and the panel folds down to a rail carrying the same label on its side; click
@@ -58,33 +84,6 @@ Every document reopens where you stopped reading. Go back with the arrow in the 
 label, with ⌫ or ⌘[, or just click the file again.
 
 [Demo page](https://dux.github.io/md-boss/web-demo/)
-
-## Install
-
-macOS and Linux:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/dux/md-boss/main/install.sh | sh
-```
-
-Windows, in PowerShell:
-
-```powershell
-irm https://raw.githubusercontent.com/dux/md-boss/main/install.ps1 | iex
-```
-
-No administrator, no installer, nothing added outside your home folder except
-`/Applications/MdBoss.app` on macOS. The script checks the release checksum, tells you if
-`bun` is missing, and prints the one command that fixes it.
-
-The macOS release is Developer ID signed and notarized (the release workflow lists the
-secrets it needs), so it opens from a browser download like any other app, and Finder will
-hand it a document that still carries the download quarantine.
-On Windows and Linux the build is unsigned, so installing through `curl` or `irm` rather than
-a browser download stays deliberate: no quarantine or Mark-of-the-Web means no Gatekeeper or
-SmartScreen prompt.
-
-`| sh -s -- --uninstall` removes it again, leaving `~/.config/md-boss` alone.
 
 | Paper | Raw and preview |
 |---|---|
@@ -146,6 +145,7 @@ changes.
 | `hammer package` | build the shell and assemble the app for the platform you are on; `--release` also writes the release archive |
 | `hammer build` | lint, test, then `frontend` and `package` together |
 | `hammer run` | launch the bundle built here |
+| `hammer run:win` | build the shell for x86_64 and launch it under Rosetta (macOS) |
 | `hammer install_app` | copy the bundle into `/Applications` (macOS) |
 | `hammer server` | run the bun server alone on a fixed port, for poking at it with a WebSocket client |
 | `hammer payload` | write `payload-<version>.tar.gz` - `server/`, `dist/`, `version.txt` |
