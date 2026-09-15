@@ -29,7 +29,7 @@ describe('link rewrite pass', () => {
     })
     const moves = [{ old: join(root, 'b.md'), new: join(root, 'moved/b.md') }]
     const planned = plan(root, new Set(['node_modules']), moves, {}, new Set(), null)
-    expect(planned.map((r) => r.path.slice(root.length)).sort()).toEqual(['/a.md', '/sub/c.md'])
+    expect(planned.map((r) => r.path.slice(root.length).replaceAll('\\', '/')).sort()).toEqual(['/a.md', '/sub/c.md'])
     const outcome = run(root, new Set(['node_modules']), moves, {}, new Set(), null)
     expect(outcome.failed).toEqual([])
     expect(outcome.written.length).toBe(2)

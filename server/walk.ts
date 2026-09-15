@@ -3,7 +3,7 @@
 // descended (which is also what makes a cycle impossible). The port of walk.rs.
 
 import { readdirSync, statSync, type Dirent } from 'node:fs'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 
 /** What the sidebar lists and the document panes open. */
 export const DOCUMENT_EXTENSIONS = new Set(['md', 'markdown', 'mdown', 'mkd', 'mkdn', 'mdwn', 'qmd', 'rmd', 'txt', 'csv', 'json'])
@@ -172,10 +172,14 @@ export class Scanner {
     return result
   }
 
+  /** A change at `path` drops its own memo, everything under it, and every ancestor's -
+   *  any of them can have its answer flipped by the file appearing or going away. Compared
+   *  with the platform's separator, so Windows paths match their own prefixes. */
   invalidate(path: string): void {
-    const below = `${path}/`
+    const under = (child: string, parent: string) =>
+      child.startsWith(parent.endsWith(sep) ? parent : `${parent}${sep}`)
     for (const cached of [...this.cache.keys()]) {
-      if (cached === path || cached.startsWith(below) || path.startsWith(`${cached}/`)) this.cache.delete(cached)
+      if (cached === path || under(cached, path) || under(path, cached)) this.cache.delete(cached)
     }
   }
 

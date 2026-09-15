@@ -78,7 +78,7 @@ describe('search', () => {
     const skip = new Set(['node_modules'])
     const never = () => false
     const result = run(dir, skip, 'plan', {}, DEFAULT_LIMITS, never)
-    expect(result.hits.map((h) => h.path.slice(dir.length))).toEqual(['/a.md', '/bin.md', '/c.txt', '/sub/b.md', '/sub/b.md', '/sub/b.md'])
+    expect(result.hits.map((h) => h.path.slice(dir.length).replaceAll('\\', '/'))).toEqual(['/a.md', '/bin.md', '/c.txt', '/sub/b.md', '/sub/b.md', '/sub/b.md'])
     expect(result.filesSearched).toBe(4)
     expect(result.truncated).toBe(false)
 
