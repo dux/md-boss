@@ -10,7 +10,7 @@
     "test": "bun test"
   },
   "devDependencies": {
-    "@dinoreic/fez": "github:dux/fez#df2c06a",
+    "@dinoreic/fez": "github:dux/fez#cb17e77",
     "bun-types": "^1.4.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
