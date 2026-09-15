@@ -1,0 +1,3 @@
+# Check everything out as LF on every OS. The app and its tests compare file text and
+# template strings byte for byte, and a Windows CRLF checkout makes them differ.
+* text=auto eol=lf
