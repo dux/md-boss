@@ -31,7 +31,9 @@ APP_VERSION ||= JSON.parse(File.read('package.json'))['version']
 # friends); it resolves in the checkout but not in the bundle unless it is staged too.
 PAYLOAD_DIRS ||= %w[server dist src/models].freeze
 
-helpers do
+# Shared by the top-level tasks and the `run:` namespace - a namespace is its own Hammer
+# subclass, so it would not otherwise see these. `helpers` defines them on the root class.
+HELPERS = proc do
   def host_os
     case RbConfig::CONFIG['host_os']
     when /darwin/            then :macos
@@ -149,18 +151,32 @@ helpers do
     FileUtils.rm_f [zip, out]
   end
 
-  def package_macos(bin, archive:)
-    resources = "#{BUNDLE_DIR}/Contents/Resources"
-    FileUtils.rm_rf BUNDLE_DIR
-    FileUtils.mkdir_p "#{BUNDLE_DIR}/Contents/MacOS"
+  # The macOS bundle skeleton: plist, the binary, the PATH launcher and the payload. `dir`
+  # names the .app, so `run:win` can build a throwaway Intel bundle beside the released one.
+  def assemble_macos(bin, dir)
+    resources = "#{dir}/Contents/Resources"
+    FileUtils.rm_rf dir
+    FileUtils.mkdir_p "#{dir}/Contents/MacOS"
     FileUtils.mkdir_p resources
-    File.write "#{BUNDLE_DIR}/Contents/Info.plist",
+    File.write "#{dir}/Contents/Info.plist",
                File.read('shell/Info.plist').gsub('__VERSION__', APP_VERSION)
-    FileUtils.cp bin, "#{BUNDLE_DIR}/Contents/MacOS/#{BINARY_NAME}"
+    FileUtils.cp bin, "#{dir}/Contents/MacOS/#{BINARY_NAME}"
     # The install script puts this on PATH, pinning the bundle's real location into it.
     FileUtils.cp "bin/#{BINARY_NAME}", "#{resources}/#{BINARY_NAME}.sh"
     stage_payload resources
     build_icns "#{resources}/AppIcon.icns"
+  end
+
+  # Homebrew's rust shadows rustup's on PATH and has no cross std, and the toolchain's
+  # cargo calls a bare `rustc`. Put rustup's toolchain bin first so both resolve to it.
+  def rustup_toolchain_bin
+    cargo = `rustup which cargo 2>/dev/null`.strip
+    error 'rustup has no cargo - run `rustup toolchain install stable`' if cargo.empty?
+    File.dirname cargo
+  end
+
+  def package_macos(bin, archive:)
+    assemble_macos bin, BUNDLE_DIR
 
     sign_macos
     say.green "built ./#{BUNDLE_DIR}"
@@ -201,6 +217,8 @@ helpers do
     say.green "built ./#{archive_name 'zip'}"
   end
 end
+
+helpers(&HELPERS)
 
 task :install do
   desc 'bun install and cargo fetch - both sides of the toolchain'
@@ -364,5 +382,43 @@ task :demo do
     say 'serving http://localhost:8000/web-demo/', :cyan
     `open http://localhost:8000/web-demo/`
     sh 'python3 -m http.server 8000'
+  end
+end
+
+# Not a release path: the one way to run the Intel slice on an Apple Silicon machine. It
+# reuses the same arch-independent payload the released bundle carries and ad-hoc signs the
+# throwaway app, so Rosetta will load it.
+namespace :run do
+  # A namespace is a separate subclass of Hammer, so it does not see the helpers defined
+  # at the top of this file. Run the same definitions against this class.
+  class_eval(&HELPERS)
+
+  task :win do
+    desc 'Build the shell for x86_64 and launch it under Rosetta (macOS)'
+    opt :release, type: :boolean, desc: 'Optimised shell'
+    proc do |opts|
+      error 'run:win is macOS only' unless host_os == :macos
+      error 'rustup not found - cross-building needs it: brew install rustup' unless tool?('rustup')
+      installed = `rustup target list --installed 2>/dev/null`
+      error 'x86_64 target missing - run `rustup target add x86_64-apple-darwin`' unless installed.include?('x86_64-apple-darwin')
+
+      need_frontend!
+      cfg = opts[:release] ? 'release' : 'debug'
+      say "building md-boss for x86_64 (#{cfg})", :cyan
+      path = ENV.fetch('PATH', '')
+      ENV['PATH'] = "#{rustup_toolchain_bin}:#{path}"
+      begin
+        sh "cargo build --quiet --manifest-path shell/Cargo.toml --target x86_64-apple-darwin#{opts[:release] ? ' --release' : ''}"
+      ensure
+        ENV['PATH'] = path
+      end
+
+      dir = "#{APP_NAME}-x86.app"
+      assemble_macos File.join('shell', 'target', 'x86_64-apple-darwin', cfg, BINARY_NAME), dir
+      # Rosetta refuses an unsigned Intel binary; ad-hoc is enough for a local test.
+      sh "codesign --force --sign - #{dir}"
+      say.green "launching ./#{dir} under Rosetta - quit it to come back here"
+      sh "arch -x86_64 #{dir}/Contents/MacOS/#{BINARY_NAME}"
+    end
   end
 end

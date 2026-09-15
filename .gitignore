@@ -3,6 +3,7 @@ dist
 out
 shell/target
 MdBoss.app
+MdBoss-x86.app
 payload-*.tar.gz
 md-boss-*.tar.gz
 md-boss-*.zip
