@@ -1,0 +1,24 @@
+<script>
+  // Narrow and widen the preview's reading measure. In em, so the column keeps tracking
+  // the text size instead of fighting it. In the rendered panel's own label strip rather
+  // than in a bar spanning the window: this only affects the rendered column. One step is
+  // 2em, about 5% of the default measure (Manager.measureStep).
+  class {
+    narrower() {
+      MdBoss.manager.changeMeasure(-MdBoss.manager.constructor.measureStep)
+    }
+
+    wider() {
+      MdBoss.manager.changeMeasure(MdBoss.manager.constructor.measureStep)
+    }
+  }
+</script>
+
+<style>
+  display: flex;
+  align-items: center;
+  gap: 2px;
+</style>
+
+<button class="tool-button square text-buttons pointer" title="Narrower text column (⌘←)" onclick="fez.narrower()">‹</button>
+<button class="tool-button square text-buttons pointer" title="Wider text column (⌘→)" onclick="fez.wider()">›</button>

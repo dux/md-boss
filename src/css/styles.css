@@ -1,0 +1,176 @@
+/* Text styles, used like classes: the chrome's four text roles and the sizes they take from
+   settings. Sizes are never written at a call site - the four --font-* vars are set from
+   SettingsData by src/theme/apply.ts, and captions derive from the sidebar size (captionSize)
+   so a status bar still at 11px under an 18px tree cannot happen.
+
+   The app chrome is deliberately system sans. The serif lives only inside the preview
+   page - that contrast is what signals "the middle pane is the document".
+
+   The shared control faces (buttons, the two dialogs, empty states, head-truncated paths)
+   live at the bottom, so a component declares only what is particular to it. */
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: calc(var(--font-default) + var(--chrome-font-offset));
+}
+
+#app {
+  height: 100%;
+}
+
+/* File and folder names in the sidebar, list items. */
+.text-default {
+  font-size: calc(var(--font-default) + var(--chrome-font-offset));
+  font-weight: 400;
+}
+
+/* Buttons, toolbar items, the toggle bar. */
+.text-buttons {
+  font-size: calc(var(--font-buttons) + var(--chrome-font-offset));
+  font-weight: 500;
+}
+
+/* Status bar, metadata, captions, paths. */
+.text-small {
+  font-size: calc(var(--font-small) + var(--chrome-font-offset));
+  font-weight: 400;
+}
+
+/* Section headers like "Theme". */
+.text-title {
+  font-size: calc(var(--font-small) + var(--chrome-font-offset));
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+
+.text-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* The pointing hand over a button the app draws itself; list rows keep the arrow. */
+.pointer {
+  cursor: pointer;
+}
+
+/* Shared controls. Every panel label strip and both modals draw from these rather than each
+   component spelling the same face out in its own scoped <style>. Geometry only one call
+   site needs (width, padding, radius) stays with that call site. */
+
+/* The light face every control in a panel head wears: Back, Copy DOC, Copy Path, AI start
+   and the measure arrows. bg, not surface - the strip is already surface, and in the paper
+   palette the two are the same hex, so a surface button would have no edge at all. */
+.tool-button {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: calc(var(--font-buttons) + 8px);
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--muted);
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.tool-button:hover {
+  border-color: var(--border-strong);
+  background: var(--selection);
+  color: var(--text);
+}
+
+/* The measure arrows: a square the same height, the glyph centred. */
+.tool-button.square {
+  justify-content: center;
+  width: calc(var(--font-buttons) + 12px);
+  padding: 0;
+  font-weight: 600;
+}
+
+.tool-button .chevron {
+  font-size: 0.8em;
+  font-weight: 600;
+}
+
+/* The two dialogs: Settings and the shared prompt panel. The overlay dims the app behind
+   them; the panel is the card. z-index, padding, gap and max-height stay at the call site. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+.modal-panel {
+  width: 420px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 8px 30px var(--border-strong);
+}
+
+/* A filled call to action: link blue, the label in bg so it stays readable on every
+   palette. `.caution` swaps the fill to the warning red. */
+.button-link {
+  border: 1px solid var(--link);
+  background: var(--link);
+  color: var(--bg);
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.button-link.caution {
+  border-color: var(--alert-caution);
+  background: var(--alert-caution);
+}
+
+/* A filled button with no border, for one already sitting on a line of its own. */
+.button-link.flat {
+  border: 0;
+}
+
+/* A plain secondary button: hairline, surface, the normal ink. */
+.button-outline {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+}
+
+/* A list or pane with nothing to show. */
+.empty-state {
+  padding: 24px 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* A path clipped from the head: the tail is the part that tells two files apart. The rtl
+   container clips, the bdi keeps the text itself reading left to right. */
+.truncate-head {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.truncate-head bdi {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* One turn, shared by the folder refresh and the search spinner. */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

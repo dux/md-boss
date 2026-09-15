@@ -1,5 +1,5 @@
 import csvJS from './csv.js?raw'
-import csvCSS from './csv.css?raw'
+import csvCSS from '../css/csv.css?raw'
 import { jsLiteral } from './page'
 import type { CSVTable } from '../models/csvTable'
 

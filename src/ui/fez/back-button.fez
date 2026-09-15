@@ -35,40 +35,10 @@
   .back.hidden {
     display: none;
   }
-
-  /* A light button, the same face the other two controls in this strip wear. bg and not
-     surface: the strip is already surface, and in the paper palette the two are the same
-     hex - a surface button on it would have no edges at all. Sized in border-box so the
-     border does not push it past the rail. */
-  button {
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    height: calc(var(--font-buttons) + 8px);
-    padding: 0 7px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--bg);
-    color: var(--muted);
-    font-family: inherit;
-    white-space: nowrap;
-  }
-
-  button:hover {
-    border-color: var(--border-strong);
-    background: var(--selection);
-    color: var(--text);
-  }
-
-  button .chevron {
-    font-size: 0.8em;
-    font-weight: 600;
-  }
 </style>
 
 <div class={'back' + (state.target ? '' : ' hidden')}>
   {#if state.target}
-    <button class="text-buttons pointer" title={'Back to ' + state.target + ' (⌫)'} onclick="fez.back()"><span class="chevron">‹</span> go back</button>
+    <button class="tool-button text-buttons pointer" title={'Back to ' + state.target + ' (⌫)'} onclick="fez.back()"><span class="chevron">‹</span> go back</button>
   {/if}
 </div>

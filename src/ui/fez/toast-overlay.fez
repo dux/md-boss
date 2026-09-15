@@ -75,18 +75,12 @@
     height: 1.1em;
   }
 
-  /* The message's one button, "Restart to update": filled with the link colour, as the
-     prompt panel's primary button is. */
+  /* The message's one button, "Restart to update": the filled link face, .button-link. */
   .toast .action {
     flex: none;
     margin-left: 4px;
     padding: 3px 10px;
-    border: 1px solid var(--link);
     border-radius: 5px;
-    background: var(--link);
-    color: var(--bg);
-    font-family: inherit;
-    font-weight: 600;
   }
 
   .toast .text {
@@ -120,7 +114,7 @@
     {/if}
     <span class="text">{state.message.text}</span>
     {#if state.message.action}
-      <button class="action text-buttons pointer" onclick="fez.act()">{state.message.action.label}</button>
+      <button class="button-link action text-buttons pointer" onclick="fez.act()">{state.message.action.label}</button>
     {/if}
   {/if}
 </div>

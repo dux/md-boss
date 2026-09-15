@@ -182,16 +182,7 @@
   .panel-head .doc-path {
     flex: 0 1 auto;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    direction: rtl;
-    text-align: left;
     color: var(--muted);
-  }
-
-  .panel-head .doc-path bdi {
-    direction: ltr;
-    unicode-bidi: isolate;
   }
 
   .panel-head .count {
@@ -386,33 +377,14 @@
     white-space: nowrap;
   }
 
-  footer .path {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    /* Truncated from the head - the tail of a path is the part that tells files apart. */
-    direction: rtl;
-    text-align: left;
-  }
-
-  footer .path bdi {
-    direction: ltr;
-    unicode-bidi: isolate;
-  }
-
   /* The one control down here, and only when there is something to do with it. It says
-     what an "edited" label would say and does something about it. Link blue rather than
-     the accent: this is the call to action; the label takes bg to stay readable on every
-     palette's blue. */
+     what an "edited" label would say and does something about it - .button-link flat fills
+     it with the link blue, the label in bg to stay readable on every palette. */
   footer .save {
     flex: none;
     height: calc(var(--font-small) + 7px);
     padding: 0 9px;
-    border: 0;
     border-radius: 4px;
-    background: var(--link);
-    color: var(--bg);
-    font-family: inherit;
-    font-weight: 600;
   }
 </style>
 
@@ -444,7 +416,7 @@
     <div class="panel-head pointer" title={fez.hint('preview')} onclick="fez.toggle('preview')">
       <span class="label text-title">Preview</span>
       {#if state.docPath && state.panes.includes('preview')}
-        <span class="doc-path text-small" title={state.file}><bdi>{state.docPath}</bdi></span>
+        <span class="truncate-head doc-path text-small" title={state.file}><bdi>{state.docPath}</bdi></span>
       {/if}
       {#if state.file && state.panes.includes('preview')}
         <div class="tools" onclick="fez.stop(event)">
@@ -499,7 +471,7 @@
      say something. -->
 <footer class="text-small">
   {#if state.dirty}
-    <button class="save text-small pointer" title="Save (⌘S)" onclick="fez.save()">Save</button>
+    <button class="button-link flat save text-small pointer" title="Save (⌘S)" onclick="fez.save()">Save</button>
   {/if}
-  <span class="path"><bdi>{state.file || 'No file open'}</bdi></span>
+  <span class="truncate-head path"><bdi>{state.file || 'No file open'}</bdi></span>
 </footer>

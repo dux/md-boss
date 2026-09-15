@@ -58,7 +58,7 @@ The chrome is system sans and the document is serif.
 That contrast signals that the middle pane is the thing being read rather than another piece of UI.
 
 * Preview body and headings use `ui-serif, "New York", "Iowan Old Style", Charter, Palatino, Georgia, serif`.
-* Chrome uses `-apple-system, system-ui, sans-serif` through the text classes in `src/ui/styles.css`.
+* Chrome uses `-apple-system, system-ui, sans-serif` through the text classes in `src/css/styles.css`.
 * Mono text uses `"SF Mono", ui-monospace, Menlo, monospace`.
 * The default reading measure is 48em and remains adjustable in 2em steps.
 * Font-size settings remain the user's base values; Compact applies its offsets on top without rewriting them.

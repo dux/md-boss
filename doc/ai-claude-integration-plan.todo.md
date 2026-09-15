@@ -81,7 +81,7 @@ tests/agent.test.ts      the server module against a stub Query
 - [ ] `'chat'` joins `PANES`, with a toggle segment and a shortcut
 - [ ] `./src/ui/chat-pane.fez`: transcript, composer, stop button, empty state
 - [ ] tool calls render collapsed - one line, expandable; thinking hidden behind a toggle
-- [ ] only the classes in `./src/ui/styles.css` and only theme tokens, same rule as every other component
+- [ ] only the classes in `./src/css/styles.css` and only theme tokens, same rule as every other component
 - [ ] empty states: no `claude` on PATH (show the install line, mirroring the "bun not found" page), not logged in, no folder open
 
 **Stop here and use it for a week before phase 6.**

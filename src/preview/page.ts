@@ -4,7 +4,7 @@ import type { TypedBlock } from '../models/typedBlocks'
 import markedJS from './marked.min.js?raw'
 import highlightJS from './highlight.min.js?raw'
 import previewJS from './preview.js?raw'
-import previewCSS from './preview.css?raw'
+import previewCSS from '../css/preview.css?raw'
 
 export interface PreviewPageOptions {
   markdown: string

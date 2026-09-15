@@ -314,13 +314,7 @@
   }
 
   .refresh.spinning svg {
-    animation: refresh-turn 0.55s linear infinite;
-  }
-
-  @keyframes refresh-turn {
-    to {
-      transform: rotate(360deg);
-    }
+    animation: spin 0.55s linear infinite;
   }
 
   .list {
@@ -361,19 +355,9 @@
     font-size: 0.8em;
   }
 
-  /* Truncated from the head - the tail of a path is the part that tells two "docs" apart.
-     The rtl container does the clipping; the bdi keeps the text itself reading left to right. */
+  /* .truncate-head clips from the head; only the ink is this row's. */
   .row .parent {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    direction: rtl;
-    text-align: left;
     color: var(--muted);
-  }
-
-  .row .parent bdi {
-    direction: ltr;
-    unicode-bidi: isolate;
   }
 
   .row.active .name {
@@ -402,7 +386,7 @@
       <div class={'row text-default' + (item.isActive ? ' active' : '') + (index === state.cursor ? ' cursor' : '') + (item.kind === 'add' ? ' add' : '')} title={item.path || ''} onclick="fez.pickAt({index})">
         <span class="check">{item.isActive ? '✓' : ''}</span>
         <span class="name">{item.name}</span>
-        <span class="parent text-small"><bdi>{item.parent}</bdi></span>
+        <span class="truncate-head parent text-small"><bdi>{item.parent}</bdi></span>
       </div>
     {/each}
   </div>

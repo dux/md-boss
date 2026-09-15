@@ -1,0 +1,17 @@
+<script>
+  // Copy DOC: the open document as rich text, for pasting into a word processor. It sits in
+  // the rendered panel's label strip beside copy path. The preview pane owns the render and
+  // the manager owns the clipboard write; this is only the button, and it is mounted only
+  // for a markdown document, so there is nothing to hide.
+  class {
+    copy() {
+      MdBoss.manager.copyDocument()
+    }
+  }
+</script>
+
+<style>
+  display: block;
+</style>
+
+<button class="tool-button text-buttons pointer" title="Copy this document as clean text, ready for Google Docs" onclick="fez.copy()">copy doc</button>

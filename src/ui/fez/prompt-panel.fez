@@ -194,26 +194,15 @@
     display: none;
   }
 
+  /* z-index is this dialog's; the dimming and centring are .modal-overlay's. */
   .overlay {
-    position: fixed;
-    inset: 0;
     z-index: 25;
-    display: grid;
-    place-items: center;
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
   }
 
+  /* padding and gap are this dialog's; the card itself is .modal-panel. */
   .panel {
-    width: 420px;
-    box-sizing: border-box;
     padding: 16px 18px;
-    display: flex;
-    flex-direction: column;
     gap: 10px;
-    border: 1px solid var(--border-strong);
-    border-radius: 8px;
-    background: var(--bg);
-    box-shadow: 0 8px 30px var(--border-strong);
   }
 
   .title {
@@ -283,24 +272,7 @@
 
   .buttons button {
     padding: 4px 12px;
-    border: 1px solid var(--border-strong);
     border-radius: 5px;
-    background: var(--surface);
-    color: var(--text);
-    font-family: inherit;
-  }
-
-  .buttons button.primary {
-    border-color: var(--link);
-    background: var(--link);
-    color: var(--bg);
-    font-weight: 600;
-  }
-
-  /* The button that cannot be taken back. Caution red, and not the one Return lands on. */
-  .buttons button.destructive {
-    border-color: var(--alert-caution);
-    background: var(--alert-caution);
   }
 
   /* Don't Save: the edits go, but the file stays - caution in outline rather than filled,
@@ -312,9 +284,9 @@
   }
 </style>
 
-<div class={'overlay' + (state.open ? '' : ' hidden')}>
+<div class={'modal-overlay overlay' + (state.open ? '' : ' hidden')}>
   {#if state.open}
-    <div class="panel" role="dialog" aria-modal="true" aria-label={state.title}>
+    <div class="modal-panel panel" role="dialog" aria-modal="true" aria-label={state.title}>
       <div class="title text-default">{state.title}</div>
       <div class={'message text-small' + (state.kind === 'text' ? ' text-mono' : '')}>{state.message}</div>
       {#if state.kind === 'text'}
@@ -339,10 +311,10 @@
       {/if}
       <div class="buttons">
         {#if state.kind === 'discard'}
-          <button class="discard text-buttons pointer" onclick="fez.discard()">Don't Save</button>
+          <button class="button-outline discard text-buttons pointer" onclick="fez.discard()">Don't Save</button>
         {/if}
-        <button class="cancel text-buttons pointer" onclick="fez.cancel()">Cancel</button>
-        <button class={'primary text-buttons pointer' + (state.kind === 'confirm' ? ' destructive' : '')} onclick="fez.confirm()">{state.confirm}</button>
+        <button class="button-outline cancel text-buttons pointer" onclick="fez.cancel()">Cancel</button>
+        <button class={'button-link primary text-buttons pointer' + (state.kind === 'confirm' ? ' caution' : '')} onclick="fez.confirm()">{state.confirm}</button>
       </div>
     </div>
   {/if}

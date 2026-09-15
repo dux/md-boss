@@ -39,32 +39,10 @@
   .copy.hidden {
     display: none;
   }
-
-  /* The same light face as the two controls beside it - back-button carries the note on
-     why it is bg rather than surface. */
-  button {
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    height: calc(var(--font-buttons) + 8px);
-    padding: 0 7px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--bg);
-    color: var(--muted);
-    font-family: inherit;
-    white-space: nowrap;
-  }
-
-  button:hover {
-    border-color: var(--border-strong);
-    background: var(--selection);
-    color: var(--text);
-  }
 </style>
 
 <div class={'copy' + (state.path ? '' : ' hidden')}>
   {#if state.path}
-    <button class="text-buttons pointer" title={'Copy ' + state.path} onclick="fez.copy()">copy path</button>
+    <button class="tool-button text-buttons pointer" title={'Copy ' + state.path} onclick="fez.copy()">copy path</button>
   {/if}
 </div>

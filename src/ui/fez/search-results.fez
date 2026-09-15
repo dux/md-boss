@@ -96,12 +96,6 @@
   display: block;
   padding: 2px 0 8px;
 
-  .empty {
-    padding: 24px 12px;
-    color: var(--muted);
-    text-align: center;
-  }
-
   .file {
     display: flex;
     align-items: baseline;
@@ -195,39 +189,30 @@
     color: var(--text);
   }
 
-  /* Truncated from the head - the tail of a path is the part that tells files apart. */
+  /* .truncate-head clips from the head; only the ink is this row's. */
   .file-row .dir {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    direction: rtl;
-    text-align: left;
     color: var(--muted);
-  }
-
-  .file-row .dir bdi {
-    direction: ltr;
-    unicode-bidi: isolate;
   }
 </style>
 
 {#if state.mode === 'files'}
   {#if state.files.length === 0}
-    <div class="empty text-default">No file matches.</div>
+    <div class="empty empty-state text-default">No file matches.</div>
   {:else}
     {#each state.files as file, index}
       <div class={'file-row row' + (index === state.cursor ? ' cursor' : '')} title={file.path} onclick="fez.openFile('{file.path}')">
         <span class="name text-default">{file.name}</span>
         {#if file.dir}
-          <span class="dir text-small"><bdi>{file.dir}</bdi></span>
+          <span class="truncate-head dir text-small"><bdi>{file.dir}</bdi></span>
         {/if}
       </div>
     {/each}
   {/if}
 {:else if state.groups.length === 0}
   {#if state.running}
-    <div class="empty text-default">Searching…</div>
+    <div class="empty empty-state text-default">Searching…</div>
   {:else}
-    <div class="empty text-default">Nothing found.</div>
+    <div class="empty empty-state text-default">Nothing found.</div>
   {/if}
 {:else}
   {#each state.groups as group}

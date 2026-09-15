@@ -390,10 +390,8 @@
   box-sizing: border-box;
   outline: none;
 
+  /* .empty-state carries the box; only the line wrapping is this pane's. */
   .empty {
-    padding: 24px 12px;
-    color: var(--muted);
-    text-align: center;
     white-space: pre-line;
   }
 
@@ -507,7 +505,7 @@
 {#if state.searching}
   <search-results></search-results>
 {:else if state.message}
-  <div class="empty text-default">{state.message}</div>
+  <div class="empty empty-state text-default">{state.message}</div>
 {:else}
   {#each state.rows as row, index}
     <div
@@ -535,6 +533,6 @@
     </div>
   {/each}
   {#if state.truncated}
-    <div class="empty text-small">Showing the first {state.limit} files - narrow the root to see the rest.</div>
+    <div class="empty empty-state text-small">Showing the first {state.limit} files - narrow the root to see the rest.</div>
   {/if}
 {/if}

@@ -32,31 +32,10 @@
   .ai-start.hidden {
     display: none;
   }
-
-  /* The same light face as Back, Copy Path and the measure controls in this strip. */
-  button {
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    height: calc(var(--font-buttons) + 8px);
-    padding: 0 7px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--bg);
-    color: var(--muted);
-    font-family: inherit;
-    white-space: nowrap;
-  }
-
-  button:hover {
-    border-color: var(--border-strong);
-    background: var(--selection);
-    color: var(--text);
-  }
 </style>
 
 <div class={'ai-start' + (state.path ? '' : ' hidden')}>
   {#if state.path}
-    <button class="text-buttons pointer" title={'Copy an AI authoring prompt for ' + state.path} onclick="fez.start()">AI start</button>
+    <button class="tool-button text-buttons pointer" title={'Copy an AI authoring prompt for ' + state.path} onclick="fez.start()">AI start</button>
   {/if}
 </div>
