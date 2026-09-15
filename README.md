@@ -147,6 +147,7 @@ changes.
 | `hammer run` | launch the bundle built here |
 | `hammer run:win` | build the shell for x86_64 and launch it under Rosetta (macOS) |
 | `hammer install_app` | copy the bundle into `/Applications` (macOS) |
+| `hammer push` | bump the patch version, amend the last commit, push it, and tag the release |
 | `hammer server` | run the bun server alone on a fixed port, for poking at it with a WebSocket client |
 | `hammer payload` | write `payload-<version>.tar.gz` - `server/`, `dist/`, `version.txt` |
 | `hammer icon` | regenerate `icons/` from `icons/AppIcon.svg` |

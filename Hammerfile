@@ -334,6 +334,36 @@ task :install_app do
   end
 end
 
+# From "the work is committed" to "a release is building". The patch bump rides in the same
+# commit as the change it ships - never a version commit of its own - and the tag is what the
+# release workflow triggers on.
+task :push do
+  desc 'Bump the patch version, amend the last commit, push it, and tag the release'
+  proc do
+    branch = `git rev-parse --abbrev-ref HEAD`.strip
+    error 'detached HEAD - check out a branch first' if branch == 'HEAD'
+    dirty = `git status --porcelain`.split("\n").reject { |line| line.include?('package.json') }
+    say.yellow "not in this push (commit them first):\n#{dirty.join("\n")}" unless dirty.empty?
+    body = File.read('package.json')
+    match = body.match(/"version":\s*"(\d+)\.(\d+)\.(\d+)"/) or error 'no version field in package.json'
+    old = "#{match[1]}.#{match[2]}.#{match[3]}"
+    version = "#{match[1]}.#{match[2]}.#{match[3].to_i + 1}"
+    tag = "v#{version}"
+    if `git tag -l #{tag}`.strip != '' || `git ls-remote --tags origin #{tag} 2>/dev/null`.strip != ''
+      error "#{tag} already exists - nothing bumped"
+    end
+
+    say "version #{old} -> #{version}", :cyan
+    File.write('package.json', body.sub(match[0], %("version": "#{version}")))
+    sh 'git add package.json'
+    sh 'git commit --amend --no-edit'
+    sh "git push --force-with-lease origin #{branch}"
+    sh "git tag -a #{tag} -m \"#{APP_NAME} #{version}\""
+    sh "git push origin #{tag}"
+    say.green "pushed #{branch} and #{tag} - the release workflow is building"
+  end
+end
+
 task :icon do
   desc 'Regenerate icons/ from icons/AppIcon.svg - the PNG set everywhere, .icns on macOS'
   proc do
