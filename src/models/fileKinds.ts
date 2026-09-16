@@ -2,7 +2,7 @@
 // the tree and the link snippet read.
 
 export const DOCUMENT_EXTENSIONS = new Set([
-  'md', 'markdown', 'mdown', 'mkd', 'mkdn', 'mdwn', 'qmd', 'rmd', 'txt', 'csv', 'json',
+  'md', 'markdown', 'mdown', 'mkd', 'mkdn', 'mdwn', 'qmd', 'rmd', 'txt', 'csv', 'json', 'yaml', 'yml',
 ])
 
 export const IMAGE_EXTENSIONS = new Set([
@@ -17,6 +17,14 @@ export function extensionOf(path: string): string {
 
 export const isDocument = (path: string) => DOCUMENT_EXTENSIONS.has(extensionOf(path))
 export const isImage = (path: string) => IMAGE_EXTENSIONS.has(extensionOf(path))
+
+export type CodeLanguage = 'json' | 'yaml'
+export function codeLanguage(path: string): CodeLanguage | null {
+  const extension = extensionOf(path)
+  if (extension === 'json') return 'json'
+  if (extension === 'yaml' || extension === 'yml') return 'yaml'
+  return null
+}
 
 /** The name a typed file name is created under. Anything the sidebar would not list becomes
  *  markdown - creating a file the tree then hides is the one outcome here worth ruling out. */

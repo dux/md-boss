@@ -3,7 +3,7 @@ import { extensionOf, isImage } from '../models/fileKinds'
 // Sidebar row glyphs: one 16x16 stroke icon per kind, drawn in currentColor so the row's
 // CSS sets the colour. Inline SVG strings rather than files - fez components cannot
 // import, and the tree redraws often enough that a data URL per row is not worth it.
-export type RowIconKind = 'folder' | 'folder-open' | 'markdown' | 'table' | 'json' | 'image' | 'text'
+export type RowIconKind = 'folder' | 'folder-open' | 'markdown' | 'table' | 'json' | 'yaml' | 'image' | 'text'
 
 const ATTRS = 'viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"'
 
@@ -16,6 +16,7 @@ const ICONS: Record<RowIconKind, string> = {
   'markdown': PAGE + '<path d="M6 11.4V8l1.5 1.7L9 8v3.4"/>',
   'table': PAGE + '<path d="M5.6 8h5.6M5.6 10.4h5.6M8.4 8v4.4M5.6 8v4.4h5.6V8"/>',
   'json': PAGE + '<path d="M6.6 8c-.9 0-.9.6-.9 1.2s0 .9-.7 1 .7.4.7 1 0 1.2.9 1.2M9.8 8c.9 0 .9.6.9 1.2s0 .9.7 1-.7.4-.7 1 0 1.2-.9 1.2"/>',
+  'yaml': PAGE + '<path d="M5.6 8l1.4 2v2.4M8.4 8L7 10M9.2 12.4V8l1.2 2 1.2-2v4.4"/>',
   'image': '<rect x="2.2" y="3" width="11.6" height="10" rx="1"/><circle cx="5.6" cy="6.4" r="1.1"/><path d="M2.6 12.2l3.4-3.4 2.2 2.2 1.9-1.9 3.5 3.5"/>',
   'text': PAGE + '<path d="M6 8.6h4M6 10.6h4M6 12.6h2.6"/>',
 }
@@ -30,6 +31,7 @@ export function rowIconKind(name: string, isDir: boolean, open = false): RowIcon
   if (MARKDOWN.has(ext)) return 'markdown'
   if (ext === 'csv') return 'table'
   if (ext === 'json') return 'json'
+  if (ext === 'yaml' || ext === 'yml') return 'yaml'
   if (isImage(name)) return 'image'
   return 'text'
 }

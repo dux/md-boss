@@ -31,6 +31,8 @@ describe('walk', () => {
     expect(isDocument('CAPS.MD')).toBe(true)
     expect(isDocument('notes.txt')).toBe(true)
     expect(isDocument('data.csv')).toBe(true)
+    expect(isDocument('config.yaml')).toBe(true)
+    expect(isDocument('CONFIG.YML')).toBe(true)
     expect(isDocument('b.swift')).toBe(false)
     expect(isDocument('no-extension')).toBe(false)
     expect(isDocument('trailing.')).toBe(false)

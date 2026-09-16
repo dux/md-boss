@@ -12,6 +12,8 @@ describe('rowIconKind', () => {
     expect(rowIconKind('a.Rmd', false)).toBe('markdown')
     expect(rowIconKind('data.csv', false)).toBe('table')
     expect(rowIconKind('settings.json', false)).toBe('json')
+    expect(rowIconKind('config.yaml', false)).toBe('yaml')
+    expect(rowIconKind('config.yml', false)).toBe('yaml')
     expect(rowIconKind('photo.JPG', false)).toBe('image')
     expect(rowIconKind('notes.txt', false)).toBe('text')
     expect(rowIconKind('Makefile', false)).toBe('text')

@@ -79,6 +79,8 @@ describe('file rename checks', () => {
   test('a typed name without a document extension becomes markdown', () => {
     expect(documentName('plan')).toBe('plan.md')
     expect(documentName('plan.txt')).toBe('plan.txt')
+    expect(documentName('config.yaml')).toBe('config.yaml')
+    expect(documentName('config.yml')).toBe('config.yml')
     expect(documentName('archive.tar.gz')).toBe('archive.tar.gz.md')
   })
 })

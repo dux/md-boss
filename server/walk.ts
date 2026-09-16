@@ -6,7 +6,7 @@ import { readdirSync, statSync, type Dirent } from 'node:fs'
 import { join, sep } from 'node:path'
 
 /** What the sidebar lists and the document panes open. */
-export const DOCUMENT_EXTENSIONS = new Set(['md', 'markdown', 'mdown', 'mkd', 'mkdn', 'mdwn', 'qmd', 'rmd', 'txt', 'csv', 'json'])
+export const DOCUMENT_EXTENSIONS = new Set(['md', 'markdown', 'mdown', 'mkd', 'mkdn', 'mdwn', 'qmd', 'rmd', 'txt', 'csv', 'json', 'yaml', 'yml'])
 
 /** Directories the sidebar treats as opaque files - a `Foo.app` with a stray .txt inside it
  *  is not a folder worth showing. Only the scanner asks for this; the search walk descends. */

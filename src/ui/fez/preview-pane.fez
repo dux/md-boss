@@ -209,12 +209,13 @@
       this.render(this.source(doc))
     }
 
-    /** What the page renders for a document: markdown as it is, JSON inside a fence so it
-     *  reads as code rather than as one long paragraph. */
+    /** What the page renders for a document: markdown as it is, JSON and YAML inside a
+     *  fence so they read as code rather than as one long paragraph. */
     source(doc) {
-      if (!doc.path.toLowerCase().endsWith('.json')) return doc.text
+      const language = MdBoss.codeLanguage(doc.path)
+      if (!language) return doc.text
       const fence = doc.text.includes('```') ? '````' : '```'
-      return `${fence}json\n${doc.text}\n${fence}\n`
+      return `${fence}${language}\n${doc.text}\n${fence}\n`
     }
 
     render(markdown, completed = []) {
