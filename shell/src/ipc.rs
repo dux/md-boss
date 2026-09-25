@@ -177,11 +177,16 @@ fn handle(ctx: &mut Context, method: &str, params: &Value) -> Result<Value, Stri
 /// The file selected in Finder / Explorer / the file manager.
 fn reveal(path: &str) -> Result<Value, String> {
     #[cfg(target_os = "macos")]
-    let status = Command::new("open").arg("-R").arg(path).status();
+    let revealed = Command::new("open").arg("-R").arg(path).status().is_ok_and(|s| s.success());
+    // explorer exits 1 even after selecting the file, so only a failed launch counts. The path
+    // is quoted by hand: Command would quote the whole `/select,` argument, which explorer rejects.
     #[cfg(target_os = "windows")]
-    let status = Command::new("explorer").arg(format!("/select,{path}")).status();
+    let revealed = {
+        use std::os::windows::process::CommandExt;
+        Command::new("explorer").raw_arg(format!("/select,\"{path}\"")).status().is_ok()
+    };
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let status = Command::new("dbus-send")
+    let revealed = Command::new("dbus-send")
         .args([
             "--session",
             "--dest=org.freedesktop.FileManager1",
@@ -191,15 +196,14 @@ fn reveal(path: &str) -> Result<Value, String> {
         ])
         .arg(format!("array:string:file://{path}"))
         .arg("string:")
-        .status();
-    match status {
-        Ok(s) if s.success() => Ok(Value::Null),
-        _ => {
-            // No file manager answered: the folder is the next best thing.
-            let parent = PathBuf::from(path).parent().map(|p| p.to_path_buf()).unwrap_or_default();
-            open::that_detached(parent).map(|_| Value::Null).map_err(|e| e.to_string())
-        }
+        .status()
+        .is_ok_and(|s| s.success());
+    if revealed {
+        return Ok(Value::Null);
     }
+    // No file manager answered: the folder is the next best thing.
+    let parent = PathBuf::from(path).parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    open::that_detached(parent).map(|_| Value::Null).map_err(|e| e.to_string())
 }
 
 pub fn reply(webview: &WebView, id: u64, result: Value, error: Option<String>) {
