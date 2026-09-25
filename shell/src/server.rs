@@ -46,7 +46,8 @@ impl Server {
         }
         let port = free_port().map_err(SpawnError::Io)?;
         let token = random_token();
-        let child = Command::new(bun)
+        let mut command = Command::new(bun);
+        command
             .arg(&layout.server_main)
             .arg("--port")
             .arg(port.to_string())
@@ -57,9 +58,17 @@ impl Server {
             .current_dir(&layout.app_dir)
             .stdin(Stdio::null())
             .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(SpawnError::Io)?;
+            .stderr(Stdio::inherit());
+        // The shell is a GUI-subsystem binary in release, so a console child would be given
+        // a fresh console window that stays up for the whole session. Ask for none: the child
+        // then inherits our std handles, which are a real console only when launched from one.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+        let child = command.spawn().map_err(SpawnError::Io)?;
         Ok(Server { port, token, child, killed: false })
     }
 
