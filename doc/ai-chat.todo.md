@@ -68,7 +68,9 @@ It carries:
 * the image rule: draw only SVG, name files `kebab-name.svg`, embed as `![alt](assets/name.svg)`
 
 Built-in tools are off (`tools: []`) and `settingSources: []`.
-That means no CLAUDE.md, no file access and no permission prompts - just chat.
+The claude.ai account connectors are off too (`strictMcpConfig: true`, `settings: {disableClaudeAiConnectors: true}`).
+Without them the connectors' tool definitions ride along on every turn - ten times the cost of a one-word reply.
+That means no CLAUDE.md, no MCP, no file access and no permission prompts - just chat.
 
 Each user turn is one `SDKUserMessage` built by a pure function:
 
@@ -87,9 +89,12 @@ At most 10 go per turn, 5 MB each, and the server reads the bytes.
 
 Conversation memory is the CLI session: `resume: claudeSessionId`.
 If resume fails because the CLI's session file is gone, the chat starts a new CLI session seeded with the full document and the transcript text, and retries once.
+The CLI reports that case as an error result reading "No conversation found with session ID: ...".
 
 Prepare and revise turns add `outputFormat: {type: 'json_schema'}` with `{reply, summary, document, images: [{name, alt, svg}]}`.
 It returns the full revised document rather than edit hunks, so applying it cannot mismatch.
+The CLI answers through a `StructuredOutput` tool, so no text deltas stream on these turns and the pane shows "Preparing change..." until the result lands.
+The parsed object arrives as `structured_output` on the success result.
 
 ## Architecture
 
@@ -103,13 +108,17 @@ It returns the full revised document rather than edit hunks, so applying it cann
   `./src/native/memory.ts` gets a twin that replays scripted replies, so every model test runs without the CLI.
 * The installed app does not ship `node_modules`, so the SDK travels inside a bundled server (`bun build server/main.ts --target bun`).
   The shell starts `server/main.js` in a bundle and `server/main.ts` in a checkout.
+  The bundle comes out around 1.2 MB and runs with no `node_modules` beside it.
+  `bun install` also fetches `@anthropic-ai/claude-agent-sdk-<platform>`, a 217 MB copy of `claude`.
+  It stays in the checkout: we always pass `pathToClaudeCodeExecutable`, so the bundle never needs it.
 
 ## Files
 
 ```
 + server/claude.ts           find claude (claudePath, Bun.which, ~/.local/bin, ~/.claude/local, brew paths);
                              status() = {path, version}; run(turn) = query({systemPrompt, tools: [],
-                             settingSources: [], resume, model, includePartialMessages: true,
+                             settingSources: [], strictMcpConfig: true,
+                             settings: {disableClaudeAiConnectors: true}, resume, model, includePartialMessages: true,
                              outputFormat?, abortController, pathToClaudeCodeExecutable, cwd: <tmp>/md-boss/chats}),
                              pushes deltas, resolves {sessionId, text, structured} | error; reads image bytes
 ~ server/rpc.ts              ai.status, ai.run(turnId, request), ai.stop(turnId), paths.temp
@@ -150,13 +159,13 @@ It returns the full revised document rather than edit hunks, so applying it cann
 
 Each step ends with a working app.
 
-* [ ] Spike in `./tmp`: install the SDK and confirm against the real CLI, then adjust names here to whatever the SDK actually exposes
-  * [ ] a custom `systemPrompt` with `tools: []`
-  * [ ] `resume` across two `query()` calls
-  * [ ] an image block in an `SDKUserMessage`
-  * [ ] `outputFormat` coming back as structured output on the result message
-  * [ ] `pathToClaudeCodeExecutable` pointing at the native `~/.local/bin/claude`
-  * [ ] a `bun build` bundle of it running
+* [x] Spike in `./tmp`: install the SDK and confirm against the real CLI, then adjust names here to whatever the SDK actually exposes
+  * [x] a custom `systemPrompt` with `tools: []`
+  * [x] `resume` across two `query()` calls
+  * [x] an image block in an `SDKUserMessage`
+  * [x] `outputFormat` coming back as structured output on the result message
+  * [x] `pathToClaudeCodeExecutable` pointing at the native `~/.local/bin/claude`
+  * [x] a `bun build` bundle of it running
 * [ ] Server `claude.ts`, RPC, native seam, memory twin, tests
 * [ ] `aiPrompt.ts` and `aiChat.ts`: chat only, Ask/Write, persistence, reseed, tests
 * [ ] Pane, settings, menu, width; preview pick and "Ask AI" menus
