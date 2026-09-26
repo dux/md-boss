@@ -411,6 +411,16 @@ mark { background: var(--selection); color: var(--text); }
   box-shadow: 0 0 0 0.3em var(--selection);
 }
 
+/* The AI pane is open: the block under the pointer is what a click hands to the chat.
+   Only the innermost one - the list item, not the list around it. An outline, so it never
+   takes room and never reads as the landing highlight above. */
+.md-picking [data-line]:hover:not(:has([data-line]:hover)) {
+  cursor: pointer;
+  border-radius: 3px;
+  outline: 1px dashed var(--accent);
+  outline-offset: 0.2em;
+}
+
 /* highlight.js - token colours come from the same theme tokens as everything else. */
 
 .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-doctag {

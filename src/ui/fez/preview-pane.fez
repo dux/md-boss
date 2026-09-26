@@ -28,6 +28,8 @@
         if (msg.kind === 'anchorMiss') MdBoss.manager.showError('No heading: ' + msg.id)
         if (msg.kind === 'ready') {
           this.local.loaded = true
+          this.local.picking = null
+          this.pushPickMode()
           if (this.local.pending !== null) {
             this.render(this.local.pending, this.local.pendingCompletions)
           }
@@ -44,6 +46,8 @@
         // A right-click on a block: the page says which source line, and where, in its
         // own coordinates - the iframe's offset puts the menu under the pointer.
         if (msg.kind === 'context') this.contextMenu(msg)
+        // A click on a block while the AI pane is open: its rows go to the chat.
+        if (msg.kind === 'pick') MdBoss.manager.attachToChat(msg.line, msg.next ? msg.next - 1 : null)
         if (msg.kind === 'key') this.replayKey(msg)
       }
       window.addEventListener('message', this.local.onMessage)
@@ -72,6 +76,7 @@
             this.local.measure = data.previewMeasure
             if (this.local.loaded) this.frame.contentWindow.mdSetMeasure(data.previewMeasure)
           }
+          this.pushPickMode()
         }),
       ]
       // Copy DOC's renderer: the pane owns the rendered page, so it lends the manager the
@@ -100,6 +105,15 @@
       const map = {}
       for (const [line, text] of MdBoss.manager.notes.noteTexts(this.local.path)) map[String(line)] = text
       this.frame.contentWindow.mdSetNotes(map)
+    }
+
+    /** Blocks are clickable only while the AI pane is open to receive them. */
+    pushPickMode() {
+      if (!this.local.loaded) return
+      const on = MdBoss.visiblePanes(MdBoss.manager.settings.data).includes('ai')
+      if (on === this.local.picking) return
+      this.local.picking = on
+      this.frame.contentWindow.mdSetPickMode(on)
     }
 
     pushHighlight() {
@@ -136,6 +150,7 @@
       const hasNote = manager.hasNoteAtCursor
       MdBoss.menus.open(box.left + (msg.x || 0), box.top + (msg.y || 0), [
         { label: hasNote ? 'Edit Note…' : 'Add Note…', action: () => manager.addNoteAtCursor() },
+        { label: 'Ask AI', action: () => manager.attachToChat(msg.line, msg.next ? msg.next - 1 : null) },
         { separator: true },
         { label: 'Copy Path', action: () => manager.copyPath(doc.path) },
         { label: 'Copy Path with Line', action: () => manager.copyPath(doc.path, msg.line) },

@@ -6,13 +6,24 @@
   // A note is a line number, a title and a wrapped body; under 240 the titles all truncate.
   const MIN_NOTES = 240
   const MAX_NOTES = 640
+  // The AI column has a composer and a label strip with two controls to fit.
+  const MIN_AI = 300
+  const MAX_AI = 760
+
+  // Each draggable edge: the setting it writes and its clamp. The sidebar grows rightwards;
+  // the other two are columns to their divider's right, so they grow the other way.
+  const EDGES = {
+    sidebar: { key: 'sidebarWidth', min: MIN_SIDEBAR, max: MAX_SIDEBAR, leftward: false },
+    notes: { key: 'notesWidth', min: MIN_NOTES, max: MAX_NOTES, leftward: true },
+    ai: { key: 'aiWidth', min: MIN_AI, max: MAX_AI, leftward: true },
+  }
 
   // Root layout: sidebar | divider | document, status bar across the bottom - the shape of
   // the Swift ContentView. Every column is a panel with a label above it: click the label
   // and the panel collapses to a rail carrying the same label turned on its side, click the
   // rail and it comes back. That rail is why there are no toggle buttons anywhere - a
   // collapsed panel says its own name and is its own way back, the sidebar included.
-  // Panels sit left to right in PANES order: preview, raw, notes. Side by side, preview and
+  // Panels sit left to right in PANES order: preview, raw, notes, AI. Side by side, preview and
   // raw split the width evenly; the preview's reading column keeps its measure while the
   // half fits it and narrows with the pane when it does not.
   class {
@@ -20,6 +31,7 @@
       const data = MdBoss.manager.settings.data
       this.state.sidebarWidth = data.sidebarWidth
       this.state.notesWidth = data.notesWidth
+      this.state.aiWidth = data.aiWidth
       this.state.showSidebar = data.showSidebar
       this.state.panes = MdBoss.visiblePanes(data)
       // Which edge is under the pointer, or null - only the one being dragged lights up.
@@ -42,6 +54,7 @@
         MdBoss.manager.settings.onChange((data) => {
           this.state.sidebarWidth = data.sidebarWidth
           this.state.notesWidth = data.notesWidth
+          this.state.aiWidth = data.aiWidth
           this.state.showSidebar = data.showSidebar
           this.state.panes = MdBoss.visiblePanes(data)
         }),
@@ -99,20 +112,17 @@
 
     // The width the drag started from plus the pointer's travel, so the pane tracks the
     // cursor exactly instead of accumulating rounding drift across move events. Pointer
-    // capture keeps the moves coming while the pointer is over the preview iframe. Both
-    // edges are the same drag; the notes column just grows the other way, being the pane
-    // to the divider's right.
+    // capture keeps the moves coming while the pointer is over the preview iframe. Every
+    // edge is the same drag; the notes and AI columns just grow the other way, being the
+    // pane to the divider's right.
     dragStart(event, edge) {
       if (event.button !== 0) return
-      const notes = edge === 'notes'
-      const key = notes ? 'notesWidth' : 'sidebarWidth'
-      const min = notes ? MIN_NOTES : MIN_SIDEBAR
-      const max = notes ? MAX_NOTES : MAX_SIDEBAR
+      const { key, min, max, leftward } = EDGES[edge]
       const divider = event.currentTarget
       const startX = event.clientX
       const startWidth = MdBoss.manager.settings.data[key]
       const move = (e) => {
-        const travel = notes ? startX - e.clientX : e.clientX - startX
+        const travel = leftward ? startX - e.clientX : e.clientX - startX
         const width = Math.min(max, Math.max(min, startWidth + travel))
         MdBoss.manager.settings.patch({ [key]: Math.round(width) })
       }
@@ -329,13 +339,15 @@
     border-left: 1px solid var(--border);
   }
 
-  /* Notes are a list, not a document: the column keeps the width the divider left it at
-     rather than sharing what preview and raw split. */
-  main .pane.notes {
+  /* Notes are a list and AI a conversation, not documents: each column keeps the width
+     its divider left it at rather than sharing what preview and raw split. */
+  main .pane.notes,
+  main .pane.ai {
     flex: none;
   }
 
-  main .pane.notes.collapsed {
+  main .pane.notes.collapsed,
+  main .pane.ai.collapsed {
     flex: 0 0 var(--rail);
     width: auto;
   }
@@ -459,6 +471,20 @@
     </div>
     {#if state.panes.includes('notes')}
       <div class="panel-body"><notes-pane></notes-pane></div>
+    {/if}
+  </div>
+  {#if state.panes.includes('ai')}
+    <div class={'divider' + (state.dragging === 'ai' ? ' dragging' : '')} role="separator" aria-orientation="vertical" aria-label="AI width" aria-valuenow={state.aiWidth} title="Drag to resize the AI column" onpointerdown="fez.dragStart(event, 'ai')"><span></span></div>
+  {/if}
+  <div class={'pane ai' + (state.panes.includes('ai') ? '' : ' collapsed')} style={state.panes.includes('ai') ? 'width: ' + state.aiWidth + 'px' : ''}>
+    <div class="panel-head pointer" title={fez.hint('ai')} onclick="fez.toggle('ai')">
+      <span class="label text-title">AI</span>
+      {#if state.file && state.panes.includes('ai')}
+        <div class="tools" onclick="fez.stop(event)"><ai-tools></ai-tools></div>
+      {/if}
+    </div>
+    {#if state.panes.includes('ai')}
+      <div class="panel-body"><ai-pane></ai-pane></div>
     {/if}
   </div>
 </main>

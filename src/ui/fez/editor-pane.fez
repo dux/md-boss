@@ -160,8 +160,12 @@
       if (MdBoss.documentKind(doc.path) === 'markdown') {
         items.push({ label: 'Insert', items: this.insertItems('', line) }, { separator: true })
       }
+      // A selection the click landed in is what the question is about; otherwise the line.
+      const selected = this.local.editor ? this.local.editor.selectedLines() : null
+      const rows = selected && line >= selected.start && line <= selected.end ? selected : { start: line, end: line }
       items.push(
         { label: hasNote ? 'Edit Note…' : 'Add Note…', action: () => manager.addNoteAtCursor() },
+        { label: 'Ask AI', action: () => manager.attachToChat(rows.start, rows.end) },
         { separator: true },
         { label: 'Copy Path', action: () => manager.copyPath(doc.path) },
         { label: 'Copy Path with Line', action: () => manager.copyPath(doc.path, line) },

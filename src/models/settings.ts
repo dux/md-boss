@@ -2,7 +2,7 @@
 // the defaults and nowhere else - parseSettings merges stored JSON over them, so old config
 // files stay readable and unknown keys are dropped rather than fatal.
 
-export const PANES = ['preview', 'raw', 'notes'] as const
+export const PANES = ['preview', 'raw', 'notes', 'ai'] as const
 export type Pane = (typeof PANES)[number]
 
 export interface SettingsData {
@@ -13,6 +13,8 @@ export interface SettingsData {
   /** The notes column's width. A list rather than a document, so it keeps a width of its
    *  own instead of sharing what preview and raw split. */
   notesWidth: number
+  /** The AI column's width - a conversation, so like notes it keeps its own. */
+  aiWidth: number
   showSidebar: boolean
   previewFontSize: number
   /** Reading measure in em, so the column tracks the text size rather than fighting it.
@@ -42,6 +44,7 @@ export function defaultSettings(): SettingsData {
     visiblePanes: ['preview'],
     sidebarWidth: 260,
     notesWidth: 350,
+    aiWidth: 400,
     showSidebar: true,
     previewFontSize: 17,
     previewMeasure: 48,
@@ -107,7 +110,7 @@ export function paneNamed(stored: string): Pane | null {
   return (PANES as readonly string[]).includes(stored) ? (stored as Pane) : null
 }
 
-export const PANE_TITLE: Record<Pane, string> = { preview: 'Preview', raw: 'Raw', notes: 'Notes' }
+export const PANE_TITLE: Record<Pane, string> = { preview: 'Preview', raw: 'Raw', notes: 'Notes', ai: 'AI' }
 
 /** Always in declaration order, and possibly empty: a pane that is off still holds its
  *  header rail on screen, so "all collapsed" is a viewer state, not a dead end. */

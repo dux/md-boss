@@ -1,8 +1,8 @@
 // Preview page script, inlined into the preview iframe by src/preview/page.ts.
 //
 // App -> page: mdRender, mdSetTheme, mdSetFontSize, mdSetMeasure, mdScrollToAnchor,
-//              mdScrollToLine, mdSetNotes, mdHighlightLine, mdSetBase - called on the
-//              iframe's window.
+//              mdScrollToLine, mdSetNotes, mdHighlightLine, mdSetBase, mdSetPickMode -
+//              called on the iframe's window.
 // Page -> app: window.parent.postMessage({kind, ...}) - the pane listens for "message".
 
 (function () {
@@ -905,11 +905,44 @@
 
   // MARK: page -> app
 
+  // While the AI pane is open, a click on a block hands its rows to the chat: from the
+  // block's own line to the line before the next block, or to the end of the document.
+  var picking = false;
+
+  window.mdSetPickMode = function (on) {
+    picking = !!on;
+    document.documentElement.classList.toggle('md-picking', picking);
+  };
+
+  function pick(event) {
+    if (!picking || event.target.closest('input, summary, button, a')) { return; }
+    // A drag that selected text is the reader copying, not pointing.
+    var selection = window.getSelection();
+    if (selection && !selection.isCollapsed) { return; }
+    var node = event.target.closest('[data-line]');
+    if (!node) { return; }
+    var line = Number(node.getAttribute('data-line'));
+    post({ kind: 'pick', line: line, next: nextBlockLine(line) });
+  }
+
+  // Where the block after `line` starts - the end of a block's rows. Null for the last one.
+  function nextBlockLine(line) {
+    var next = null;
+    blockList().some(function (entry) {
+      if (entry.line > line) { next = entry.line; }
+      return next !== null;
+    });
+    return next;
+  }
+
   // Same-document anchors are handled here; every other link goes to the app, already
   // absolute, and the page itself never navigates away from the document it is rendering.
   document.addEventListener('click', function (event) {
     var anchor = event.target.closest ? event.target.closest('a') : null;
-    if (!anchor) { return; }
+    if (!anchor) {
+      pick(event);
+      return;
+    }
     var href = anchor.getAttribute('href') || '';
     if (!href) { return; }
     event.preventDefault();
@@ -926,7 +959,8 @@
     var node = event.target.closest ? event.target.closest('[data-line]') : null;
     // The pane draws the menu itself, at the click - so the page's own menu stays shut.
     event.preventDefault();
-    post({ kind: 'context', line: node ? Number(node.getAttribute('data-line')) : 1, x: event.clientX, y: event.clientY });
+    var line = node ? Number(node.getAttribute('data-line')) : 1;
+    post({ kind: 'context', line: line, next: nextBlockLine(line), x: event.clientX, y: event.clientY });
   });
 
   document.addEventListener('scroll', function () {

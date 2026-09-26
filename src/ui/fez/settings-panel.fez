@@ -12,12 +12,17 @@
       this.state.sizes = []
       this.state.isDefault = true
       this.state.componentCount = 0
+      // The claude the AI pane runs: its version and path, or null when there is none.
+      this.state.claude = null
+      this.state.claudeChecked = false
     }
 
     onMount() {
       this.local.unsubscribe = [
         MdBoss.panels.onToggle((panel) => {
-          if (panel === 'settings') this.state.open = !this.state.open
+          if (panel !== 'settings') return
+          this.state.open = !this.state.open
+          if (this.state.open) this.checkClaude()
         }),
         MdBoss.manager.settings.onChange(() => this.pull()),
         MdBoss.components.onChange(() => this.pull()),
@@ -67,6 +72,16 @@
 
     close() {
       this.state.open = false
+    }
+
+    async checkClaude() {
+      try {
+        const status = await MdBoss.manager.claudeStatus()
+        this.state.claude = status.path ? { path: status.path, version: status.version || 'unknown version' } : null
+      } catch {
+        this.state.claude = null
+      }
+      this.state.claudeChecked = true
     }
 
     pickStyle(id) {
@@ -320,6 +335,17 @@
     text-align: left;
   }
 
+  .claude {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .claude .path {
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+
   /* .button-outline carries the hairline; only the width and shape are this one's. */
   .starter {
     width: 100%;
@@ -373,6 +399,19 @@
         <p class="component-copy text-small"><span class="text-mono">md-type.fez</span> renders <span class="text-mono">::type</span> and <span class="text-mono">:::type</span> blocks. Each component requires <span class="text-mono">&lt;info&gt;</span> and <span class="text-mono">&lt;demo&gt;</span> blocks.</p>
         <button class="component-link text-buttons pointer" onclick="fez.openFezGuide()">Fez authoring guide ↗</button>
         <button class="button-outline starter text-buttons pointer" onclick="fez.copyStarter()">LLM / AI components starter</button>
+      </div>
+      <hr>
+      <div class="text-title">AI</div>
+      <div class="claude">
+        {#if !state.claudeChecked}
+          <span class="path text-small">Looking for Claude Code…</span>
+        {:else if state.claude}
+          <span class="text-default">Claude Code {state.claude.version}</span>
+          <span class="path text-small text-mono">{state.claude.path}</span>
+        {:else}
+          <span class="text-default">Claude Code was not found</span>
+          <span class="path text-small">Install it from claude.com/claude-code and log in, or set <span class="text-mono">claudePath</span> in settings.json. <span class="text-mono">aiModel</span> there picks the model.</span>
+        {/if}
       </div>
       <hr>
       <div class="foot">

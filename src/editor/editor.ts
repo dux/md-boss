@@ -65,6 +65,8 @@ export interface Editor {
   /** A construct from the Insert menu. `line` is the line that was right-clicked; without
    *  one the caret's line, and a `/` query still standing there is swallowed. */
   insert(snippet: string, line?: number): void
+  /** The lines a non-empty selection spans, 1-based and inclusive; null with only a caret. */
+  selectedLines(): { start: number; end: number } | null
   /** A native (OS) file drag over the pane, in viewport coordinates: the caret follows the
    *  pointer while it is over the text, as the NSTextView's did, and goes back where it
    *  was if the drag leaves without dropping. */
@@ -407,6 +409,12 @@ export function createEditor(options: EditorOptions): Editor {
         userEvent: 'input',
       })
       view.focus()
+    },
+    selectedLines() {
+      const { main } = view.state.selection
+      if (main.empty) return null
+      const doc = view.state.doc
+      return { start: doc.lineAt(main.from).number, end: doc.lineAt(main.to).number }
     },
     dragOver(x, y) {
       const pos = view.posAtCoords({ x, y }, false)

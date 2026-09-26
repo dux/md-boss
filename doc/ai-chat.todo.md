@@ -52,7 +52,6 @@ Apply saves them to `assets/` next to the document, and the revision embeds them
   Cmd-Z in the raw pane undoes an Apply as one step.
 * Empty states:
   * no document open
-  * not a markdown document
   * `claude` not found: the install line, plus the settings key that overrides the path
   * not logged in: the `claude` error text, plus "run `claude` in a terminal to log in"
 * The Settings panel gets an AI section showing the detected `claude` path and version.
@@ -170,7 +169,7 @@ Each step ends with a working app.
 * [x] Server `claude.ts`, RPC, native seam, memory twin, tests
 * [x] Bundled server in the Hammerfile and the shell path - pulled forward, so a package built after this step still starts
 * [x] `aiPrompt.ts` and `aiChat.ts`: chat only, Ask/Write, persistence, reseed, tests
-* [ ] Pane, settings, menu, width; preview pick and "Ask AI" menus
+* [x] Pane, settings, menu, width; preview pick and "Ask AI" menus
 * [ ] Prepare, revise, proposal card, Apply (assets, notes shift, stale-base refusal), tests
 * [ ] `hammer build`, then launch the bundle from Finder and chat
 * [ ] README section

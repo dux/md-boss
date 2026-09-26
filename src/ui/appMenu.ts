@@ -128,6 +128,7 @@ export class AppMenu {
       case 'toggle-preview': return manager.togglePane('preview')
       case 'toggle-raw': return manager.togglePane('raw')
       case 'toggle-notes': return manager.togglePane('notes')
+      case 'toggle-ai': return manager.togglePane('ai')
       case 'side-by-side': return manager.toggleSideBySide()
       case 'narrower': return manager.changeMeasure(-Manager.measureStep)
       case 'wider': return manager.changeMeasure(Manager.measureStep)

@@ -1,0 +1,316 @@
+<script>
+  // A row the chat was pointed at, as a chip: its lines, and its first words to tell two apart.
+  const chip = (a) => ({
+    lines: a.start === a.end ? 'L' + a.start : 'L' + a.start + '-' + a.end,
+    words: MdBoss.suggestedTitle(a.text.split('\n').find((l) => l.trim()) || ''),
+    text: a.text,
+  })
+
+  // The AI column: one conversation about the open document. The chat (models/aiChat.ts)
+  // owns everything said and everything sent; this draws it and hands on what is typed.
+  // Return sends, Shift-Return is a new line, Escape stops a reply that is still arriving.
+  // The transcript follows new text while you are at its end and stays put once you have
+  // scrolled up to read.
+  class {
+    init() {
+      this.state.hasDocument = false
+      this.state.ready = false
+      this.state.missing = false
+      this.state.messages = []
+      // The reply as it arrives; null between turns.
+      this.state.streaming = null
+      this.state.attachments = []
+      this.local.chat = null
+      this.local.offChat = null
+      this.local.stick = true
+    }
+
+    onMount() {
+      this.local.unsubscribe = [
+        MdBoss.manager.onChange(() => this.follow()),
+        MdBoss.manager.settings.onChange(() => this.checkClaude()),
+      ]
+      this.follow()
+      this.checkClaude()
+    }
+
+    onDestroy() {
+      for (const off of this.local.unsubscribe || []) off()
+      if (this.local.offChat) this.local.offChat()
+    }
+
+    afterRender() {
+      const list = this.find('.transcript')
+      if (list && this.local.stick) list.scrollTop = list.scrollHeight
+    }
+
+    /** The manager swaps the chat when another document opens. */
+    follow() {
+      const chat = MdBoss.manager.chat
+      if (chat !== this.local.chat) {
+        if (this.local.offChat) this.local.offChat()
+        this.local.chat = chat
+        this.local.offChat = chat ? chat.onChange(() => this.pull()) : null
+        this.local.stick = true
+      }
+      this.pull()
+    }
+
+    async checkClaude() {
+      try {
+        this.state.missing = !(await MdBoss.manager.claudeStatus()).path
+      } catch {
+        // No server to ask: a turn will say what is wrong when there is one.
+        this.state.missing = false
+      }
+    }
+
+    pull() {
+      const chat = this.local.chat
+      this.state.hasDocument = !!MdBoss.manager.document
+      this.state.ready = !!chat
+      if (!chat) {
+        this.state.messages = []
+        this.state.attachments = []
+        this.state.streaming = null
+        return
+      }
+      this.state.messages = chat.session.messages.map((m) => ({
+        role: m.role,
+        text: m.text,
+        chips: (m.attachments || []).map(chip),
+      }))
+      this.state.streaming = chat.state === 'streaming' ? chat.streaming : null
+      this.state.attachments = chat.attachments.map(chip)
+    }
+
+    scrolled(event) {
+      const list = event.currentTarget
+      this.local.stick = list.scrollHeight - list.scrollTop - list.clientHeight < 40
+    }
+
+    keyDown(event) {
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+        event.preventDefault()
+        this.send()
+      } else if (event.key === 'Escape' && this.state.streaming !== null) {
+        event.preventDefault()
+        this.stop()
+      }
+    }
+
+    /** The field grows with what is typed, up to a third of the column. */
+    grow(field) {
+      field.style.height = 'auto'
+      field.style.height = Math.min(field.scrollHeight, 220) + 'px'
+    }
+
+    send() {
+      const field = this.find('.field')
+      if (!field || !field.value.trim() || this.state.streaming !== null) return
+      const text = field.value
+      field.value = ''
+      this.grow(field)
+      this.local.stick = true
+      void MdBoss.manager.sendToChat(text)
+    }
+
+    stop() {
+      if (this.local.chat) this.local.chat.stop()
+    }
+
+    detach(index) {
+      if (this.local.chat) this.local.chat.detach(Number(index))
+    }
+  }
+</script>
+
+<style>
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--sidebar-bg);
+
+  .transcript {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .hint {
+    margin: auto 0;
+  }
+
+  .message {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .message .text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 1.45;
+  }
+
+  /* What you said sits apart from what came back: a card, as a note does in its column. */
+  .message.user {
+    align-self: flex-end;
+    max-width: 88%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--border);
+  }
+
+  .message.error .text {
+    padding-left: 8px;
+    border-left: 3px solid var(--alert-caution);
+    color: var(--alert-caution);
+  }
+
+  .message.streaming .text:empty::before {
+    content: 'Thinking…';
+    color: var(--muted);
+  }
+
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .chip .lines {
+    color: var(--accent);
+  }
+
+  .chip .words {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip button {
+    padding: 0 0 0 2px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+  }
+
+  .chip button:hover {
+    color: var(--text);
+  }
+
+  .composer {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .field {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: calc(3 * 1.45em + 12px);
+    padding: 6px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: inherit;
+    line-height: 1.45;
+    resize: none;
+    outline: none;
+  }
+
+  .field:focus {
+    border-color: var(--accent);
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .actions .keys {
+    flex: 1;
+    color: var(--muted);
+  }
+
+  .actions button {
+    height: calc(var(--font-buttons) + 12px);
+    padding: 0 12px;
+    border-radius: 5px;
+  }
+</style>
+
+{#if !state.hasDocument}
+  <div class="empty-state text-default">Open a document to talk it through with Claude.</div>
+{:else if state.missing}
+  <div class="empty-state text-default">Claude Code was not found. Install it from claude.com/claude-code and log in, or set <span class="text-mono">claudePath</span> in settings.json.</div>
+{:else if state.ready}
+  <div class="transcript" onscroll="fez.scrolled(event)">
+    {#each state.messages as message}
+      <div class={'message ' + message.role}>
+        {#if message.chips.length}
+          <div class="chips">
+            {#each message.chips as c}
+              <span class="chip text-small" title={c.text}><span class="lines text-mono">{c.lines}</span><span class="words">{c.words}</span></span>
+            {/each}
+          </div>
+        {/if}
+        <div class="text text-default">{message.text}</div>
+      </div>
+    {:else}
+      {#if state.streaming === null}
+        <div class="hint empty-state text-default">Talk the document through. Click a block in the preview to point at it.</div>
+      {/if}
+    {/each}
+    {#if state.streaming !== null}
+      <div class="message assistant streaming">
+        <div class="text text-default">{state.streaming}</div>
+      </div>
+    {/if}
+  </div>
+  <div class="composer">
+    {#if state.attachments.length}
+      <div class="chips">
+        {#each state.attachments as c, index}
+          <span class="chip text-small" title={c.text}><span class="lines text-mono">{c.lines}</span><span class="words">{c.words}</span><button class="pointer" title="Remove" onclick="fez.detach({index})">×</button></span>
+        {/each}
+      </div>
+    {/if}
+    <textarea class="field text-default" placeholder="Ask, or say what should change…" rows="3" spellcheck="true" onkeydown="fez.keyDown(event)" oninput="fez.grow(this)"></textarea>
+    <div class="actions">
+      <span class="keys text-small">Return to send, ⇧Return for a new line</span>
+      {#if state.streaming !== null}
+        <button class="button-outline text-buttons pointer" title="Stop (Esc)" onclick="fez.stop()">Stop</button>
+      {:else}
+        <button class="button-link text-buttons pointer" onclick="fez.send()">Send</button>
+      {/if}
+    </div>
+  </div>
+{/if}

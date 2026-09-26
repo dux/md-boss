@@ -105,6 +105,7 @@ describe('panes', () => {
 
   test('visible panes are in declaration order, unknown names dropped', () => {
     expect(visiblePanes({ ...defaultSettings(), visiblePanes: ['notes', 'raw'] })).toEqual(['raw', 'notes'])
+    expect(visiblePanes({ ...defaultSettings(), visiblePanes: ['ai', 'preview'] })).toEqual(['preview', 'ai'])
     expect(visiblePanes({ ...defaultSettings(), visiblePanes: ['junk'] })).toEqual([])
   })
 

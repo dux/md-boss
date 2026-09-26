@@ -87,6 +87,7 @@ describe('the menu carries the README keyboard table', () => {
     expect(items.get('toggle-preview')!.accelerator).toBe('CmdOrCtrl+2')
     expect(items.get('toggle-raw')!.accelerator).toBe('CmdOrCtrl+3')
     expect(items.get('toggle-notes')!.accelerator).toBe('CmdOrCtrl+4')
+    expect(items.get('toggle-ai')!.accelerator).toBe('CmdOrCtrl+5')
     expect(items.get('side-by-side')!.accelerator).toBe('CmdOrCtrl+\\')
     expect(items.get('toggle-light-dark')!.accelerator).toBe('CmdOrCtrl+Shift+D')
     expect(items.get('bigger')!.accelerator).toBe('CmdOrCtrl+=')
@@ -177,10 +178,11 @@ describe('state in the menu', () => {
   })
 
   test('panel and note items say what they will do', () => {
-    const shown = byId(state({ visiblePanes: ['preview', 'raw'], showSidebar: true, hasNoteAtCursor: true }))
+    const shown = byId(state({ visiblePanes: ['preview', 'raw', 'ai'], showSidebar: true, hasNoteAtCursor: true }))
     expect(shown.get('toggle-preview')!.label).toBe('Collapse Preview')
     expect(shown.get('toggle-raw')!.label).toBe('Collapse Raw')
     expect(shown.get('toggle-notes')!.label).toBe('Expand Notes')
+    expect(shown.get('toggle-ai')!.label).toBe('Collapse AI')
     expect(shown.get('toggle-sidebar')!.label).toBe('Collapse Files')
     expect(shown.get('add-note')!.label).toBe('Edit Note…')
     const hidden = byId(state({ visiblePanes: ['notes'], showSidebar: false }))

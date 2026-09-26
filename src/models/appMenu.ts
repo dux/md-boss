@@ -43,7 +43,7 @@ export type PredefinedKind =
 export type MenuAction =
   | 'new-file' | 'open-folder' | 'open-file' | 'save' | 'revert' | 'rename' | 'trash' | 'reveal' | 'settings'
   | 'find' | 'find-in-project' | 'go-to-file' | 'bold' | 'italic' | 'link' | 'add-note' | 'delete-note'
-  | 'back' | 'toggle-preview' | 'toggle-raw' | 'toggle-notes' | 'side-by-side' | 'toggle-sidebar'
+  | 'back' | 'toggle-preview' | 'toggle-raw' | 'toggle-notes' | 'toggle-ai' | 'side-by-side' | 'toggle-sidebar'
   | 'narrower' | 'wider'
   | 'bigger' | 'smaller' | 'actual-size' | 'toggle-light-dark'
   | `style:${StyleID}` | 'mode:light' | 'mode:dark'
@@ -108,13 +108,14 @@ export interface MenuPatch {
   checked?: boolean
 }
 
-/** Cmd-1 to Cmd-4, in the order the panels stand on screen: files, preview, raw, notes.
+/** Cmd-1 to Cmd-5, in the order the panels stand on screen: files, preview, raw, notes, AI.
  *  The number is the position, so the keys are read off the window rather than remembered. */
 export const SIDEBAR_ACCELERATOR = 'CmdOrCtrl+1'
 export const PANE_ACCELERATOR: Record<Pane, string> = {
   preview: 'CmdOrCtrl+2',
   raw: 'CmdOrCtrl+3',
   notes: 'CmdOrCtrl+4',
+  ai: 'CmdOrCtrl+5',
 }
 
 /** What a panel label's tooltip says. ⌘ for CmdOrCtrl, the way the rest of the tooltips
@@ -122,7 +123,7 @@ export const PANE_ACCELERATOR: Record<Pane, string> = {
 export const panelShortcut = (panel: 'files' | Pane): string =>
   (panel === 'files' ? SIDEBAR_ACCELERATOR : PANE_ACCELERATOR[panel]).replace('CmdOrCtrl+', '⌘')
 
-const PANE_ACTION: Record<Pane, MenuAction> = { preview: 'toggle-preview', raw: 'toggle-raw', notes: 'toggle-notes' }
+const PANE_ACTION: Record<Pane, MenuAction> = { preview: 'toggle-preview', raw: 'toggle-raw', notes: 'toggle-notes', ai: 'toggle-ai' }
 
 const separator: MenuEntry = { kind: 'separator' }
 const predefined = (item: PredefinedKind, label?: string): MenuEntry => ({ kind: 'predefined', item, label })

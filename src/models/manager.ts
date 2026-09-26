@@ -2,9 +2,10 @@
 // listed, which file is open, what it says. A singleton on purpose - menu commands live
 // outside the component tree and cannot read view state.
 
-import { native, type OpenRequest, type RewriteOutcome, type SearchHit } from '../native/bridge'
+import { native, type AiStatus, type OpenRequest, type RewriteOutcome, type SearchHit } from '../native/bridge'
+import { AIChat } from './aiChat'
 import { AnnotationStore, FALLBACK_FILE_NAME } from './annotationStore'
-import { buildAIStartPrompt } from './aiStart'
+import { buildAIStartPrompt, markdownDialect } from './aiStart'
 import { gitRoot, launchPaths } from './cli'
 import { DirectoryWatcher } from './directoryWatcher'
 import { OpenDocument } from './document'
@@ -83,6 +84,8 @@ export class Manager {
   highlightedLine: number | null = null
   private scrollRequestCount = 0
   document: OpenDocument | null = null
+  /** The open document's AI chat. Null with nothing open and while the next one loads. */
+  chat: AIChat | null = null
   /** Copy DOC's renderer, injected by the preview pane while its page is up: the rendered
    *  document as neutral HTML and text. Null in tests and until the pane mounts. */
   exportDocument: (() => DocExport | null) | null = null
@@ -414,6 +417,73 @@ export class Manager {
       splitTasksByAgent: answer.splitTasksByAgent ?? false,
     })
     await this.copyText(prompt, 'AI prompt copied')
+  }
+
+  // MARK: AI
+
+  /** The chat follows the document, loaded before the document is announced so the pane
+   *  never shows one file's conversation beside another's text. A turn still running on
+   *  the one left behind is stopped, not left streaming into a transcript nobody reads. */
+  private async loadChat(path: string): Promise<AIChat | null> {
+    this.chat?.stop()
+    this.chat = null
+    return AIChat.open(path, {
+      settings: this.settings,
+      dialect: () => markdownDialect(this.exampleComponents()),
+    }).catch((err) => {
+      console.error('AI chat not opened:', err)
+      return null
+    })
+  }
+
+  /** Rows for the chat - a click in the preview, or Ask AI - from `start` to `end` (the
+   *  document's end when null), trailing blank lines dropped. Unfolds the AI pane. */
+  attachToChat(start: number, end: number | null): void {
+    const doc = this.document
+    if (!doc || !this.chat) return
+    const lines = doc.text.split('\n')
+    if (start < 1 || start > lines.length) return
+    let last = Math.max(start, Math.min(end ?? lines.length, lines.length))
+    while (last > start && lines[last - 1].trim() === '') last--
+    this.chat.attach({ start, end: last, text: lines.slice(start - 1, last).join('\n') })
+    if (!visiblePanes(this.settings.data).includes('ai')) this.settings.set(showPane(this.settings.data, 'ai'))
+  }
+
+  /** New session: the transcript and the CLI session go. Confirmed, since neither comes back. */
+  async resetChat(): Promise<void> {
+    const chat = this.chat
+    if (!chat || chat.session.messages.length === 0) return
+    const yes = await this.prompts.confirm({
+      title: 'Start a new AI session?',
+      message: `The conversation about ${basename(chat.session.path)} will be cleared.`,
+      confirm: 'New Session',
+    })
+    if (yes) chat.reset()
+  }
+
+  // `claude --version` answered once per claudePath: the server caches it too, but the
+  // pane asks on every mount and a round trip per fold is not worth making.
+  private claude: { path: string | null; status: Promise<AiStatus> } | null = null
+
+  /** Which `claude` the AI pane would run, and whether there is one. */
+  claudeStatus(): Promise<AiStatus> {
+    const path = this.settings.data.claudePath
+    if (this.claude?.path !== path) {
+      const status = native().ai.status(path).catch((err) => {
+        // A server that did not answer is asked again next time, not remembered.
+        this.claude = null
+        throw err
+      })
+      this.claude = { path, status }
+    }
+    return this.claude.status
+  }
+
+  /** A message from the AI pane, about the document as the editor holds it now. */
+  async sendToChat(message: string): Promise<void> {
+    const doc = this.document
+    if (!doc || !this.chat) return
+    await this.chat.send(message, doc.text)
   }
 
   /** Cmd-S and the Save button. */
@@ -827,6 +897,9 @@ export class Manager {
     try {
       this.document = await OpenDocument.load(path)
       opened = true
+      const chat = await this.loadChat(path)
+      // Another open may have landed while this chat loaded; the newer document keeps its own.
+      if (this.document?.path === path) this.chat = chat
       if (pushingHistory && leaving !== null) this.push(leaving)
       this.scrollSync.reset()
       this.highlightedLine = null
@@ -857,6 +930,8 @@ export class Manager {
     if (!(await this.confirmDiscardingChanges())) return false
     // A config dir that cannot be written is not a reason to keep the app up.
     await this.settings.flush().catch((err) => console.error('settings not saved on quit:', err))
+    this.chat?.stop()
+    await this.chat?.flushed()
     return true
   }
 

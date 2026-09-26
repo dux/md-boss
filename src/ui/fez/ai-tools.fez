@@ -1,0 +1,105 @@
+<script>
+  // The AI label strip's controls: Ask or Write, and a new session. Ask talks about the
+  // document; Write shapes changes to it. The mode belongs to the chat, so each document
+  // keeps the one it was left in.
+  class {
+    init() {
+      this.state.ready = false
+      this.state.mode = 'write'
+      this.state.empty = true
+      this.local.chat = null
+      this.local.offChat = null
+    }
+
+    onMount() {
+      this.local.unsubscribe = MdBoss.manager.onChange(() => this.follow())
+      this.follow()
+    }
+
+    onDestroy() {
+      if (this.local.unsubscribe) this.local.unsubscribe()
+      if (this.local.offChat) this.local.offChat()
+    }
+
+    follow() {
+      const chat = MdBoss.manager.chat
+      if (chat !== this.local.chat) {
+        if (this.local.offChat) this.local.offChat()
+        this.local.chat = chat
+        this.local.offChat = chat ? chat.onChange(() => this.pull()) : null
+      }
+      this.pull()
+    }
+
+    pull() {
+      const chat = this.local.chat
+      this.state.ready = !!chat
+      this.state.mode = chat ? chat.session.mode : 'write'
+      this.state.empty = !chat || chat.session.messages.length === 0
+    }
+
+    pick(mode) {
+      if (this.local.chat) this.local.chat.setMode(mode)
+    }
+
+    reset() {
+      void MdBoss.manager.resetChat()
+    }
+  }
+</script>
+
+<style>
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
+  .tools {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .tools.hidden {
+    display: none;
+  }
+
+  /* The settings panel's segmented control, at the height of the strip's other buttons. */
+  .mode {
+    display: flex;
+    padding: 1px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+
+  .mode button {
+    height: calc(var(--font-buttons) + 6px);
+    padding: 0 8px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+  }
+
+  .mode button.selected {
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: 0 0 0 1px var(--border-strong);
+  }
+
+  .tool-button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+</style>
+
+<div class={'tools' + (state.ready ? '' : ' hidden')}>
+  {#if state.ready}
+    <div class="mode text-buttons">
+      <button class={'pointer' + (state.mode === 'ask' ? ' selected' : '')} title="Talk about the document" onclick="fez.pick('ask')">Ask</button>
+      <button class={'pointer' + (state.mode === 'write' ? ' selected' : '')} title="Shape changes to it" onclick="fez.pick('write')">Write</button>
+    </div>
+    <button class="tool-button text-buttons pointer" title="Clear this conversation and start over" disabled={state.empty} onclick="fez.reset()">New session</button>
+  {/if}
+</div>
