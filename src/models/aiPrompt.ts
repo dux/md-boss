@@ -56,7 +56,7 @@ export function systemPrompt(dialect: string): string {
 
 In both modes, never ask whether to write, apply or save anything, and never offer to. The user has a Prepare change button; when they press it you will be asked for the full revised document. Until then, just talk it through.
 
-Keep replies short and conversational - this is a chat pane beside the document, not a report. Use Markdown only for short lists and snippets.
+Keep replies short and conversational - this is a chat pane beside the document, not a report. Replies render as Markdown (lists, code, tables and task marks all draw), but keep formatting light.
 
 ## Images
 

@@ -13,6 +13,7 @@ import { ContextMenus } from './ui/menus'
 import { isInside } from './ui/dragPoint'
 import { refreshIcon, rowIcon } from './ui/icons'
 import { NOTE_SCOPES, SCOPE_TITLE, noteLabel, partitionNotes, scopeIsCollapsible, suggestedTitle } from './models/notes'
+import { renderReply } from './models/replyMarkdown'
 import { SEARCH_PLACEHOLDER } from './models/sidebarSearch'
 import { documentBaseURL } from './models/linkTarget'
 import { revealLabel } from './models/platform'
@@ -56,6 +57,8 @@ export async function createApp() {
     noteLabel,
     /** A line's first words, markdown stripped - a note's title, an AI chip's label. */
     suggestedTitle,
+    /** A Claude reply's Markdown as inert HTML, for the markdown-text component. */
+    renderReply,
     partitionNotes,
     scopeIsCollapsible,
     SEARCH_PLACEHOLDER,

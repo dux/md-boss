@@ -37,8 +37,7 @@ Apply saves them to `assets/` next to the document, and the revision embeds them
   * Write is for shaping changes: it suggests freely, never asks permission to write, and shows **Prepare change** in the composer.
 * The transcript shows user turns, tinted and on the right, with their attached-line chips; each reply is a white card headed "Claude" and streams in live.
   The thread keeps a reading measure, so a wide pane centres it rather than stretching every line.
-  Replies are plain text with preserved whitespace in this first layer.
-  Markdown rendering of replies is a later layer.
+  Replies render as Markdown through the `markdown-text` component: the same local `marked` and task marks as the preview, with raw HTML shown as text and only web, mail, anchor and relative links kept, since it draws in the app window.
 * The composer has removable chips for attached rows (`L12-14 "first 40 chars..."`), a textarea, Send / Stop, and Prepare change in Write mode.
   Return sends and ⇧Return adds a newline.
 * The proposal card in the transcript shows:
@@ -197,7 +196,6 @@ Each step ends with a working app.
 ## Later
 
 * Other providers: an Anthropic-compatible base URL and key (DeepSeek), and a model picker.
-* Markdown rendering of assistant replies.
 * Usage and cost from the result message, shown somewhere quiet.
 
 ## Not doing

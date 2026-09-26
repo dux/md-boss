@@ -1,0 +1,200 @@
+<script>
+  // Markdown that is not the document - a Claude reply - drawn in the app window. The HTML
+  // comes from models/replyMarkdown.ts, which keeps it inert; this gives it the theme's
+  // tokens and draws task marks the way the preview does (src/css/preview.css). Kept in
+  // step with its `text` prop, so a reply still arriving renders as it grows.
+  class {
+    init() {
+      this.state.html = ''
+    }
+
+    beforeRender() {
+      this.state.html = MdBoss.renderReply(this.props.text || '')
+    }
+  }
+</script>
+
+<style>
+  display: block;
+  min-width: 0;
+
+  .md {
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+
+    > :first-child {
+      margin-top: 0;
+    }
+
+    > :last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  p, ul, ol, pre, blockquote, table {
+    margin: 0 0 0.6em;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    margin: 0.9em 0 0.35em;
+    font-size: 1em;
+    font-weight: 650;
+  }
+
+  h1, h2 {
+    font-size: 1.12em;
+  }
+
+  ul, ol {
+    padding-left: 1.4em;
+  }
+
+  li + li,
+  li > ul,
+  li > ol {
+    margin-top: 0.2em;
+  }
+
+  li > p {
+    margin: 0;
+  }
+
+  a {
+    color: var(--link);
+  }
+
+  code {
+    padding: 0.05em 0.3em;
+    border: 1px solid var(--code-border);
+    border-radius: 3px;
+    background: var(--code-bg);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+  }
+
+  pre {
+    padding: 8px 10px;
+    border: 1px solid var(--code-border);
+    border-radius: 6px;
+    background: var(--code-bg);
+    overflow-x: auto;
+
+    code {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      overflow-wrap: normal;
+    }
+  }
+
+  blockquote {
+    padding-left: 10px;
+    border-left: 3px solid var(--quote-bar);
+    color: var(--quote-text);
+  }
+
+  table {
+    border-collapse: collapse;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  th, td {
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    text-align: left;
+  }
+
+  th {
+    background: var(--table-head);
+  }
+
+  hr {
+    margin: 0.8em 0;
+    border: 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .md-image {
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  /* Task marks, as the preview draws them: a box, a ticked box, a turning ring. An item a
+     mark leads loses its bullet and the mark takes the bullet's place. */
+  li:has(> input:first-child),
+  li:has(> .md-spinner:first-child),
+  li:has(> p:first-child > input:first-child),
+  li:has(> p:first-child > .md-spinner:first-child) {
+    list-style: none;
+
+    > input:first-child,
+    > .md-spinner:first-child,
+    > p:first-child > input:first-child,
+    > p:first-child > .md-spinner:first-child {
+      margin: 0 0.4em 0 -1.4em;
+    }
+  }
+
+  input[type="checkbox"], .md-spinner {
+    display: inline-block;
+    box-sizing: border-box;
+    width: 1em;
+    height: 1em;
+    margin: 0 0.1em;
+    font: inherit;
+    vertical-align: -0.12em;
+  }
+
+  input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    border: 1.5px solid var(--border-strong);
+    border-radius: 0.25em;
+    background: transparent;
+  }
+
+  input[type="checkbox"]:checked {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 0.29em;
+    top: 0.1em;
+    width: 0.2em;
+    height: 0.44em;
+    border: solid var(--bg);
+    border-width: 0 0.13em 0.13em 0;
+    transform: rotate(43deg);
+  }
+
+  .md-spinner-track {
+    fill: none;
+    stroke: var(--border-strong);
+    stroke-width: 2;
+  }
+
+  .md-spinner-head {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 2;
+    stroke-linecap: round;
+    transform-origin: 50% 50%;
+    animation: md-reply-spin 0.9s linear infinite;
+  }
+
+  @keyframes md-reply-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .md-spinner-head { animation: none; }
+  }
+</style>
+
+<div class="md">{@html state.html}</div>

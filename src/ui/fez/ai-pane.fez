@@ -85,6 +85,21 @@
       this.state.attachments = chat.attachments.map(chip)
     }
 
+    /** A link in a reply never navigates the app window: the web goes to the browser, the
+     *  rest is followed the way a link in the preview is, against the document's folder. */
+    clicked(event) {
+      const link = event.target.closest('a')
+      if (!link) return
+      event.preventDefault()
+      const href = link.getAttribute('href') || ''
+      if (/^(https?:|mailto:)/i.test(href)) {
+        void MdBoss.native().shell.openURL(href)
+        return
+      }
+      const doc = MdBoss.manager.document
+      if (doc) void MdBoss.manager.followLink(new URL(href, MdBoss.documentBaseURL(doc.path)).href)
+    }
+
     scrolled(event) {
       const list = event.currentTarget
       this.local.stick = list.scrollHeight - list.scrollTop - list.clientHeight < 40
@@ -199,8 +214,7 @@
     color: var(--alert-caution);
   }
 
-  .message.streaming .text:empty::before {
-    content: 'Thinking…';
+  .message .thinking {
     color: var(--muted);
   }
 
@@ -298,7 +312,7 @@
 {#if state.missing}
   <div class="empty-state text-default">Claude Code was not found. Install it from claude.com/claude-code and log in, or set <span class="text-mono">claudePath</span> in settings.json.</div>
 {:else if state.ready}
-  <div class="transcript" onscroll="fez.scrolled(event)">
+  <div class="transcript" onscroll="fez.scrolled(event)" onclick="fez.clicked(event)">
     <div class="thread">
       {#each state.messages as message}
         <div class={'message ' + message.role}>
@@ -312,7 +326,11 @@
               {/each}
             </div>
           {/if}
-          <div class="text text-default">{message.text}</div>
+          {#if message.role === 'assistant'}
+            <markdown-text class="text-default" :text="message.text"></markdown-text>
+          {:else}
+            <div class="text text-default">{message.text}</div>
+          {/if}
         </div>
       {:else}
         {#if state.streaming === null}
@@ -322,7 +340,11 @@
       {#if state.streaming !== null}
         <div class="message assistant streaming">
           <span class="who text-title">{state.assistant}</span>
-          <div class="text text-default">{state.streaming}</div>
+          {#if state.streaming}
+            <markdown-text class="text-default" :text="state.streaming"></markdown-text>
+          {:else}
+            <div class="thinking text-default">Thinking…</div>
+          {/if}
         </div>
       {/if}
     </div>
