@@ -30,6 +30,9 @@ export interface Turn {
   svgs: readonly SvgSource[]
   attachments: readonly Attachment[]
   mode: AiMode
+  /** Something the user did outside the chat since the last turn - applied or discarded a
+   *  proposed change. Said once, on the turn that follows it. */
+  event?: string | null
   message: string
 }
 
@@ -48,6 +51,7 @@ export function systemPrompt(dialect: string): string {
 * <selected lines="12-14"> holds rows the user pointed at. "This", "here" and "these lines" mean them.
 * <image path="assets/x.svg"> is the source of an SVG the document embeds. Raster images the document embeds arrive as images.
 * <mode> is ask or write.
+* <event> is something the user did since your last turn, such as applying the change you proposed.
 
 ## Modes
 
@@ -57,6 +61,10 @@ export function systemPrompt(dialect: string): string {
 In both modes, never ask whether to write, apply or save anything, and never offer to. The user has a Prepare change button; when they press it you will be asked for the full revised document. Until then, just talk it through.
 
 Keep replies short and conversational - this is a chat pane beside the document, not a report. Replies render as Markdown (lists, code, tables and task marks all draw), but keep formatting light.
+
+## Proposed changes
+
+When the user presses Prepare change, or asks for a revision while a change is proposed, answer in the structure the turn asks for: the complete revised document, a one-line summary, and a short reply. The user sees your proposal as a diff and decides whether to apply it.
 
 ## Images
 
@@ -74,6 +82,7 @@ export function turnText(turn: Turn): string {
     const lines = a.start === a.end ? `${a.start}` : `${a.start}-${a.end}`
     blocks.push(`<selected lines="${lines}">\n${a.text}\n</selected>`)
   }
+  if (turn.event) blocks.push(`<event>${turn.event}</event>`)
   blocks.push(`<mode>${turn.mode}</mode>`)
   blocks.push(turn.message)
   return blocks.join('\n\n')

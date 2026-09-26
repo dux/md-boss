@@ -6,12 +6,18 @@
     text: a.text,
   })
 
+  const STATUS = { pending: '', applied: 'Applied', discarded: 'Discarded', superseded: 'Revised below' }
+
   // The AI column: one conversation about the open document. The chat (models/aiChat.ts)
   // owns everything said and everything sent; this draws it and hands on what is typed.
-  // Return sends, Shift-Return is a new line, Escape stops a reply that is still arriving.
+  // Return sends, Shift-Return is a new line, Escape stops a turn that is still running.
   // The transcript follows new text while you are at its end and stays put once you have
   // scrolled up to read. The pane shares the window's width with the document, so the
   // thread keeps a reading measure of its own rather than running the whole way across.
+  //
+  // A proposed change is a card under the reply that carried it: the summary, the size of
+  // the change, the drawings, the diff - open while the change waits for Apply or Discard,
+  // folded once it is settled, and either way a click on its toggle away.
   class {
     init() {
       // Who answers - the name on every reply card.
@@ -19,12 +25,20 @@
       this.state.ready = false
       this.state.missing = false
       this.state.messages = []
-      // The reply as it arrives; null between turns.
-      this.state.streaming = null
+      // The running turn: 'streaming', 'preparing', or null between turns.
+      this.state.busy = null
+      this.state.streaming = ''
       this.state.attachments = []
+      this.state.canPrepare = false
+      this.state.placeholder = ''
       this.local.chat = null
       this.local.offChat = null
       this.local.stick = true
+      // Cards whose diff was toggled away from its default, by message index.
+      this.local.toggled = new Set()
+      // Each proposal's diff, worked out once - a reply streaming in re-renders the pane
+      // on every word, and a long document's diff is not worth redoing that often.
+      this.local.diffs = new WeakMap()
     }
 
     onMount() {
@@ -54,6 +68,7 @@
         this.local.chat = chat
         this.local.offChat = chat ? chat.onChange(() => this.pull()) : null
         this.local.stick = true
+        this.local.toggled = new Set()
       }
       this.pull()
     }
@@ -73,16 +88,54 @@
       if (!chat) {
         this.state.messages = []
         this.state.attachments = []
-        this.state.streaming = null
+        this.state.busy = null
         return
       }
-      this.state.messages = chat.session.messages.map((m) => ({
+      const writing = chat.session.mode === 'write'
+      const pending = chat.pending
+      this.state.messages = chat.session.messages.map((m, index) => ({
         role: m.role,
         text: m.text,
+        prepare: !!m.prepare,
         chips: (m.attachments || []).map(chip),
+        proposal: m.proposal ? this.proposalView(m.proposal, index) : null,
       }))
-      this.state.streaming = chat.state === 'streaming' ? chat.streaming : null
+      this.state.busy = chat.state === 'idle' ? null : chat.state
+      this.state.streaming = chat.streaming
       this.state.attachments = chat.attachments.map(chip)
+      this.state.canPrepare = writing && !pending && chat.session.messages.length > 0
+      this.state.placeholder = writing && pending ? 'Say what to change in the proposal…' : 'Ask, or say what should change…'
+    }
+
+    proposalView(proposal, index) {
+      let diff = this.local.diffs.get(proposal)
+      if (!diff) {
+        diff = MdBoss.proposalDiff(proposal.base, proposal.document)
+        this.local.diffs.set(proposal, diff)
+      }
+      const open = (proposal.status === 'pending') !== this.local.toggled.has(index)
+      return {
+        index,
+        status: proposal.status,
+        label: STATUS[proposal.status],
+        summary: proposal.summary || 'Proposed change',
+        added: diff.added,
+        removed: diff.removed,
+        open,
+        lines: open ? diff.lines : [],
+        images: proposal.images.map((image) => ({
+          name: image.name,
+          alt: image.alt,
+          replaces: image.replaces,
+          url: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(image.svg),
+        })),
+      }
+    }
+
+    toggleChanges(index) {
+      const i = Number(index)
+      if (!this.local.toggled.delete(i)) this.local.toggled.add(i)
+      this.pull()
     }
 
     /** A link in a reply never navigates the app window: the web goes to the browser, the
@@ -109,7 +162,7 @@
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
         event.preventDefault()
         this.send()
-      } else if (event.key === 'Escape' && this.state.streaming !== null) {
+      } else if (event.key === 'Escape' && this.state.busy) {
         event.preventDefault()
         this.stop()
       }
@@ -123,12 +176,25 @@
 
     send() {
       const field = this.find('.field')
-      if (!field || !field.value.trim() || this.state.streaming !== null) return
+      if (!field || !field.value.trim() || this.state.busy) return
       const text = field.value
       field.value = ''
       this.grow(field)
       this.local.stick = true
       void MdBoss.manager.sendToChat(text)
+    }
+
+    prepare() {
+      this.local.stick = true
+      void MdBoss.manager.prepareChange()
+    }
+
+    apply() {
+      void MdBoss.manager.applyProposal()
+    }
+
+    discard() {
+      MdBoss.manager.discardProposal()
     }
 
     stop() {
@@ -307,6 +373,169 @@
     padding: 0 12px;
     border-radius: 5px;
   }
+
+  /* The button's own turn, not something typed: quieter than a message. */
+  .message.user.prepare {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+    color: var(--muted);
+  }
+
+  /* MARK: Proposed change */
+
+  .proposal {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .proposal.superseded,
+  .proposal.discarded {
+    border-color: var(--border);
+    color: var(--muted);
+  }
+
+  .proposal .head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .proposal .summary {
+    flex: 1;
+    min-width: 0;
+    font-weight: 600;
+  }
+
+  .proposal .stats {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .stats .plus {
+    color: var(--alert-tip);
+  }
+
+  .stats .minus {
+    color: var(--alert-caution);
+  }
+
+  .proposal .status {
+    color: var(--muted);
+  }
+
+  .proposal.applied .status {
+    color: var(--alert-tip);
+    font-weight: 600;
+  }
+
+  .proposal .toggle {
+    align-self: flex-start;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--link);
+    font-family: inherit;
+  }
+
+  .diff {
+    max-height: 360px;
+    overflow: auto;
+    padding: 4px 0;
+    border: 1px solid var(--code-border);
+    border-radius: 6px;
+    background: var(--code-bg);
+    line-height: 1.45;
+  }
+
+  .diff .line {
+    position: relative;
+    padding: 0 10px 0 24px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: var(--text);
+  }
+
+  .diff .line::before {
+    position: absolute;
+    left: 9px;
+  }
+
+  .diff .add {
+    background: color-mix(in srgb, var(--alert-tip) 14%, transparent);
+  }
+
+  .diff .add::before {
+    content: '+';
+    color: var(--alert-tip);
+  }
+
+  .diff .remove {
+    background: color-mix(in srgb, var(--alert-caution) 14%, transparent);
+  }
+
+  .diff .remove::before {
+    content: '−';
+    color: var(--alert-caution);
+  }
+
+  .diff .gap {
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .image {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 150px;
+  }
+
+  .image img {
+    box-sizing: border-box;
+    width: 150px;
+    height: 96px;
+    padding: 4px;
+    object-fit: contain;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+  }
+
+  .image .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+  }
+
+  .decide {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .decide button {
+    height: calc(var(--font-buttons) + 12px);
+    padding: 0 14px;
+    border-radius: 5px;
+  }
+
+  .decide button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 </style>
 
 {#if state.missing}
@@ -315,7 +544,7 @@
   <div class="transcript" onscroll="fez.scrolled(event)" onclick="fez.clicked(event)">
     <div class="thread">
       {#each state.messages as message}
-        <div class={'message ' + message.role}>
+        <div class={'message ' + message.role + (message.prepare ? ' prepare' : '')}>
           {#if message.role === 'assistant'}
             <span class="who text-title">{state.assistant}</span>
           {/if}
@@ -331,16 +560,55 @@
           {:else}
             <div class="text text-default">{message.text}</div>
           {/if}
+          {#if message.proposal}
+            <div class={'proposal ' + message.proposal.status}>
+              <div class="head">
+                <span class="summary text-default">{message.proposal.summary}</span>
+                <span class="stats text-small text-mono"><span class="plus">+{message.proposal.added}</span> <span class="minus">−{message.proposal.removed}</span></span>
+              </div>
+              {#if message.proposal.label}
+                <span class="status text-small">{message.proposal.label}</span>
+              {/if}
+              {#if message.proposal.images.length && message.proposal.status !== 'superseded'}
+                <div class="images">
+                  {#each message.proposal.images as image}
+                    <div class="image" title={image.alt}>
+                      <img src={image.url} alt={image.alt}>
+                      <span class="name text-small text-mono">{image.replaces ? 'replaces ' : 'new '}assets/{image.name}</span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+              <button class="toggle text-small pointer" onclick="fez.toggleChanges({message.proposal.index})">{message.proposal.open ? 'Hide changes' : 'Show changes'}</button>
+              {#if message.proposal.open}
+                <div class="diff text-small text-mono">
+                  {#each message.proposal.lines as line}
+                    <div class={'line ' + line.kind}>{line.kind === 'gap' ? '⋯' : line.text}</div>
+                  {:else}
+                    <div class="line gap">No changes to the text</div>
+                  {/each}
+                </div>
+              {/if}
+              {#if message.proposal.status === 'pending'}
+                <div class="decide">
+                  <button class="button-outline text-buttons pointer" disabled={state.busy ? 'disabled' : ''} onclick="fez.discard()">Discard</button>
+                  <button class="button-link text-buttons pointer" disabled={state.busy ? 'disabled' : ''} onclick="fez.apply()">Apply</button>
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
       {:else}
-        {#if state.streaming === null}
+        {#unless state.busy}
           <div class="hint empty-state text-default">Talk the document through. Click a block in the preview to point at it.</div>
-        {/if}
+        {/unless}
       {/each}
-      {#if state.streaming !== null}
+      {#if state.busy}
         <div class="message assistant streaming">
           <span class="who text-title">{state.assistant}</span>
-          {#if state.streaming}
+          {#if state.busy === 'preparing'}
+            <div class="thinking text-default">Preparing the change…</div>
+          {:else if state.streaming}
             <markdown-text class="text-default" :text="state.streaming"></markdown-text>
           {:else}
             <div class="thinking text-default">Thinking…</div>
@@ -358,12 +626,15 @@
           {/each}
         </div>
       {/if}
-      <textarea class="field text-default" placeholder="Ask, or say what should change…" rows="3" spellcheck="true" onkeydown="fez.keyDown(event)" oninput="fez.grow(this)"></textarea>
+      <textarea class="field text-default" placeholder={state.placeholder} rows="3" spellcheck="true" onkeydown="fez.keyDown(event)" oninput="fez.grow(this)"></textarea>
       <div class="actions">
         <span class="keys text-small">Return to send, ⇧Return for a new line</span>
-        {#if state.streaming !== null}
+        {#if state.busy}
           <button class="button-outline text-buttons pointer" title="Stop (Esc)" onclick="fez.stop()">Stop</button>
         {:else}
+          {#if state.canPrepare}
+            <button class="button-outline text-buttons pointer" title="Turn the conversation into a proposed change" onclick="fez.prepare()">Prepare change</button>
+          {/if}
           <button class="button-link text-buttons pointer" onclick="fez.send()">Send</button>
         {/if}
       </div>

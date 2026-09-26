@@ -8,8 +8,10 @@ const PATH = '/home/dev/notes/plan.md'
 const DOC = Array.from({ length: 30 }, (_, i) => `Step ${i + 1}.`).join('\n')
 const tick = () => new Promise((r) => setTimeout(r, 0))
 
-async function setup(files: Record<string, string> = {}) {
-  installNative(memoryNative({ [PATH]: DOC, ...files }))
+async function setup(extra: Record<string, string> = {}) {
+  // The map the native reads and writes, so a test can poke it and see what landed.
+  const files: Record<string, string> = { [PATH]: DOC, ...extra }
+  installNative(memoryNative(files))
   const settings = await SettingsStore.load()
   const chat = await AIChat.open(PATH, { settings, dialect: () => 'DIALECT' })
   return { chat, settings, files, ai: native().ai as MemoryAi }
@@ -167,7 +169,7 @@ describe('AI chat persistence', () => {
     again.reset()
     await again.flushed()
     const fresh = await AIChat.open(PATH, { settings, dialect: () => '' })
-    expect(fresh.session).toEqual({ path: PATH, claudeSessionId: null, lastSentText: null, sentImages: [], mode: 'ask', messages: [] })
+    expect(fresh.session).toEqual({ path: PATH, claudeSessionId: null, lastSentText: null, sentImages: [], mode: 'ask', event: null, messages: [] })
   })
 
   test('a corrupt file, or one written for another path, is a new chat', async () => {
@@ -179,5 +181,123 @@ describe('AI chat persistence', () => {
     expect((await AIChat.open(PATH, { settings, dialect: () => '' })).session.messages).toEqual([])
     files[file] = JSON.stringify({ path: '/elsewhere.md', messages: [{ role: 'user', text: 'x' }] })
     expect((await AIChat.open(PATH, { settings, dialect: () => '' })).session.messages).toEqual([])
+  })
+})
+
+describe('AI chat proposals', () => {
+  const proposal = (document: string, extra: Record<string, unknown> = {}) => ({
+    structured: { reply: 'Here it is.', summary: 'Shorter steps', document, images: [], ...extra },
+  })
+
+  test('Prepare change asks for the structured answer and leaves a pending proposal against the text it saw', async () => {
+    const { chat, ai } = await setup()
+    await chat.send('Merge steps 1 and 2.', DOC)
+    ai.script(proposal('merged'))
+    const states: string[] = []
+    chat.onChange(() => states.push(chat.state))
+    await chat.prepare(DOC)
+
+    const request = ai.requests[1]
+    expect(request.schema).not.toBeNull()
+    expect(request.text).toContain('Prepare the change we have discussed.')
+    expect(states).toContain('preparing')
+    expect(chat.session.messages.at(-2)).toMatchObject({ role: 'user', text: 'Prepare change', prepare: true })
+    expect(chat.session.messages.at(-1)).toMatchObject({ role: 'assistant', text: 'Here it is.' })
+    expect(chat.pending).toEqual({ summary: 'Shorter steps', document: 'merged', images: [], base: DOC, status: 'pending' })
+  })
+
+  test('in Write mode a message revises the pending change; in Ask mode it is only talk', async () => {
+    const { chat, ai } = await setup()
+    ai.script(proposal('first'))
+    await chat.prepare(DOC)
+    const first = chat.pending
+    ai.script(proposal('second'))
+    await chat.send('Keep step 3.', DOC)
+    expect(ai.requests[1].schema).not.toBeNull()
+    expect(ai.requests[1].text).toContain('Keep step 3.\n\nRevise the proposed change')
+    expect(first?.status).toBe('superseded')
+    expect(chat.pending?.document).toBe('second')
+
+    chat.setMode('ask')
+    await chat.send('Why step 3?', DOC)
+    expect(ai.requests[2].schema).toBeNull()
+    expect(chat.pending?.document).toBe('second')
+  })
+
+  test('Prepare is only for Write mode and only when nothing is pending', async () => {
+    const { chat, ai } = await setup()
+    chat.setMode('ask')
+    await chat.prepare(DOC)
+    chat.setMode('write')
+    ai.script(proposal('one'))
+    await chat.prepare(DOC)
+    await chat.prepare(DOC)
+    expect(ai.requests.length).toBe(1)
+  })
+
+  test('an answer that does not read whole is an error row, and nothing is proposed', async () => {
+    const { chat, ai } = await setup()
+    ai.script({ structured: { reply: 'x', summary: 'y' } })
+    await chat.prepare(DOC)
+    expect(chat.pending).toBeNull()
+    expect(chat.session.messages.at(-1)).toEqual({ role: 'error', text: 'The proposed change came back incomplete. Try again.' })
+  })
+
+  test('stopping a revision leaves the change it would have revised pending', async () => {
+    const { chat, ai } = await setup()
+    ai.script(proposal('first'))
+    await chat.prepare(DOC)
+    ai.script({ ...proposal('second'), hold: true })
+    const revising = chat.send('More.', DOC)
+    await tick()
+    expect(chat.state).toBe('preparing')
+    chat.stop()
+    await revising
+    expect(chat.pending?.document).toBe('first')
+    expect(chat.state).toBe('idle')
+  })
+
+  test('applied: the model is told once, and not sent the text it wrote', async () => {
+    const { chat, ai } = await setup()
+    ai.script(proposal('merged'))
+    await chat.prepare(DOC)
+    chat.markApplied('merged')
+    expect(chat.session.messages.at(-1)?.proposal?.status).toBe('applied')
+    expect(chat.pending).toBeNull()
+
+    await chat.send('Thanks. Anything else?', 'merged')
+    expect(ai.requests[1].text).toContain('<event>The user applied your proposed change')
+    expect(ai.requests[1].text).not.toContain('<document')
+    await chat.send('And now?', 'merged')
+    expect(ai.requests[2].text).not.toContain('<event>')
+  })
+
+  test('discarded: the proposal settles and the next turn says so', async () => {
+    const { chat, ai } = await setup()
+    ai.script(proposal('merged'))
+    await chat.prepare(DOC)
+    chat.discard()
+    expect(chat.pending).toBeNull()
+    await chat.send('Start over.', DOC)
+    expect(ai.requests[1].text).toContain('<event>The user discarded your proposed change.</event>')
+  })
+
+  test('a drawing is marked as replacing a file already in assets/', async () => {
+    const { chat, ai } = await setup({ '/home/dev/notes/assets/old.svg': '<svg/>' })
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
+    ai.script(proposal('doc', { images: [{ name: 'old.svg', alt: 'Old', svg }, { name: 'new.svg', alt: 'New', svg }] }))
+    await chat.prepare(DOC)
+    expect(chat.pending?.images.map((i) => [i.name, i.replaces])).toEqual([['old.svg', true], ['new.svg', false]])
+  })
+
+  test('a stored proposal that does not read whole is dropped on load, its message kept', async () => {
+    const { settings, files } = await setup()
+    files[await sessionFile(PATH)] = JSON.stringify({
+      path: PATH,
+      messages: [{ role: 'assistant', text: 'Here.', proposal: { summary: 's', status: 'pending' } }],
+    })
+    const chat = await AIChat.open(PATH, { settings, dialect: () => '' })
+    expect(chat.session.messages).toEqual([{ role: 'assistant', text: 'Here.', proposal: undefined }])
+    expect(chat.pending).toBeNull()
   })
 })

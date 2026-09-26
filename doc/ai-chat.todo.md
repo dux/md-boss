@@ -45,8 +45,9 @@ Apply saves them to `assets/` next to the document, and the revision embeds them
   * a collapsible unified diff, additions in `--alert-tip` and deletions in `--alert-caution`
   * thumbnails of the new SVGs, each marked new or replacing an existing file
   * **Apply** and **Discard**
-* While a proposal is pending, every message revises it.
-  The reply streams, a new card replaces the old one, and the old card collapses to "Revision N".
+* While a proposal is pending, every message in Write mode revises it; in Ask mode a message is only talk.
+  A new card takes over, and the old one folds to its summary, marked "Revised below".
+* Applying or discarding is told to the model once, as an `<event>` on the next turn, and an applied text is not sent back to the model that wrote it.
 * Apply writes the SVGs to `assets/`, puts the new text in the buffer, saves, keeps notes on their lines, and marks the turn "Applied".
   If the document changed after the proposal was prepared, Apply refuses with "The document changed - prepare the change again".
   Cmd-Z in the raw pane undoes an Apply as one step.
@@ -170,17 +171,17 @@ Each step ends with a working app.
 * [x] Bundled server in the Hammerfile and the shell path - pulled forward, so a package built after this step still starts
 * [x] `aiPrompt.ts` and `aiChat.ts`: chat only, Ask/Write, persistence, reseed, tests
 * [x] Pane, settings, menu, width; preview pick and "Ask AI" menus
-* [ ] Prepare, revise, proposal card, Apply (assets, notes shift, stale-base refusal), tests
+* [x] Prepare, revise, proposal card, Apply (assets, notes shift, stale-base refusal), tests
 * [ ] `hammer build`, then launch the bundle from Finder and chat
 * [ ] README section
 
 ## Errors and edges
 
 * [ ] the `claude` process dies mid-turn: the turn goes to `error` and the pane offers Retry
-* [ ] Escape and Stop interrupt a streaming turn; interrupting during Prepare change leaves the previous proposal intact
+* [x] Escape and Stop interrupt a streaming turn; interrupting during Prepare change leaves the previous proposal intact
 * [ ] switching documents, closing the pane or losing the server mid-turn aborts the turn and never leaks the subprocess
 * [ ] rate limits, refusals and an expired login show up as readable rows, never as a stuck spinner
-* [ ] a structured result that fails the schema is an error row, and nothing is applied
+* [x] a structured result that fails the schema is an error row, and nothing is applied
 
 ## Verification
 

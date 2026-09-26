@@ -17,7 +17,7 @@ import { LineIndex } from './lineIndex'
 import { resolveLinkTarget } from './linkTarget'
 import { snippet } from './markdownLinks'
 import { type Note, suggestedTitle } from './notes'
-import type { Edit } from './noteShift'
+import { editsBetween, type Edit } from './noteShift'
 import { basename, dirname, joinPath, normalizePath, relativeTo } from './paths'
 import { Prompts } from './prompts'
 import { RootFolders } from './rootFolders'
@@ -477,6 +477,60 @@ export class Manager {
       this.claude = { path, status }
     }
     return this.claude.status
+  }
+
+  /** Prepare change: the conversation so far, as a proposed revision of the editor's text. */
+  async prepareChange(): Promise<void> {
+    const doc = this.document
+    if (!doc || !this.chat) return
+    await this.chat.prepare(doc.text)
+  }
+
+  /** Apply: the proposed text becomes the document - drawings written to assets/ first, the
+   *  buffer swapped in one undoable step, notes carried hunk by hunk, the file saved. Refused
+   *  once the editor holds anything but the text the change was prepared against: applying
+   *  it would silently throw those edits away. */
+  async applyProposal(): Promise<void> {
+    const doc = this.document
+    const chat = this.chat
+    const proposal = chat?.pending
+    if (!doc || !chat || !proposal || chat.state !== 'idle') return
+    if (doc.text !== proposal.base) {
+      this.showError('The document changed - prepare the change again')
+      return
+    }
+    try {
+      if (proposal.images.length) {
+        const assets = joinPath(dirname(doc.path), 'assets')
+        await native().fs.mkdir(assets)
+        for (const image of proposal.images) await native().fs.write(joinPath(assets, image.name), image.svg)
+      }
+      const before = doc.text
+      doc.replaceBuffer(proposal.document)
+      await this.followNotes(doc.path, before, proposal.document)
+      await doc.save()
+      chat.markApplied(proposal.document)
+      this.toast.success(`Applied the change to ${doc.name}`)
+    } catch (err) {
+      this.showError(`Could not apply the change: ${String(err)}`)
+    }
+    this.emit()
+  }
+
+  discardProposal(): void {
+    this.chat?.discard()
+  }
+
+  /** Notes ride each changed run separately, last to first, so a note between two hunks
+   *  stays on its line rather than falling into one edit spanning both. */
+  private async followNotes(path: string, before: string, after: string): Promise<void> {
+    if (!this.notes.hasNotes(path)) return
+    let current = before
+    for (const { edit, text } of editsBetween(before, after).reverse()) {
+      const next = current.slice(0, edit.start) + text + current.slice(edit.end)
+      await this.notes.shift(path, new LineIndex(current), new LineIndex(next), edit)
+      current = next
+    }
   }
 
   /** A message from the AI pane, about the document as the editor holds it now. */

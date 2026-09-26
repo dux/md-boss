@@ -6,6 +6,7 @@
 // noted line takes the note down with its text rather than leaving it behind on the new
 // blank line.
 
+import { diffLines } from 'diff'
 import type { LineIndex } from './lineIndex'
 
 /** One replacement, in UTF-16 offsets against the text *before* it happened. */
@@ -32,4 +33,38 @@ export function shiftLine(line: number, from: LineIndex, to: LineIndex, edit: Ed
   const range = from.rangeOfLine(line)
   if (!range) return null
   return to.lineAt(shiftOffset(range.start, edit))
+}
+
+/** One changed run of lines: the edit, and the text it put in. */
+export interface Replacement {
+  edit: Edit
+  text: string
+}
+
+/** The line-level replacements that turn `before` into `after`, one per changed run, in
+ *  `before`'s offsets and in order - for a whole-text swap such as an applied AI change, so
+ *  notes can follow each hunk instead of the one edit spanning them all swallowing every
+ *  note in between. Apply them last to first: an edit never moves the offsets above it. */
+export function editsBetween(before: string, after: string): Replacement[] {
+  const found: Replacement[] = []
+  let offset = 0
+  let open: Replacement | null = null
+  for (const change of diffLines(before, after)) {
+    if (!change.added && !change.removed) {
+      if (open) found.push(open)
+      open = null
+      offset += change.value.length
+      continue
+    }
+    open ??= { edit: { start: offset, end: offset, length: 0 }, text: '' }
+    if (change.removed) {
+      offset += change.value.length
+      open.edit.end = offset
+    } else {
+      open.text += change.value
+      open.edit.length = open.text.length
+    }
+  }
+  if (open) found.push(open)
+  return found
 }
