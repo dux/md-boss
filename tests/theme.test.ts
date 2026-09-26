@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { jsLiteral } from '../src/preview/page'
 import {
-  DENSITY_TOKENS, STYLES, STYLE_IDS, THEMES, THEME_IDS, TOKENS, contrast, flippedTheme, isDark,
-  isValidHex, rootCSS, selectingMode, selectingStyle, styleNamed, themeForStyle, themeNamed,
+  DENSITY_TOKENS, GITHUB_BG, STYLES, STYLE_IDS, THEMES, THEME_IDS, TOKENS, contrast, flippedTheme, isDark,
+  isValidHex, previewRootCSS, rootCSS, selectingMode, selectingStyle, styleNamed, themeForStyle, themeNamed,
   tokenValue, type ThemeID,
 } from '../src/theme/theme'
 
@@ -23,6 +23,28 @@ describe('theme', () => {
   test('every appearance id has exactly one theme', () => {
     for (const id of THEME_IDS) expect(THEMES.filter((t) => t.id === id)).toHaveLength(1)
     expect(THEMES.map((t) => t.id)).toEqual([...THEME_IDS])
+  })
+
+  test('the GitHub preview uses the github-markdown-css light palette', () => {
+    expect(GITHUB_BG).toBe('#FFFFFF')
+    const light = previewRootCSS(themeNamed('paper'), 'github')
+    const dark = previewRootCSS(themeNamed('dark'), 'github')
+    const compact = previewRootCSS(themeNamed('compact-dark'), 'github')
+    for (const css of [light, dark, compact]) {
+      expect(css).toContain('--bg: #FFFFFF;')
+      expect(css).toContain('--text: #1F2328;')
+      expect(css).toContain('--code-bg: #F6F8FA;')
+      expect(css).toContain('--code-inline-bg: #818B981F;')
+      expect(css).toContain('--link: #0969DA;')
+      expect(css).toContain('--muted: #59636E;')
+      expect(css).toContain('--border: #D1D9E0;')
+      expect(css).toContain('color-scheme: light')
+      expect(css).not.toContain('#F2EADA')
+      expect(css).not.toContain('#FBF7EF')
+    }
+    expect(compact).toContain('--document-font-offset: -2px')
+    expect(previewRootCSS(themeNamed('paper'), 'default')).toBe(rootCSS(themeNamed('paper')))
+    expect(contrast('#1F2328', GITHUB_BG)).toBeGreaterThanOrEqual(7)
   })
 
   test('default and compact share the house palettes', () => {

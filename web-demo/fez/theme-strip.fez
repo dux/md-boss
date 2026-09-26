@@ -9,9 +9,9 @@
       // than a different colour.
       this.state.themes = [
         { name: 'Default Light', id: 'paper', compact: false, bg: '#FBF7EF', surface: '#F3EDE1', border: '#E3D9C6', text: '#2B2723', muted: '#756C61', accent: '#9A5B34' },
-        { name: 'Default Dark', id: 'dark', compact: false, bg: '#1E1C1A', surface: '#26231F', border: '#38342E', text: '#E6E0D6', muted: '#9A9287', accent: '#E0996A' },
+        { name: 'Default Dark', id: 'dark', compact: false, bg: '#1E1C1A', surface: '#26231F', border: '#38342E', text: '#F7F4EE', muted: '#9A9287', accent: '#E0996A' },
         { name: 'Compact Light', id: 'compact-light', compact: true, bg: '#FBF7EF', surface: '#F3EDE1', border: '#E3D9C6', text: '#2B2723', muted: '#756C61', accent: '#9A5B34' },
-        { name: 'Compact Dark', id: 'compact-dark', compact: true, bg: '#1E1C1A', surface: '#26231F', border: '#38342E', text: '#E6E0D6', muted: '#9A9287', accent: '#E0996A' }
+        { name: 'Compact Dark', id: 'compact-dark', compact: true, bg: '#1E1C1A', surface: '#26231F', border: '#38342E', text: '#F7F4EE', muted: '#9A9287', accent: '#E0996A' }
       ]
     }
   }

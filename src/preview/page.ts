@@ -1,5 +1,6 @@
 import fezJS from '@dinoreic/fez?raw'
 import type { InstalledMarkdownComponent } from '../models/markdownComponents'
+import type { MarkdownStyle } from '../models/settings'
 import type { TypedBlock } from '../models/typedBlocks'
 import markedJS from 'marked/marked.min.js?raw'
 import highlightJS from './highlight.min.js?raw'
@@ -23,6 +24,8 @@ export interface PreviewPageOptions {
   components: InstalledMarkdownComponent[]
   /** Closed typed blocks in markdown, with absolute source lines and parsed props. */
   typedBlocks: TypedBlock[]
+  /** Paper column or GitHub README layout. Omitted is the paper column. */
+  markdownStyle?: MarkdownStyle
 }
 
 /** A JSON string literal is a JS string literal; `</` is escaped so a document holding
@@ -73,8 +76,9 @@ export function buildPreviewPage(o: PreviewPageOptions): string {
   const installed = o.components
     .map((component) => `Fez.compile(${jsLiteral(component.tag)}, ${jsLiteral(component.source)});`)
     .join('\n')
+  const markdownStyle = o.markdownStyle === 'github' ? 'github' : 'default'
   return `<!DOCTYPE html>
-<html data-asset-base="${escapeAttribute(o.assetBase)}">
+<html data-asset-base="${escapeAttribute(o.assetBase)}" data-md-style="${markdownStyle}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

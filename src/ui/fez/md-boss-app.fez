@@ -193,10 +193,11 @@
     color: var(--muted);
   }
 
-  /* The panel's own controls, right of its label - Back, copy path and the measure arrows
-     rather than floating over the page they act on. They carry their own borders, so the
-     gap is wide enough that two outlines side by side do not read as one smudged control.
-     They never shrink, so the path to their left is what a narrow panel takes it out of. */
+  /* The panel's own controls, right of its label - Back, the preview layout, copy path
+     and the measure arrows rather than floating over the page they act on. They carry
+     their own borders, so the gap is wide enough that two outlines side by side do not
+     read as one smudged control. They never shrink, so the path to their left is what a
+     narrow panel takes it out of. */
   .panel-head .tools {
     flex: none;
     margin-left: auto;
@@ -425,6 +426,11 @@
       {#if state.file && state.panes.includes('preview')}
         <div class="tools" onclick="fez.stop(event)">
           <back-button></back-button>
+          <!-- Markdown only: a table has no layout to switch. Before copy path, which a
+               .csv still has. -->
+          {#if state.kind === 'markdown'}
+            <render-style></render-style>
+          {/if}
           <!-- Not inside the markdown test below: a .csv has a path worth copying too. -->
           <copy-path></copy-path>
           <!-- The measure is the rendered column's, so a table has no use for it. -->

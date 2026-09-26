@@ -43,6 +43,7 @@ Rendering is GitHub-flavored markdown - tables, task lists, code highlighting, a
 alerts in five colours - done entirely offline by a bundled `marked.js` in an embedded web view.
 No network, no telemetry, no account.
 Long documents get a quiet linked Contents list from their second- and third-level headings.
+The GitHub layout leaves that list out.
 
 Typed blocks such as `:::info`, `:::warning` and `:::details title="More"` render through
 editable Fez components installed in `~/.config/md-boss/components`.
@@ -109,7 +110,7 @@ Three pieces, and the line between them is the whole design:
 git clone https://github.com/dux/md-boss
 cd md-boss
 hammer install     # bun install + cargo fetch
-hammer dev         # vite plus the shell pointed at it
+bun run dev        # same as hammer dev: vite plus the shell, which opens the app
 ```
 
 Requires [Bun](https://bun.sh) (`curl -fsSL https://bun.sh/install | bash`), a stable Rust
@@ -141,7 +142,7 @@ inside it rather than as a `node_modules`; a checkout runs `server/main.ts` from
 | command | what it does |
 |---|---|
 | `hammer install` | `bun install` and `cargo fetch` - both sides of the toolchain |
-| `hammer dev` | vite on 1430 plus the shell (`cargo run`) pointed at it - the inner loop |
+| `hammer dev` | vite on 1430 plus the shell (`cargo run`) pointed at it - the inner loop. `bun run dev` is the same |
 | `hammer test` | `bun test` and `cargo test` |
 | `hammer lint` | `tsc --noEmit` and `cargo clippy` |
 | `hammer frontend` | everything platform independent: `dist/`, the icon set, the payload tarball |
@@ -193,6 +194,13 @@ reduced page padding, and denser code blocks and tables.
 
 Pick the style and colour mode independently in Settings or from the Appearance menu.
 ⇧⌘D changes only light/dark mode, so Default stays Default and Compact stays Compact.
+
+The preview has a second choice, on the Preview label, before Copy path: Default or GitHub.
+That one is how the document is drawn, and it is remembered for every file.
+Default is the paper column.
+GitHub is the layout a README uses on GitHub: system sans on a white page, a rule under the first two heading levels, upright quotes, and code blocks on GitHub's gray.
+It does not draw the Contents list.
+Light, dark, and Compact still apply on top of either layout.
 
 Both palettes are gated by the test suite at 7:1 contrast for body text and 4.5:1 for
 secondary text against their own backgrounds.

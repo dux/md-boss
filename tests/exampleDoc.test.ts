@@ -117,6 +117,7 @@ describe('what the example page demonstrates', () => {
 
   test('explains and qualifies for the automatic Contents list it draws', () => {
     expect(exampleText).toContain('gets a quiet linked Contents list after its first `#` heading')
+    expect(exampleText).toContain('The GitHub layout does not draw that list.')
     expect(exampleText).toContain('the list sits at the top, below front matter')
     expect(exampleText.match(/^## /gm)?.length ?? 0).toBeGreaterThanOrEqual(2)
   })

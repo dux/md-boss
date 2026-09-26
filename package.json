@@ -4,7 +4,7 @@
   "version": "0.1.2",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "hammer dev",
     "build": "tsc --noEmit && vite build",
     "server": "bun server/main.ts",
     "test": "bun test"

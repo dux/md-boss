@@ -260,6 +260,23 @@ describe('theme switching', () => {
   })
 })
 
+describe('markdown layout', () => {
+  test('the choice is one setting for every file, and an unknown name is ignored', async () => {
+    installNative(memoryNative({ '/w/a.md': 'a' }))
+    const manager = new Manager(await SettingsStore.load(), await RootFolders.load(), '/home/dev')
+    expect(manager.markdownStyle).toBe('default')
+    manager.setMarkdownStyle('github')
+    expect(manager.settings.data.markdownStyle).toBe('github')
+    expect(manager.toast.text).toBeNull()
+    manager.setMarkdownStyle('nope')
+    expect(manager.markdownStyle).toBe('github')
+    manager.setMarkdownStyle('github')
+    expect(manager.markdownStyle).toBe('github')
+    manager.setMarkdownStyle('default')
+    expect(manager.markdownStyle).toBe('default')
+  })
+})
+
 describe('text sizes', () => {
   test('zoom moves only the document sizes and clamps; reset restores sizes and measure', async () => {
     installNative(memoryNative({ '/w/a.md': 'a' }))

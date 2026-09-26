@@ -5,6 +5,15 @@
 export const PANES = ['preview', 'raw', 'ai', 'notes'] as const
 export type Pane = (typeof PANES)[number]
 
+/** The preview's two layouts. `default` is the paper column; `github` is a README's. */
+export const MARKDOWN_STYLES = ['default', 'github'] as const
+export type MarkdownStyle = (typeof MARKDOWN_STYLES)[number]
+
+/** An unknown stored name is the paper layout, so a hand-edited file cannot blank the page. */
+export function markdownStyleNamed(id: string): MarkdownStyle {
+  return (MARKDOWN_STYLES as readonly string[]).includes(id) ? (id as MarkdownStyle) : 'default'
+}
+
 export interface SettingsData {
   themeID: string
   /** Which panes the viewer shows, left to right in PANES order. */
@@ -34,6 +43,8 @@ export interface SettingsData {
   aiModel: string | null
   /** The `claude` the AI pane runs; null finds it on PATH and in the usual places. */
   claudePath: string | null
+  /** How the preview draws markdown. One choice for every file. */
+  markdownStyle: MarkdownStyle
 }
 
 export function defaultSettings(): SettingsData {
@@ -58,6 +69,7 @@ export function defaultSettings(): SettingsData {
     ],
     aiModel: null,
     claudePath: null,
+    markdownStyle: 'default',
   }
 }
 
@@ -83,7 +95,9 @@ export function parseSettings(text: string | null | undefined): SettingsData {
     if (value === undefined) continue
     if (sameShape(value, fallback)) out[key] = value
   }
-  return out as unknown as SettingsData
+  const data = out as unknown as SettingsData
+  data.markdownStyle = markdownStyleNamed(data.markdownStyle)
+  return data
 }
 
 function sameShape(value: unknown, fallback: unknown): boolean {

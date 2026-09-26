@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   FONT_SETTINGS, ZOOMABLE, canChangeFontSize, captionSize, clampFont, defaultSettings, fontDefault,
-  paneNamed, parseSettings, resetFontSizes, serializeSettings, setFontSize, showPane, togglePane,
+  markdownStyleNamed, paneNamed, parseSettings, resetFontSizes, serializeSettings, setFontSize, showPane, togglePane,
   visiblePanes,
 } from '../src/models/settings'
 
@@ -84,6 +84,15 @@ describe('loading settings.json', () => {
     expect(parseSettings('{"lastOpenedFile": "/a.md"}').lastOpenedFile).toBe('/a.md')
     expect(parseSettings('{"lastOpenedFile": null}').lastOpenedFile).toBeNull()
     expect(parseSettings('{"lastOpenedFolder": "/w"}').lastOpenedFolder).toBe('/w')
+  })
+
+  test('markdown style is default or github, and an unknown name is the paper layout', () => {
+    expect(parseSettings(null).markdownStyle).toBe('default')
+    expect(parseSettings('{"markdownStyle":"github"}').markdownStyle).toBe('github')
+    expect(parseSettings('{"markdownStyle":"compact"}').markdownStyle).toBe('default')
+    expect(parseSettings('{"markdownStyle":1}').markdownStyle).toBe('default')
+    expect(markdownStyleNamed('github')).toBe('github')
+    expect(markdownStyleNamed('nope')).toBe('default')
   })
 
   test('serialize is pretty, sorted, and round-trips', () => {

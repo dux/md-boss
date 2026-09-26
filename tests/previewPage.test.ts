@@ -117,10 +117,44 @@ describe('the Markdown preview page', () => {
 
     expect(page).toContain('function insertContents()')
     expect(page).toContain("querySelectorAll('h2, h3')")
+    expect(page).toContain("getAttribute('data-md-style') === 'github'")
     expect(page).toContain('if (h2Count < 2 && h3Count < 2) { return; }')
     expect(page).toContain("nav.setAttribute('aria-label', 'Contents')")
     expect(page).toContain("assignSlugs();\n    insertContents();")
     expect(page).toContain('.md-toc-h3 { padding-left: 1.25em; }')
     expect(page).toContain('.md-toc a { color: var(--muted);')
+  })
+
+  test('the page is told which markdown layout to draw, and can be told again', () => {
+    const paper = buildPreviewPage({
+      markdown: '# Guide',
+      themeCSS: '',
+      fontSize: 17,
+      measure: 48,
+      baseURL: null,
+      assetBase: '',
+      components: [],
+      typedBlocks: [],
+    })
+    const github = buildPreviewPage({
+      markdown: '# Guide',
+      themeCSS: '',
+      fontSize: 17,
+      measure: 48,
+      baseURL: null,
+      assetBase: '',
+      components: [],
+      typedBlocks: [],
+      markdownStyle: 'github',
+    })
+
+    expect(paper).toContain('data-md-style="default"')
+    expect(github).toContain('data-md-style="github"')
+    expect(github).toContain('window.mdSetMarkdownStyle = function (style)')
+    expect(github).toContain('html[data-md-style="github"] h1')
+    expect(github).toContain('border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent)')
+    expect(github).toContain('background: var(--code-bg)')
+    expect(github).toContain('background: var(--code-inline-bg)')
+    expect(github).toContain('--sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif')
   })
 })

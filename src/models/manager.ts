@@ -23,7 +23,7 @@ import { Prompts } from './prompts'
 import { RootFolders } from './rootFolders'
 import { ScrollMemory } from './scrollMemory'
 import { ScrollSync } from './scrollSync'
-import { canChangeFontSize, defaultSettings, FONT_SETTINGS, fontDefault, type FontSetting, fontSize, type Pane, resetFontSizes, setFontSize, showPane, togglePane, visiblePanes, ZOOMABLE, fontSetting } from './settings'
+import { canChangeFontSize, defaultSettings, FONT_SETTINGS, fontDefault, type FontSetting, fontSize, MARKDOWN_STYLES, markdownStyleNamed, type MarkdownStyle, type Pane, resetFontSizes, setFontSize, showPane, togglePane, visiblePanes, ZOOMABLE, fontSetting } from './settings'
 import { SettingsStore } from './settingsStore'
 import { SidebarSearch } from './sidebarSearch'
 import { Toast } from './toast'
@@ -747,6 +747,17 @@ export class Manager {
     this.settings.patch({ themeID: theme.id })
     this.flash(`${theme.title} appearance`)
     this.emit()
+  }
+
+  /** The preview's layout, one for every file. Unknown names are ignored. */
+  get markdownStyle(): MarkdownStyle {
+    return markdownStyleNamed(this.settings.data.markdownStyle)
+  }
+
+  setMarkdownStyle(id: string): void {
+    if (!(MARKDOWN_STYLES as readonly string[]).includes(id)) return
+    if (this.settings.data.markdownStyle === id) return
+    this.settings.patch({ markdownStyle: id as MarkdownStyle })
   }
 
   // MARK: Text size

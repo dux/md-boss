@@ -1,8 +1,8 @@
 // Preview page script, inlined into the preview iframe by src/preview/page.ts.
 //
-// App -> page: mdRender, mdSetTheme, mdSetFontSize, mdSetMeasure, mdScrollToAnchor,
-//              mdScrollToLine, mdSetNotes, mdHighlightLine, mdSetBase, mdSetPickMode -
-//              called on the iframe's window.
+// App -> page: mdRender, mdSetTheme, mdSetFontSize, mdSetMeasure, mdSetMarkdownStyle,
+//              mdScrollToAnchor, mdScrollToLine, mdSetNotes, mdHighlightLine, mdSetBase,
+//              mdSetPickMode - called on the iframe's window.
 // Page -> app: window.parent.postMessage({kind, ...}) - the pane listens for "message".
 
 (function () {
@@ -84,7 +84,12 @@
 
   // A short document needs no index. Two headings at either supported level is enough to
   // earn one; H2 and H3 are not added together, so one of each still leaves the page alone.
+  // GitHub's README has no contents list, so that layout drops one that was already drawn.
   function insertContents() {
+    var existing = content.querySelector('nav.md-toc');
+    if (existing) { existing.remove(); }
+    if (document.documentElement.getAttribute('data-md-style') === 'github') { return; }
+
     var headings = Array.from(content.querySelectorAll('h2, h3'));
     var h2Count = headings.filter(function (heading) { return heading.tagName === 'H2'; }).length;
     var h3Count = headings.length - h2Count;
@@ -817,6 +822,15 @@
 
   window.mdSetMeasure = function (em) {
     document.documentElement.style.setProperty('--measure', em + 'em');
+    invalidate();
+  };
+
+  // `default` is the paper column; `github` is the README layout. The CSS for both is
+  // already on the page. The contents list is redrawn with the layout, since only the
+  // paper column has one.
+  window.mdSetMarkdownStyle = function (style) {
+    document.documentElement.setAttribute('data-md-style', style === 'github' ? 'github' : 'default');
+    insertContents();
     invalidate();
   };
 

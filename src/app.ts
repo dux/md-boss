@@ -24,7 +24,7 @@ import { buildCSVPage } from './preview/csvPage'
 import { parseCSV } from './models/csvTable'
 import { MarkdownComponents } from './models/markdownComponents'
 import { typedBlocks } from './models/typedBlocks'
-import { isDark, rootCSS, STYLES, themeForStyle, themeNamed } from './theme/theme'
+import { isDark, previewRootCSS, rootCSS, STYLES, themeForStyle, themeNamed } from './theme/theme'
 
 // What .fez components may reach. Fez compiles them at runtime, so they cannot import
 // modules; this object is their one import and the explicit list of the app surface.
@@ -81,6 +81,8 @@ export async function createApp() {
     revealLabel: revealLabel(native().platform),
     isDark,
     rootCSS,
+    /** The preview's palette. GitHub replaces the ivory canvas with white. */
+    previewRootCSS,
     STYLES,
     themeForStyle,
     themeNamed,

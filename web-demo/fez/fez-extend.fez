@@ -123,7 +123,7 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 12px;
     line-height: 1.55;
-    color: #E6E0D6;
+    color: #F7F4EE;
     white-space: pre;
   }
 

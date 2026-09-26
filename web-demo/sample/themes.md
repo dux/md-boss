@@ -10,9 +10,9 @@ reduced page padding, and denser code blocks and tables.
 | Appearance | ID | Background | Body text | Accent |
 |---|---|---|---|---|
 | Default Light | `paper` | `#FBF7EF` | `#2B2723` | `#9A5B34` |
-| Default Dark | `dark` | `#1E1C1A` | `#E6E0D6` | `#E0996A` |
+| Default Dark | `dark` | `#1E1C1A` | `#F7F4EE` | `#E0996A` |
 | Compact Light | `compact-light` | `#FBF7EF` | `#2B2723` | `#9A5B34` |
-| Compact Dark | `compact-dark` | `#1E1C1A` | `#E6E0D6` | `#E0996A` |
+| Compact Dark | `compact-dark` | `#1E1C1A` | `#F7F4EE` | `#E0996A` |
 
 ## One list, one palette
 

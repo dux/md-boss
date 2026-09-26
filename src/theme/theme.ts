@@ -106,13 +106,13 @@ const paper: Theme = {
 }
 
 /** The same hue family rotated dark, so switching reads as the same app at night.
- *  Deliberately warm charcoal - not #000, not blue-black. Text on bg is ~12:1. */
+ *  Deliberately warm charcoal - not #000, not blue-black. Text on bg is ~15:1. */
 const dark: Theme = {
   id: 'dark',
   title: 'Default Dark',
   style: 'default',
   hex: {
-    'bg': '#1E1C1A', 'surface': '#26231F', 'sidebar-bg': '#1A1817', 'text': '#E6E0D6',
+    'bg': '#1E1C1A', 'surface': '#26231F', 'sidebar-bg': '#1A1817', 'text': '#F7F4EE',
     'muted': '#9A9287', 'border': '#38342E', 'border-strong': '#4A443C', 'accent': '#E0996A',
     'link': '#7FB3D5', 'selection': '#3A332B', 'code-bg': '#26231F', 'code-border': '#39342C',
     'quote-bar': '#6B5B45', 'quote-text': '#B9B1A4', 'table-stripe': '#232019',
@@ -170,6 +170,29 @@ export function contrast(one: string, other: string): number {
  *  palette it describes is a bug that cannot happen if the flag does not exist. */
 export const isDark = (theme: Theme) => luminance(tokenValue(theme, 'bg')) < 0.5
 
+/** GitHub's markdown canvas. Paper stays ivory; only the GitHub layout uses this. */
+export const GITHUB_BG = '#FFFFFF'
+
+/** Colours from github-markdown-css light (`.markdown-body`), the stylesheet github.com
+ *  serves. Not a house palette: the chrome never reads it, and it is not in THEMES.
+ *  `code-bg` is the `<pre>` gray `#F6F8FA`. Inline code is a separate translucent chip,
+ *  appended as `--code-inline-bg` because it is not a 6-digit token. */
+const GITHUB_HEX: Record<Token, string> = {
+  'bg': '#FFFFFF', 'surface': '#F6F8FA', 'sidebar-bg': '#FFFFFF', 'text': '#1F2328',
+  'muted': '#59636E', 'border': '#D1D9E0', 'border-strong': '#D1D9E0', 'accent': '#0969DA',
+  'link': '#0969DA', 'selection': '#FFF8C5', 'code-bg': '#F6F8FA', 'code-border': '#D1D9E0',
+  'quote-bar': '#D1D9E0', 'quote-text': '#59636E', 'table-stripe': '#F6F8FA',
+  'table-head': '#FFFFFF', 'rule': '#D1D9E0',
+  'alert-note': '#0969DA', 'alert-tip': '#1A7F37', 'alert-important': '#8250DF',
+  'alert-warning': '#9A6700', 'alert-caution': '#CF222E',
+  'hl-keyword': '#CF222E', 'hl-string': '#0A3069', 'hl-number': '#0550AE', 'hl-title': '#8250DF',
+  'hl-comment': '#59636E', 'hl-variable': '#953800', 'hl-type': '#0550AE', 'hl-meta': '#0550AE',
+}
+
+/** Inline `<code>` on GitHub, `#818b98` at alpha 0x1f. Not a token: the palette test
+ *  only accepts `#RRGGBB`. */
+const GITHUB_CODE_INLINE_BG = '#818B981F'
+
 /** The :root block both the chrome's <style id="theme"> and the preview page carry. */
 export function rootCSS(theme: Theme): string {
   const vars = TOKENS.map((t) => `  --${t}: ${tokenValue(theme, t)};`).join('\n')
@@ -178,6 +201,16 @@ export function rootCSS(theme: Theme): string {
   // color-scheme keeps scrollbars, form controls and the caret on the same side of the line
   // as the palette - a light scrollbar on a dark page is the tell it was forgotten.
   return `:root {\n${vars}\n${densityVars}\n  color-scheme: ${isDark(theme) ? 'dark' : 'light'};\n}`
+}
+
+/** What the preview page is told. GitHub's layout is a white page with the light ink, so a
+ *  dark app chrome does not paint the document in light type on white. Density still
+ *  follows the active style. */
+export function previewRootCSS(theme: Theme, markdownStyle: string): string {
+  if (markdownStyle !== 'github') return rootCSS(theme)
+  const light = themeForStyle(theme.style, false)
+  const page = rootCSS({ ...light, hex: GITHUB_HEX })
+  return `${page}:root { --code-inline-bg: ${GITHUB_CODE_INLINE_BG}; }\n`
 }
 
 // MARK: - Appearance choice

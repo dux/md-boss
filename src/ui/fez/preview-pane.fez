@@ -13,6 +13,8 @@
       this.local.path = null
       this.local.reloadToken = -1
       this.local.taskCompletionID = 0
+      this.local.markdownStyle = 'default'
+      this.local.bakedStyle = 'default'
       this.local.typing = null
       // Where to land once the next render is in: the remembered place of a file that
       // just arrived. Restored after the render, which is when the page has anchors.
@@ -29,6 +31,9 @@
         if (msg.kind === 'ready') {
           this.local.loaded = true
           this.local.picking = null
+          // A switch that landed while the page was still loading: the srcdoc was baked
+          // with the old layout, and the settings listener could not reach the window yet.
+          if (this.local.markdownStyle !== this.local.bakedStyle) this.pushMarkdownStyle(this.local.markdownStyle)
           this.pushPickMode()
           if (this.local.pending !== null) {
             this.render(this.local.pending, this.local.pendingCompletions)
@@ -66,7 +71,7 @@
         MdBoss.manager.settings.onChange((data) => {
           if (data.themeID !== this.local.themeID) {
             this.local.themeID = data.themeID
-            if (this.local.loaded) this.frame.contentWindow.mdSetTheme(MdBoss.rootCSS(MdBoss.themeNamed(data.themeID)))
+            if (this.local.loaded) this.frame.contentWindow.mdSetTheme(this.previewCSS())
           }
           if (data.previewFontSize !== this.local.fontSize) {
             this.local.fontSize = data.previewFontSize
@@ -76,6 +81,7 @@
             this.local.measure = data.previewMeasure
             if (this.local.loaded) this.frame.contentWindow.mdSetMeasure(data.previewMeasure)
           }
+          this.pushMarkdownStyle(data.markdownStyle)
           this.pushPickMode()
         }),
       ]
@@ -90,6 +96,8 @@
       this.local.themeID = data.themeID
       this.local.fontSize = data.previewFontSize
       this.local.measure = data.previewMeasure
+      this.local.markdownStyle = data.markdownStyle
+      this.local.bakedStyle = data.markdownStyle
       this.pull()
     }
 
@@ -114,6 +122,22 @@
       if (on === this.local.picking) return
       this.local.picking = on
       this.frame.contentWindow.mdSetPickMode(on)
+    }
+
+    /** `default` or `github`. Both styles' CSS is already in the page; this flips which. */
+    pushMarkdownStyle(style) {
+      const next = style === 'github' ? 'github' : 'default'
+      if (next === this.local.markdownStyle && next === this.local.bakedStyle) return
+      this.local.markdownStyle = next
+      if (!this.local.loaded) return
+      this.local.bakedStyle = next
+      this.frame.contentWindow.mdSetMarkdownStyle(next)
+      this.frame.contentWindow.mdSetTheme(this.previewCSS())
+    }
+
+    /** GitHub's page is white with the light ink. The chrome keeps the theme the app is in. */
+    previewCSS() {
+      return MdBoss.previewRootCSS(MdBoss.manager.theme, MdBoss.manager.markdownStyle)
     }
 
     pushHighlight() {
@@ -255,15 +279,19 @@
       this.local.pending = markdown
       this.local.pendingCompletions = completed
       this.local.basePath = this.local.path
+      const markdownStyle = MdBoss.manager.markdownStyle
+      this.local.markdownStyle = markdownStyle
+      this.local.bakedStyle = markdownStyle
       this.frame.srcdoc = MdBoss.buildPreviewPage({
         markdown,
-        themeCSS: MdBoss.rootCSS(MdBoss.manager.theme),
+        themeCSS: this.previewCSS(),
         fontSize: MdBoss.manager.settings.data.previewFontSize,
         measure: MdBoss.manager.settings.data.previewMeasure,
         baseURL: this.local.path ? MdBoss.documentBaseURL(this.local.path) : null,
         assetBase: MdBoss.native().shell.assetBase(),
         components: MdBoss.components.items,
         typedBlocks: MdBoss.typedBlocks(markdown),
+        markdownStyle,
       })
     }
   }

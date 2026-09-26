@@ -1,0 +1,62 @@
+<script>
+  // Default or GitHub, for every document. The choice is a setting, so opening another
+  // file does not put the previous one's layout back. It sits in the preview label strip,
+  // before Copy path: that is the pane whose page the choice redraws.
+  class {
+    init() {
+      this.state.style = MdBoss.manager.markdownStyle
+    }
+
+    onMount() {
+      this.local.unsubscribe = MdBoss.manager.settings.onChange(() => this.pull())
+      this.pull()
+    }
+
+    onDestroy() {
+      if (this.local.unsubscribe) this.local.unsubscribe()
+    }
+
+    pull() {
+      this.state.style = MdBoss.manager.markdownStyle
+    }
+
+    pick(style) {
+      MdBoss.manager.setMarkdownStyle(style)
+    }
+  }
+</script>
+
+<style>
+  display: block;
+
+  /* The settings panel's segmented control, at the height of the strip's other buttons.
+     Same face as Ask | Write on the AI label. */
+  .mode {
+    display: flex;
+    padding: 1px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+
+  .mode button {
+    height: calc(var(--font-buttons) + 6px);
+    padding: 0 8px;
+    border: 0;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+  }
+
+  .mode button.selected {
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: 0 0 0 1px var(--border-strong);
+  }
+</style>
+
+<div class="mode text-buttons" role="group" aria-label="Preview style">
+  <button class={'pointer' + (state.style === 'default' ? ' selected' : '')} aria-pressed={state.style === 'default' ? 'true' : 'false'} title="Paper reading layout" onclick="fez.pick('default')">Default</button>
+  <button class={'pointer' + (state.style === 'github' ? ' selected' : '')} aria-pressed={state.style === 'github' ? 'true' : 'false'} title="GitHub markdown layout" onclick="fez.pick('github')">GitHub</button>
+</div>
