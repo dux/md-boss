@@ -290,5 +290,5 @@ to the one inside the bundle.
 
 * [TODO.md](TODO.md) - where the build stands, phase by phase
 * [doc/THEMES.md](doc/THEMES.md) - the display styles, palettes and rules around them
-* [doc/ai-claude-integration-plan.todo.md](doc/ai-claude-integration-plan.todo.md) - the planned chat pane
+* [doc/ai-chat.todo.md](doc/ai-chat.todo.md) - the planned AI pane: one chat per document, prepare change, apply
 * [web-demo/](web-demo/) - the demo page, its sample documents and `hammer demo`
