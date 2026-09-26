@@ -91,8 +91,9 @@ Conversation memory is the CLI session: `resume: claudeSessionId`.
 If resume fails because the CLI's session file is gone, the chat starts a new CLI session seeded with the full document and the transcript text, and retries once.
 The CLI reports that case as an error result reading "No conversation found with session ID: ...".
 
-Prepare and revise turns add `outputFormat: {type: 'json_schema'}` with `{reply, summary, document, images: [{name, alt, svg}]}`.
-It returns the full revised document rather than edit hunks, so applying it cannot mismatch.
+Prepare and revise turns add `outputFormat: {type: 'json_schema'}` with `{reply, summary, edits: [{old, new}], images: [{name, alt, svg}]}`.
+Each `old` must occur exactly once in the text the change was prepared against, and edits must not overlap; otherwise the answer is an error row and nothing is proposed.
+It returns edits rather than the full revised document because retyping an 85 KB README took over three minutes for a one-word change.
 The CLI answers through a `StructuredOutput` tool, so no text deltas stream on these turns and the pane shows "Preparing change..." until the result lands.
 The parsed object arrives as `structured_output` on the success result.
 

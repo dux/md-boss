@@ -134,10 +134,9 @@ export class AIChat {
     this.changed()
   }
 
-  /** The same rows twice is one chip. */
+  /** One focus at a time: pointing at other rows replaces the chip. */
   attach(attachment: Attachment): void {
-    if (this._attachments.some((a) => a.start === attachment.start && a.end === attachment.end)) return
-    this._attachments = [...this._attachments, attachment].sort((a, b) => a.start - b.start)
+    this._attachments = [attachment]
     this.emit()
   }
 
@@ -251,7 +250,7 @@ export class AIChat {
     } else if (outcome.kind === 'stopped' && proposing) {
       // A stopped Prepare leaves nothing behind - and the change it would have revised stays.
     } else if (proposing && outcome.kind === 'done') {
-      const answer = parseProposal(outcome.structured)
+      const answer = parseProposal(outcome.structured, document)
       if (!answer) {
         this._session.messages.push({ role: 'error', text: 'The proposed change came back incomplete. Try again.' })
       } else {

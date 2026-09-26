@@ -57,13 +57,11 @@ describe('AI chat turns', () => {
     expect(chat.session.lastSentText).toBe(edited)
   })
 
-  test('attached rows go with the next message only, once each, in line order', async () => {
+  test('attached rows go with the next message only, and the last pointed at replaces the one before', async () => {
     const { chat, ai } = await setup()
     chat.attach({ start: 9, end: 10, text: 'Step 9.\nStep 10.' })
     chat.attach({ start: 2, end: 2, text: 'Step 2.' })
-    chat.attach({ start: 2, end: 2, text: 'Step 2.' })
-    expect(chat.attachments.map((a) => a.start)).toEqual([2, 9])
-    chat.detach(1)
+    expect(chat.attachments.map((a) => a.start)).toEqual([2])
     chat.setMode('ask')
     await chat.send('Why this?', DOC)
 
@@ -185,8 +183,9 @@ describe('AI chat persistence', () => {
 })
 
 describe('AI chat proposals', () => {
+  /** An answer whose edits turn DOC into `document`. */
   const proposal = (document: string, extra: Record<string, unknown> = {}) => ({
-    structured: { reply: 'Here it is.', summary: 'Shorter steps', document, images: [], ...extra },
+    structured: { reply: 'Here it is.', summary: 'Shorter steps', edits: [{ old: DOC, new: document }], images: [], ...extra },
   })
 
   test('Prepare change asks for the structured answer and leaves a pending proposal against the text it saw', async () => {

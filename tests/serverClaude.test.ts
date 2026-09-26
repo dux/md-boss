@@ -86,7 +86,7 @@ describe('claude turns', () => {
   })
 
   test('structured output comes back parsed', async () => {
-    const proposal = { summary: 's', document: '# Doc', images: [] }
+    const proposal = { summary: 's', edits: [{ old: 'a', new: 'b' }], images: [] }
     const result = await run(new Recording(), 't1', request({ schema: {} }), scripted([success('{...}', proposal)]))
     expect(result).toEqual({ kind: 'done', sessionId: 's1', text: '{...}', structured: proposal })
   })

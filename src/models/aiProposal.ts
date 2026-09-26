@@ -1,5 +1,7 @@
 // A proposed change: what Prepare change asks the model for, how its answer is checked
-// before anything trusts it, and the diff the pane shows. Pure - the chat (aiChat.ts) runs
+// and turned into the revised text before anything trusts it, and the diff the pane shows.
+// The model answers with edits, not the whole document: retyping a long file through the
+// StructuredOutput tool takes minutes for a one-line change. Pure - the chat (aiChat.ts) runs
 // the turns, the manager applies the result.
 
 import { structuredPatch } from 'diff'
@@ -26,7 +28,14 @@ export interface Proposal {
   status: ProposalStatus
 }
 
-/** The model's answer to a prepare or revise turn, once it has passed parseProposal. */
+/** One replacement the model asks for: `old` is an excerpt of the document it was shown. */
+export interface ProposedEdit {
+  old: string
+  new: string
+}
+
+/** The model's answer to a prepare or revise turn, once it has passed parseProposal and its
+ *  edits have been applied to the text it was prepared against. */
 export interface ProposalAnswer {
   reply: string
   summary: string
@@ -37,11 +46,27 @@ export interface ProposalAnswer {
 export const PROPOSAL_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
-  required: ['reply', 'summary', 'document', 'images'],
+  required: ['reply', 'summary', 'edits', 'images'],
   properties: {
     reply: { type: 'string', description: 'One or two sentences to the user, in the chat.' },
     summary: { type: 'string', description: 'What changed, in one line.' },
-    document: { type: 'string', description: 'The complete revised document - every line, not only the changed ones.' },
+    edits: {
+      type: 'array',
+      description: 'The whole change as replacements in the current document. Edits must not overlap.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['old', 'new'],
+        properties: {
+          old: {
+            type: 'string',
+            description: 'An exact excerpt of the current document, whitespace included, that occurs in it exactly once - '
+              + 'take in neighbouring lines until it does. Empty only when the document is empty.',
+          },
+          new: { type: 'string', description: 'What replaces it; empty deletes it.' },
+        },
+      },
+    },
     images: {
       type: 'array',
       description: 'SVG diagrams the document embeds as ![alt](assets/<name>). Empty when there are none.',
@@ -59,24 +84,33 @@ export const PROPOSAL_SCHEMA: Record<string, unknown> = {
   },
 }
 
-export const PREPARE_MESSAGE = 'Prepare the change we have discussed. Return the complete revised document - every line, '
-  + 'not only the changed ones - with a one-line summary of what changed and a short reply to me. Change nothing we '
-  + 'did not discuss. If I asked for a diagram, or one clearly helps, draw it as SVG in images and embed it as '
+export const PREPARE_MESSAGE = 'Prepare the change we have discussed. Return it as edits to the current document, with a '
+  + 'one-line summary of what changed and a short reply to me. Change nothing we did not discuss. If I asked for a diagram, or one clearly helps, draw it as SVG in images and embed it as '
   + '![alt](assets/<name>.svg); leave images empty otherwise.'
 
-export const REVISE_INSTRUCTION = 'Revise the proposed change to reflect this, and return the complete revised '
-  + 'document again in the same shape.'
+export const REVISE_INSTRUCTION = 'Revise the proposed change to reflect this, and return the whole change again in the '
+  + 'same shape - every edit, against the current document rather than your earlier proposal.'
 
 /** A file name Apply may write under assets/: no folders, no dots at the front, .svg. */
 const IMAGE_NAME = /^[a-z0-9][a-z0-9._-]*\.svg$/i
 
-/** Null unless the answer has every field, every image has a writable name and starts as an
- *  SVG, and no two images share a name - a proposal is either whole or not shown. */
-export function parseProposal(structured: unknown): ProposalAnswer | null {
+/** Null unless the answer has every field, every edit lands on exactly one place in `base`,
+ *  every image has a writable name and starts as an SVG, and no two images share a name - a
+ *  proposal is either whole or not shown. */
+export function parseProposal(structured: unknown, base: string): ProposalAnswer | null {
   if (!structured || typeof structured !== 'object') return null
   const raw = structured as Record<string, unknown>
-  if (typeof raw.reply !== 'string' || typeof raw.summary !== 'string' || typeof raw.document !== 'string') return null
-  if (!Array.isArray(raw.images)) return null
+  if (typeof raw.reply !== 'string' || typeof raw.summary !== 'string') return null
+  if (!Array.isArray(raw.edits) || !Array.isArray(raw.images)) return null
+  const edits: ProposedEdit[] = []
+  for (const item of raw.edits as unknown[]) {
+    if (!item || typeof item !== 'object') return null
+    const { old, new: text } = item as Record<string, unknown>
+    if (typeof old !== 'string' || typeof text !== 'string') return null
+    edits.push({ old, new: text })
+  }
+  const document = applyEdits(base, edits)
+  if (document === null) return null
   const images: ProposalAnswer['images'] = []
   for (const item of raw.images as unknown[]) {
     if (!item || typeof item !== 'object') return null
@@ -88,7 +122,34 @@ export function parseProposal(structured: unknown): ProposalAnswer | null {
     if (images.some((i) => i.name === file)) return null
     images.push({ name: file, alt, svg })
   }
-  return { reply: raw.reply, summary: raw.summary, document: raw.document, images }
+  return { reply: raw.reply, summary: raw.summary, document, images }
+}
+
+/** `base` with every edit made, or null when an excerpt is missing, ambiguous or overlaps
+ *  another - guessing where the model meant would change text nobody reviewed. */
+export function applyEdits(base: string, edits: readonly ProposedEdit[]): string | null {
+  const spans: { start: number; end: number; text: string }[] = []
+  for (const edit of edits) {
+    const start = excerptAt(base, edit.old)
+    if (start < 0) return null
+    spans.push({ start, end: start + edit.old.length, text: edit.new })
+  }
+  spans.sort((a, b) => a.start - b.start)
+  let out = ''
+  let at = 0
+  for (const span of spans) {
+    if (span.start < at) return null
+    out += base.slice(at, span.start) + span.text
+    at = span.end
+  }
+  return out + base.slice(at)
+}
+
+/** Where `old` occurs in `base`, or -1 unless exactly once. Empty only writes an empty document. */
+function excerptAt(base: string, old: string): number {
+  if (!old) return base ? -1 : 0
+  const at = base.indexOf(old)
+  return at >= 0 && base.indexOf(old, at + 1) < 0 ? at : -1
 }
 
 export interface DiffLine {

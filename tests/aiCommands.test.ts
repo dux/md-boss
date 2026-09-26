@@ -50,12 +50,10 @@ describe('AI commands', () => {
     await manager.open(A)
     expect(visiblePanes(manager.settings.data)).not.toContain('ai')
     manager.attachToChat(3, 6)
+    expect(manager.chat!.attachments).toEqual([{ start: 3, end: 4, text: 'First step.\nSecond step.' }])
     manager.attachToChat(7, null)
     manager.attachToChat(99, null)
-    expect(manager.chat!.attachments).toEqual([
-      { start: 3, end: 4, text: 'First step.\nSecond step.' },
-      { start: 7, end: 7, text: '## Later' },
-    ])
+    expect(manager.chat!.attachments).toEqual([{ start: 7, end: 7, text: '## Later' }])
     expect(visiblePanes(manager.settings.data)).toContain('ai')
   })
 
@@ -108,7 +106,12 @@ describe('applying a proposed change', () => {
     const context = await setup()
     await context.manager.open(A)
     context.ai.script({ text: 'ok' }, {
-      structured: { reply: 'Done.', summary: 'Intro and a diagram', document: REVISED, images: [{ name: 'flow.svg', alt: 'Flow', svg: SVG }] },
+      structured: {
+        reply: 'Done.',
+        summary: 'Intro and a diagram',
+        edits: [{ old: '# Plan\n\n', new: '# Plan\nIntro.\n\n' }, { old: '## Later\n', new: '## Later on\n![Flow](assets/flow.svg)\n' }],
+        images: [{ name: 'flow.svg', alt: 'Flow', svg: SVG }],
+      },
     })
     await context.manager.sendToChat('Add an intro and a diagram.')
     await context.manager.prepareChange()
