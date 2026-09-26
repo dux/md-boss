@@ -13,8 +13,6 @@ export interface SettingsData {
   /** The notes column's width. A list rather than a document, so it keeps a width of its
    *  own instead of sharing what preview and raw split. */
   notesWidth: number
-  /** The AI column's width - a conversation, so like notes it keeps its own. */
-  aiWidth: number
   showSidebar: boolean
   previewFontSize: number
   /** Reading measure in em, so the column tracks the text size rather than fighting it.
@@ -44,7 +42,6 @@ export function defaultSettings(): SettingsData {
     visiblePanes: ['preview'],
     sidebarWidth: 260,
     notesWidth: 350,
-    aiWidth: 400,
     showSidebar: true,
     previewFontSize: 17,
     previewMeasure: 48,

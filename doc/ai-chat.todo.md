@@ -31,11 +31,12 @@ Apply saves them to `assets/` next to the document, and the revision embeds them
 
 ## Behaviour
 
-* A fifth pane, **AI** (⌘4), sits between Raw and Notes and has its own draggable width, like Notes. Notes moves to ⌘5.
+* A fifth pane, **AI** (⌘4), sits between Raw and Notes and splits the width with Preview and Raw. Notes moves to ⌘5.
 * The head carries an **Ask | Write** toggle and a **New session** button, which confirms before clearing.
   * Ask is a conversation about the document: answers and explanations, no drafting.
   * Write is for shaping changes: it suggests freely, never asks permission to write, and shows **Prepare change** in the composer.
-* The transcript shows user turns with their attached-line chips, and assistant replies stream in live.
+* The transcript shows user turns, tinted and on the right, with their attached-line chips; each reply is a white card headed "Claude" and streams in live.
+  The thread keeps a reading measure, so a wide pane centres it rather than stretching every line.
   Replies are plain text with preserved whitespace in this first layer.
   Markdown rendering of replies is a later layer.
 * The composer has removable chips for attached rows (`L12-14 "first 40 chars..."`), a textarea, Send / Stop, and Prepare change in Write mode.
@@ -134,11 +135,11 @@ The parsed object arrives as `structured_output` on the success result.
 ~ src/models/manager.ts      owns AIChat for the open document (swap on open); attachLine(start,end);
                              applyProposal(): base check -> write assets -> replaceBuffer -> shift notes
                              per diff hunk (noteShift Edit) -> saveDocument -> chat.markApplied
-~ src/models/settings.ts     PANES += 'ai', PANE_TITLE, aiWidth, aiModel: null, claudePath: null
+~ src/models/settings.ts     PANES += 'ai', PANE_TITLE, aiModel: null, claudePath: null
 ~ src/models/appMenu.ts      PANE_ACCELERATOR ai = CmdOrCtrl+4 (notes moves to 5), PANE_ACTION toggle-ai, MenuAction union
 ~ src/ui/appMenu.ts          case 'toggle-ai'
 + src/ui/fez/ai-pane.fez     head toggle + New session, transcript, proposal card, composer, empty states
-~ src/ui/fez/md-boss-app.fez AI pane block + divider; dragStart learns the 'ai' edge (MIN 280 / MAX 720)
+~ src/ui/fez/md-boss-app.fez AI pane block, flexing with preview and raw
 ~ src/ui/fez/preview-pane.fez  forwards {kind:'pick'} to manager.attachLine; pushes pick mode on AI visibility;
                                context menu gains "Ask AI"
 ~ src/ui/fez/editor-pane.fez   context menu gains "Ask AI"

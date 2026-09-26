@@ -10,10 +10,12 @@
   // owns everything said and everything sent; this draws it and hands on what is typed.
   // Return sends, Shift-Return is a new line, Escape stops a reply that is still arriving.
   // The transcript follows new text while you are at its end and stays put once you have
-  // scrolled up to read.
+  // scrolled up to read. The pane shares the window's width with the document, so the
+  // thread keeps a reading measure of its own rather than running the whole way across.
   class {
     init() {
-      this.state.hasDocument = false
+      // Who answers - the name on every reply card.
+      this.state.assistant = 'Claude'
       this.state.ready = false
       this.state.missing = false
       this.state.messages = []
@@ -67,7 +69,6 @@
 
     pull() {
       const chat = this.local.chat
-      this.state.hasDocument = !!MdBoss.manager.document
       this.state.ready = !!chat
       if (!chat) {
         this.state.messages = []
@@ -136,10 +137,23 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+    padding: 14px 16px;
+  }
+
+  /* The reading measure: a wide pane centres the thread instead of stretching every line. */
+  .thread,
+  .composer .inner {
+    width: 100%;
+    max-width: 52em;
+    margin: 0 auto;
+    box-sizing: border-box;
+  }
+
+  .thread {
+    min-height: 100%;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 12px;
+    gap: 14px;
   }
 
   .hint {
@@ -158,14 +172,25 @@
     line-height: 1.45;
   }
 
-  /* What you said sits apart from what came back: a card, as a note does in its column. */
+  /* What you said: tinted, on the right, the way a chat reads. */
   .message.user {
     align-self: flex-end;
-    max-width: 88%;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: var(--surface);
-    box-shadow: 0 0 0 1px var(--border);
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--selection);
+  }
+
+  /* What came back: the document's own paper, named, full width of the measure. */
+  .message.assistant {
+    padding: 10px 14px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+  }
+
+  .message .who {
+    color: var(--accent);
   }
 
   .message.error .text {
@@ -222,12 +247,15 @@
 
   .composer {
     flex: none;
+    padding: 10px 16px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .composer .inner {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 8px 12px 12px;
-    border-top: 1px solid var(--border);
-    background: var(--surface);
   }
 
   .field {
@@ -267,50 +295,56 @@
   }
 </style>
 
-{#if !state.hasDocument}
-  <div class="empty-state text-default">Open a document to talk it through with Claude.</div>
-{:else if state.missing}
+{#if state.missing}
   <div class="empty-state text-default">Claude Code was not found. Install it from claude.com/claude-code and log in, or set <span class="text-mono">claudePath</span> in settings.json.</div>
 {:else if state.ready}
   <div class="transcript" onscroll="fez.scrolled(event)">
-    {#each state.messages as message}
-      <div class={'message ' + message.role}>
-        {#if message.chips.length}
-          <div class="chips">
-            {#each message.chips as c}
-              <span class="chip text-small" title={c.text}><span class="lines text-mono">{c.lines}</span><span class="words">{c.words}</span></span>
-            {/each}
-          </div>
+    <div class="thread">
+      {#each state.messages as message}
+        <div class={'message ' + message.role}>
+          {#if message.role === 'assistant'}
+            <span class="who text-title">{state.assistant}</span>
+          {/if}
+          {#if message.chips.length}
+            <div class="chips">
+              {#each message.chips as c}
+                <span class="chip text-small" title={c.text}><span class="lines text-mono">{c.lines}</span><span class="words">{c.words}</span></span>
+              {/each}
+            </div>
+          {/if}
+          <div class="text text-default">{message.text}</div>
+        </div>
+      {:else}
+        {#if state.streaming === null}
+          <div class="hint empty-state text-default">Talk the document through. Click a block in the preview to point at it.</div>
         {/if}
-        <div class="text text-default">{message.text}</div>
-      </div>
-    {:else}
-      {#if state.streaming === null}
-        <div class="hint empty-state text-default">Talk the document through. Click a block in the preview to point at it.</div>
+      {/each}
+      {#if state.streaming !== null}
+        <div class="message assistant streaming">
+          <span class="who text-title">{state.assistant}</span>
+          <div class="text text-default">{state.streaming}</div>
+        </div>
       {/if}
-    {/each}
-    {#if state.streaming !== null}
-      <div class="message assistant streaming">
-        <div class="text text-default">{state.streaming}</div>
-      </div>
-    {/if}
+    </div>
   </div>
   <div class="composer">
-    {#if state.attachments.length}
-      <div class="chips">
-        {#each state.attachments as c, index}
-          <span class="chip text-small" title={c.text}><span class="lines text-mono">{c.lines}</span><span class="words">{c.words}</span><button class="pointer" title="Remove" onclick="fez.detach({index})">×</button></span>
-        {/each}
-      </div>
-    {/if}
-    <textarea class="field text-default" placeholder="Ask, or say what should change…" rows="3" spellcheck="true" onkeydown="fez.keyDown(event)" oninput="fez.grow(this)"></textarea>
-    <div class="actions">
-      <span class="keys text-small">Return to send, ⇧Return for a new line</span>
-      {#if state.streaming !== null}
-        <button class="button-outline text-buttons pointer" title="Stop (Esc)" onclick="fez.stop()">Stop</button>
-      {:else}
-        <button class="button-link text-buttons pointer" onclick="fez.send()">Send</button>
+    <div class="inner">
+      {#if state.attachments.length}
+        <div class="chips">
+          {#each state.attachments as c, index}
+            <span class="chip text-small" title={c.text}><span class="lines text-mono">{c.lines}</span><span class="words">{c.words}</span><button class="pointer" title="Remove" onclick="fez.detach({index})">×</button></span>
+          {/each}
+        </div>
       {/if}
+      <textarea class="field text-default" placeholder="Ask, or say what should change…" rows="3" spellcheck="true" onkeydown="fez.keyDown(event)" oninput="fez.grow(this)"></textarea>
+      <div class="actions">
+        <span class="keys text-small">Return to send, ⇧Return for a new line</span>
+        {#if state.streaming !== null}
+          <button class="button-outline text-buttons pointer" title="Stop (Esc)" onclick="fez.stop()">Stop</button>
+        {:else}
+          <button class="button-link text-buttons pointer" onclick="fez.send()">Send</button>
+        {/if}
+      </div>
     </div>
   </div>
 {/if}
