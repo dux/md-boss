@@ -31,7 +31,7 @@ Apply saves them to `assets/` next to the document, and the revision embeds them
 
 ## Behaviour
 
-* A fifth pane, **AI** (⌘5), sits to the right of Notes and has its own draggable width, like Notes.
+* A fifth pane, **AI** (⌘4), sits between Raw and Notes and has its own draggable width, like Notes. Notes moves to ⌘5.
 * The head carries an **Ask | Write** toggle and a **New session** button, which confirms before clearing.
   * Ask is a conversation about the document: answers and explanations, no drafting.
   * Write is for shaping changes: it suggests freely, never asks permission to write, and shows **Prepare change** in the composer.
@@ -135,7 +135,7 @@ The parsed object arrives as `structured_output` on the success result.
                              applyProposal(): base check -> write assets -> replaceBuffer -> shift notes
                              per diff hunk (noteShift Edit) -> saveDocument -> chat.markApplied
 ~ src/models/settings.ts     PANES += 'ai', PANE_TITLE, aiWidth, aiModel: null, claudePath: null
-~ src/models/appMenu.ts      PANE_ACCELERATOR ai = CmdOrCtrl+5, PANE_ACTION toggle-ai, MenuAction union
+~ src/models/appMenu.ts      PANE_ACCELERATOR ai = CmdOrCtrl+4 (notes moves to 5), PANE_ACTION toggle-ai, MenuAction union
 ~ src/ui/appMenu.ts          case 'toggle-ai'
 + src/ui/fez/ai-pane.fez     head toggle + New session, transcript, proposal card, composer, empty states
 ~ src/ui/fez/md-boss-app.fez AI pane block + divider; dragStart learns the 'ai' edge (MIN 280 / MAX 720)

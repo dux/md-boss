@@ -173,7 +173,7 @@ Pipes make the columns; the second row sets the alignment - `:--` left, `:-:` ce
 | ⌘P | go to file by name | sidebar |
 | ⇧⌘F | search every document | sidebar |
 | ⇧⌘D | light and dark | window |
-| ⌘1 - ⌘4 | open a panel | window |
+| ⌘1 - ⌘5 | open a panel | window |
 
 ## Code
 

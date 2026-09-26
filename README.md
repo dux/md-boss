@@ -29,7 +29,7 @@ needs), so Finder will hand it a document that still carries the quarantine.
 `| sh -s -- --uninstall` removes it again, leaving `~/.config/md-boss` alone.
 
 Folders and files on the left, the rendered document on the right.
-Four panels sit side by side - files, preview, raw, notes - each under its own label.
+Five panels sit side by side - files, preview, raw, AI, notes - each under its own label.
 Click a label and the panel folds down to a rail carrying the same label on its side; click
 the rail and it comes back, so a folded panel is always its own way back.
 The edges of the files and notes columns drag; preview and raw split what is left between
@@ -258,7 +258,7 @@ On Windows and Linux read ⌘ as Ctrl and ⌥ as Alt; the shortcuts are the menu
 | ⇧⌘R | reveal the selection in Finder |
 | ⌘⌫ | move the selected file to the Trash |
 | ⌫ / ⌘[ | go back to the document you came from |
-| ⌘1 ⌘2 ⌘3 ⌘4 | fold the files, preview, raw and notes panels in or out |
+| ⌘1 ⌘2 ⌘3 ⌘4 ⌘5 | fold the files, preview, raw, AI and notes panels in or out |
 | ⌘← / ⌘→ | narrow and widen the reading column |
 | ⌘\ | raw and preview side by side |
 | ⇧⌘F | find in every document under the sidebar folder |

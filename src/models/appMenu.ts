@@ -108,14 +108,14 @@ export interface MenuPatch {
   checked?: boolean
 }
 
-/** Cmd-1 to Cmd-5, in the order the panels stand on screen: files, preview, raw, notes, AI.
+/** Cmd-1 to Cmd-5, in the order the panels stand on screen: files, preview, raw, AI, notes.
  *  The number is the position, so the keys are read off the window rather than remembered. */
 export const SIDEBAR_ACCELERATOR = 'CmdOrCtrl+1'
 export const PANE_ACCELERATOR: Record<Pane, string> = {
   preview: 'CmdOrCtrl+2',
   raw: 'CmdOrCtrl+3',
-  notes: 'CmdOrCtrl+4',
-  ai: 'CmdOrCtrl+5',
+  ai: 'CmdOrCtrl+4',
+  notes: 'CmdOrCtrl+5',
 }
 
 /** What a panel label's tooltip says. ⌘ for CmdOrCtrl, the way the rest of the tooltips
@@ -220,8 +220,8 @@ export function buildAppMenu(s: MenuState): MenuModel[] {
       // register, or it would take the editor's delete.
       item('back', 'Back', 'CmdOrCtrl+[', s.canGoBack),
       separator,
-      // The four panels in screen order, so the menu reads like the window and Cmd-1 to
-      // Cmd-4 land where the labels are.
+      // The five panels in screen order, so the menu reads like the window and Cmd-1 to
+      // Cmd-5 land where the labels are.
       item('toggle-sidebar', `${s.showSidebar ? 'Collapse' : 'Expand'} Files`, SIDEBAR_ACCELERATOR),
       ...PANES.map((pane) => item(PANE_ACTION[pane], `${s.visiblePanes.includes(pane) ? 'Collapse' : 'Expand'} ${PANE_TITLE[pane]}`, PANE_ACCELERATOR[pane])),
       separator,

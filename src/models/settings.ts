@@ -2,7 +2,7 @@
 // the defaults and nowhere else - parseSettings merges stored JSON over them, so old config
 // files stay readable and unknown keys are dropped rather than fatal.
 
-export const PANES = ['preview', 'raw', 'notes', 'ai'] as const
+export const PANES = ['preview', 'raw', 'ai', 'notes'] as const
 export type Pane = (typeof PANES)[number]
 
 export interface SettingsData {
