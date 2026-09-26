@@ -5,7 +5,11 @@ interface Task {
   state: TaskState
 }
 
-const TASK = /^[ \t]*(?:(?:>[ \t]*)+(?:[-+*]|\d+[.)])[ \t]+|(?:(?:[-+*]|\d+[.)])[ \t]+)?)\[([ xXoO*])\][ \t]+(.*)$/
+// The lines the preview draws as task items, in the same order: a bulleted task - quoted or
+// not, empty or not - and a bare `[x] text` line, which the preview gives a bullet. A bare
+// mark with nothing after it is only a mark in a paragraph, not an item.
+const BULLETED = /^[ \t]*(?:>[ \t]*)*(?:[-+*]|\d+[.)])[ \t]+\[([ xXoO*])\](?:[ \t]+(.*))?$/
+const BARE = /^[ \t]*\[([ xXoO*])\][ \t]+(.*)$/
 const FENCE = /^ {0,3}(`{3,}|~{3,})/
 
 /** Indexes in the new document's rendered task order whose unchanged task moved from an
@@ -44,9 +48,9 @@ function tasks(source: string): Task[] {
     }
     if (fence) continue
 
-    const match = TASK.exec(line)
+    const match = BULLETED.exec(line) ?? BARE.exec(line)
     if (!match) continue
-    found.push({ key: match[2].trim(), state: stateFor(match[1]) })
+    found.push({ key: (match[2] ?? '').trim(), state: stateFor(match[1]) })
   }
   return found
 }

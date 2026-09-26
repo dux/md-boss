@@ -138,6 +138,13 @@ describe('lists and quotes', () => {
     }
   })
 
+  test('a mark in running text is marked too, by the preview\'s rule', () => {
+    expect(texts('Ship when [x] green, [o] review (see [ ]).', 'taskMarker')).toEqual(['[x]', '[o]', '[ ]'])
+    expect(texts('| [ ] cell | [X] |', 'taskMarker')).toEqual(['[ ]', '[X]'])
+    expect(texts('- [ ]', 'taskMarker')).toEqual(['[ ]'])
+    expect(texts('arr[x] and [x](url) and `[x]` and [y]', 'taskMarker')).toEqual([])
+  })
+
   test('indentation is kept out of the marker', () => {
     expect(texts('    - nested', 'listMarker')).toEqual(['- '])
   })

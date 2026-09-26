@@ -144,8 +144,9 @@
 
   // GFM wants a bullet before the box; a bare `[x] item` line is what people actually type,
   // so it gets the bullet here. Same line count, so every anchor below stays put. `[o]` is
-  // ours - a third state, still running - and rides through the lexer as plain text. `[*]`
-  // spells the same state, kept because documents already carry it.
+  // ours - a third state, still running - and `[*]` spells the same state, kept because
+  // documents already carry it. Both, and a box anywhere in running text, are drawn by the
+  // task-mark extension (markedTasks.ts), registered once below.
   var TASK = /^([ \t]*)\[([ xXoO*])\]([ \t])/;
   var FENCE = /^ {0,3}(`{3,}|~{3,})/;
 
@@ -165,67 +166,28 @@
     return lines.join('\n');
   }
 
-  // The text node an item starts with - directly for a tight list, inside the wrapping <p>
-  // for a loose one.
-  function itemHead(item) {
+  // An item is a task when a marker leads it: marked's own box for `- [ ] text`, or one the
+  // task-mark extension drew - `[o]`, or a box with nothing written after it. Tagged here
+  // rather than matched in CSS, because a loose list wraps the item in a <p> and no child
+  // selector survives that. A mark further along the item is inline and stays as it is.
+  function leadingMarker(item) {
     var node = item.firstChild;
     if (node && node.nodeType === 1 && node.tagName === 'P') { node = node.firstChild; }
-    return node && node.nodeType === 3 ? node : null;
+    if (!node || node.nodeType !== 1) { return null; }
+    var box = node.tagName === 'INPUT' && node.type === 'checkbox';
+    return box || node.classList.contains('md-spinner') ? node : null;
   }
 
-  var SVG_NS = 'http://www.w3.org/2000/svg';
-
-  // Two arcs on one circle: the whole ring in the border ink, and a quarter of it in the
-  // accent, turning. An SVG rather than a bordered box because a border can only be a whole
-  // ring or four separately coloured sides - the head needs a rounded cap and a length that
-  // does not answer to the box model. Sized in em by the stylesheet, so it tracks the text.
-  function spinnerSvg() {
-    var svg = document.createElementNS(SVG_NS, 'svg');
-    svg.setAttribute('class', 'md-spinner');
-    svg.setAttribute('viewBox', '0 0 16 16');
-    svg.setAttribute('role', 'img');
-    svg.setAttribute('aria-label', 'in progress');
-
-    var track = document.createElementNS(SVG_NS, 'circle');
-    track.setAttribute('class', 'md-spinner-track');
-    track.setAttribute('cx', '8');
-    track.setAttribute('cy', '8');
-    track.setAttribute('r', '6.4');
-
-    // A quarter turn, drawn from twelve o'clock.
-    var head = document.createElementNS(SVG_NS, 'path');
-    head.setAttribute('class', 'md-spinner-head');
-    head.setAttribute('d', 'M8 1.6a6.4 6.4 0 0 1 6.4 6.4');
-
-    svg.appendChild(track);
-    svg.appendChild(head);
-    return svg;
-  }
-
-  // `[o]` arrives as literal text at the head of the item; swapping it for a spinner here
-  // keeps the third state out of the lexer entirely. Boxed items are tagged in the same
-  // pass rather than matched in CSS, because a loose list wraps the item in a <p> and no
-  // child selector survives that.
   function markTasks() {
     content.querySelectorAll('li').forEach(function (item) {
-      var head = itemHead(item);
-      var match = head && /^\[[oO*]\][ \t]/.exec(head.nodeValue);
-
-      if (match) {
-        head.nodeValue = head.nodeValue.slice(match[0].length);
-        head.parentNode.insertBefore(spinnerSvg(), head);
-        item.classList.add('md-task');
-        return;
-      }
-
-      // A nested list's checkbox belongs to its own item, not to this one.
-      var box = item.querySelector('input[type="checkbox"]');
-      if (!box || box.closest('li') !== item) { return; }
+      var marker = leadingMarker(item);
+      if (!marker) { return; }
       item.classList.add('md-task');
+      marker.classList.add('md-task-marker');
 
       // Marked leaves the space it split the item on sitting after the box, which would put
-      // the text a quarter em right of where a spinner puts it. The marker owns that gap.
-      var text = box.nextSibling;
+      // the text a quarter em right of where the marker's own margin puts it.
+      var text = marker.nextSibling;
       if (text && text.nodeType === 3) { text.nodeValue = text.nodeValue.replace(/^\s+/, ''); }
     });
   }
@@ -718,12 +680,18 @@
 
   // MARK: Swift -> page
 
+  var tasksRegistered = false;
+
   window.mdRender = function (source, typed, completed) {
     var scroller = document.scrollingElement;
     var previousTop = scroller.scrollTop;
     typed = typed || [];
 
     marked.setOptions({ gfm: true, breaks: false, pedantic: false });
+    if (!tasksRegistered) {
+      marked.use(window.mdMarkedTasks());
+      tasksRegistered = true;
+    }
     toHTML(source, typed);
     celebrateTasks(completed);
 

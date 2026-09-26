@@ -1,8 +1,9 @@
 import fezJS from '@dinoreic/fez?raw'
 import type { InstalledMarkdownComponent } from '../models/markdownComponents'
 import type { TypedBlock } from '../models/typedBlocks'
-import markedJS from './marked.min.js?raw'
+import markedJS from 'marked/marked.min.js?raw'
 import highlightJS from './highlight.min.js?raw'
+import { markedTasks } from './markedTasks'
 import previewJS from './preview.js?raw'
 import previewCSS from '../css/preview.css?raw'
 
@@ -86,6 +87,7 @@ ${o.baseURL === null ? '' : `<base id="base" href="${escapeAttribute(o.baseURL)}
 <body>
 <div id="content"></div>
 <script nonce="${n}">${markedJS}</script>
+<script nonce="${n}">window.mdMarkedTasks = ${inlineScript(markedTasks.toString())};</script>
 <script nonce="${n}">${highlightJS}</script>
 <script nonce="${n}">${inlineScript(fezJS)}</script>
 <script nonce="${n}">${installed}</script>

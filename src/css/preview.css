@@ -131,9 +131,10 @@ li > ul, li > ol { margin-bottom: 0; }
 li > p { margin: 0; }
 li > p + p { margin-top: 0.25em; }
 
-/* Task lists read as checkboxes, not as bullets with a box next to them. `.md-task` is put
-   there by the script - a loose list wraps the item in a <p>, so nothing here can find the
-   box on its own.
+/* Task lists read as checkboxes, not as bullets with a box next to them. `.md-task` and
+   `.md-task-marker` are put there by the script - a loose list wraps the item in a <p>, so
+   nothing here can find the box on its own. A mark in running text (`.md-mark`, drawn by
+   the task-mark extension) is the same marker, just not pulled into the bullet column.
 
    All three markers are drawn here rather than left to the platform. An input does not
    inherit the page font, so an em on the native box resolved against 13px while the same em
@@ -145,20 +146,24 @@ li > p + p { margin-top: 0.25em; }
    strokes. */
 li.md-task { list-style: none; }
 
-.md-task input[type="checkbox"], .md-spinner {
+.md-task-marker, .md-mark {
   display: inline-block;
   font: inherit;
   width: 1em;
   height: 1em;
-  /* Pulled back by exactly its own width, so the marker sits in the bullet column while the
-     text stays on the column an ordinary bullet's text uses - and a nested list still
-     indents by the full step instead of by what is left over. The right margin is the only
-     gap between marker and text: the script strips the space that follows both. */
-  margin: 0 0.45em 0 -1.45em;
+  margin: 0 0.1em;
   vertical-align: -0.12em;
 }
 
-.md-task input[type="checkbox"] {
+/* Pulled back by exactly its own width, so the marker sits in the bullet column while the
+   text stays on the column an ordinary bullet's text uses - and a nested list still indents
+   by the full step instead of by what is left over. The right margin is the only gap between
+   marker and text: the script strips the space that follows. */
+.md-task-marker {
+  margin: 0 0.45em 0 -1.45em;
+}
+
+input.md-task-marker, input.md-mark {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
@@ -167,14 +172,14 @@ li.md-task { list-style: none; }
   background: transparent;
 }
 
-.md-task input[type="checkbox"]:checked {
+input.md-task-marker:checked, input.md-mark:checked {
   background: var(--accent);
   border-color: var(--accent);
 }
 
 /* The tick is two sides of an empty box, turned - drawn rather than set as a glyph so it
    scales with the marker instead of with whatever font answers for a checkmark. */
-.md-task input[type="checkbox"]:checked::after {
+input.md-task-marker:checked::after, input.md-mark:checked::after {
   content: "";
   position: absolute;
   left: 0.29em;

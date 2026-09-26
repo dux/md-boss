@@ -20,6 +20,12 @@ describe('completed task transitions', () => {
     expect(completedTaskIndexes(before, after)).toEqual([])
   })
 
+  test('an empty task item counts in the order, a mark in running text does not', () => {
+    const before = '- [ ]\nA note with [o] inline.\n- [o] ship it'
+    const after = '- [ ]\nA note with [x] inline.\n- [x] ship it'
+    expect(completedTaskIndexes(before, after)).toEqual([1])
+  })
+
   test('matches duplicate task text by occurrence', () => {
     const before = '- [x] repeat\n- [o] repeat'
     const after = '- [x] repeat\n- [x] repeat'

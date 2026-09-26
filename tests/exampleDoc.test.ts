@@ -135,6 +135,12 @@ describe('what the example page demonstrates', () => {
     }
   })
 
+  test('shows task marks in running text, written as well as drawn', () => {
+    const line = 'Ship when [x] tests pass and [o] the review is in, not before [ ] the notes are written.'
+    expect(exampleText.split(line).length - 1).toBe(2)
+    expect(exampleText).toContain('`- [ ]` on its own line draws an empty box')
+  })
+
   test('explains the applied external completion celebration', () => {
     expect(exampleText).toContain('the applied checkbox celebrates with a small confetti burst')
   })

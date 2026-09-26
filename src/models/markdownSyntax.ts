@@ -140,10 +140,24 @@ function inline(line: string, start: number, end: number, spans: Span[]): void {
     const ch = line[index]
     if (ch === '\\') index = Math.min(index + 2, end)
     else if (ch === '`') index = code(line, index, end, spans)
-    else if (ch === '[' || ch === '!') index = link(line, index, end, spans)
+    else if (ch === '[') index = taskMark(line, index, end, spans) ?? link(line, index, end, spans)
+    else if (ch === '!') index = link(line, index, end, spans)
     else if (ch === '*' || ch === '_' || ch === '~') index = delimited(line, index, end, spans)
     else index++
   }
+}
+
+/** `[ ]`, `[x]`, `[o]` and their spellings in running text - the marks the preview draws
+ *  anywhere, by the same rule (src/preview/markedTasks.ts): the start of the text, a space
+ *  or `(` before, and the end, a space or punctuation after. Null when this `[` is not one. */
+function taskMark(line: string, index: number, end: number, spans: Span[]): number | null {
+  if (!' xXoO*'.includes(line[index + 1] ?? '\0') || line[index + 2] !== ']' || index + 3 > end) return null
+  const before = index > 0 ? line[index - 1] : ''
+  const after = index + 3 < end ? line[index + 3] : ''
+  if (before && !/[\s(]/.test(before)) return null
+  if (after && !/[\s.,;:!?)]/.test(after)) return null
+  append(spans, index, index + 3, 'taskMarker')
+  return index + 3
 }
 
 /** An unmatched backtick run is literal text, so it is skipped rather than painted. */

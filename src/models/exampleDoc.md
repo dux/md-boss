@@ -90,6 +90,17 @@ Each line below is written with the marker it names, so you can see the two side
 - [o] `[o]` - in progress. A turning spinner, and md-boss's own: GitHub has no such state.
 - [x] `[x]` - done. A ticked box.
 
+A marker works anywhere in running text, not only at the head of a list item - a sentence, a heading, a table cell, a quote - as long as a space or the edge of the text sits on each side of it:
+
+```md
+Ship when [x] tests pass and [o] the review is in, not before [ ] the notes are written.
+```
+
+Ship when [x] tests pass and [o] the review is in, not before [ ] the notes are written.
+
+An item with nothing after its marker is still a task: `- [ ]` on its own line draws an empty box.
+`[X]` is a tick too, and `[*]` another spelling of `[o]`. Inside `code`, `arr[x]` or a `[link](url)` the brackets stay text.
+
 Return on a task line continues the list with an empty box, whatever the line above was.
 An item with nothing written on it sheds its marker instead of growing another.
 When another tool changes an in-progress task to done in this open document, the applied checkbox celebrates with a small confetti burst.
