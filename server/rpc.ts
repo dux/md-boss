@@ -2,6 +2,7 @@
 // Every handler gets the session first, then the call's positional params.
 
 import type { Session } from './session'
+import * as claude from './claude'
 import * as fs from './fs'
 import * as links from './links'
 import * as notes from './notes'
@@ -10,6 +11,7 @@ import * as search from './search'
 import * as walk from './walk'
 import * as watch from './watch'
 import type { AnnotationFile } from '../src/models/notes'
+import type { AiRequest } from '../src/native/bridge'
 
 // biome-ignore lint/suspicious/noExplicitAny: the wire is untyped; handlers narrow
 export type Handler = (session: Session, ...args: any[]) => unknown
@@ -33,7 +35,12 @@ export const methods: Record<string, Handler> = {
 
   'paths.home': () => paths.home(),
   'paths.config': () => paths.config(),
+  'paths.temp': () => paths.temp(),
   'paths.join': (_s, ...parts: string[]) => paths.join(...parts),
+
+  'ai.status': (_s, claudePath: string | null) => claude.status(claudePath),
+  'ai.run': (s, turnId: string, request: AiRequest) => claude.run(s, turnId, request),
+  'ai.stop': (s, turnId: string) => claude.stop(s, turnId),
 
   'watch.start': (s, dir: string) => watch.start(s, dir),
   'watch.stop': (s, id: number) => watch.stop(s, id),

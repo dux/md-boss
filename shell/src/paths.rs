@@ -40,7 +40,7 @@ impl Layout {
             .unwrap_or_else(|| PathBuf::from("."));
         Layout {
             dist: app_dir.join("dist"),
-            server_main: app_dir.join("server").join("main.ts"),
+            server_main: server_main(&app_dir),
             dev_url: std::env::var("MDBOSS_DEV_URL").ok().filter(|s| !s.is_empty()),
             app_dir,
         }
@@ -54,8 +54,18 @@ impl Layout {
     }
 }
 
+/// A package carries the server bundled into one file; a checkout runs it from source.
+fn server_main(dir: &Path) -> PathBuf {
+    let bundled = dir.join("server").join("main.js");
+    if bundled.is_file() {
+        bundled
+    } else {
+        dir.join("server").join("main.ts")
+    }
+}
+
 fn has_payload(dir: &Path) -> bool {
-    dir.join("server").join("main.ts").is_file()
+    server_main(dir).is_file()
 }
 
 pub fn home_dir() -> Option<PathBuf> {

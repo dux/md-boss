@@ -133,6 +133,8 @@ platform, so CI and your machine build the app the same way.
 Bun is not bundled - the shell finds it on PATH and spawns the server with it. That is also
 what makes updates cheap: the payload is `server/` and `dist/`, and the native shell rarely
 changes.
+A package carries the server as one bundled `server/main.js`, so its npm dependencies travel
+inside it rather than as a `node_modules`; a checkout runs `server/main.ts` from source.
 
 ## Tasks
 
@@ -150,7 +152,7 @@ changes.
 | `hammer install_app` | copy the bundle into `/Applications` (macOS) |
 | `hammer push` | bump the patch version, amend the last commit, push it, and tag the release |
 | `hammer server` | run the bun server alone on a fixed port, for poking at it with a WebSocket client |
-| `hammer payload` | write `payload-<version>.tar.gz` - `server/`, `dist/`, `version.txt` |
+| `hammer payload` | write `payload-<version>.tar.gz` - the bundled `server/main.js`, `dist/`, `version.txt` |
 | `hammer icon` | regenerate `icons/` from `icons/AppIcon.svg` |
 | `hammer link` | put the `md-boss` command on PATH (`bin/md-boss` copied to `~/bin`) |
 | `hammer demo` | serve the repo and open the demo page |

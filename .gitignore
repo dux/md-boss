@@ -1,6 +1,7 @@
 node_modules
 dist
 out
+build
 shell/target
 MdBoss.app
 MdBoss-x86.app
@@ -8,7 +9,6 @@ payload-*.tar.gz
 md-boss-*.tar.gz
 md-boss-*.zip
 SHA256SUMS
-version.txt
 icons/icon_*.png
 icons/*.icns
 .DS_Store

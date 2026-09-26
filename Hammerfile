@@ -25,11 +25,11 @@ ICON_SIZES  ||= [16, 32, 64, 128, 256, 512, 1024].freeze
 # than assigning - which is how every build so far stamped hammer's version into the app.
 APP_VERSION ||= JSON.parse(File.read('package.json'))['version']
 
-# What the payload and the bundle carry besides the shell binary. The server runs from
-# source - bun runs TypeScript - so there is nothing to compile on that side.
-# src/models rides along because server/ imports parsers from it (`../src/models/notes` and
-# friends); it resolves in the checkout but not in the bundle unless it is staged too.
-PAYLOAD_DIRS ||= %w[server dist src/models].freeze
+# The server as one file. node_modules is not shipped, so the Agent SDK has to travel inside
+# it, and so do the parsers server/ imports from src/models. A checkout runs server/main.ts
+# from source; the shell starts server/main.js when a package has one.
+SERVER_BUNDLE ||= 'build/server/main.js'
+PAYLOAD_STAGE ||= 'build/payload'
 
 # Shared by the top-level tasks and the `run:` namespace - a namespace is its own Hammer
 # subclass, so it would not otherwise see these. `helpers` defines them on the root class.
@@ -69,14 +69,14 @@ HELPERS = proc do
     end
   end
 
-  # Each entry keeps its path under the staging dir - a nested one like src/models has to
-  # land as src/models, not as a bare models/, or the server's `../src/models` misses it.
+  # What the payload and the bundle carry besides the shell binary: server/main.js, dist/,
+  # version.txt. The server is bundled here rather than in `hammer frontend`, because the
+  # release's platform jobs are handed dist/ and nothing else - each has run `bun install`.
   def stage_payload(dir)
-    PAYLOAD_DIRS.each do |d|
-      dest = File.join(dir, d)
-      FileUtils.mkdir_p File.dirname(dest)
-      FileUtils.cp_r d, dest
-    end
+    sh "bun build server/main.ts --target bun --outfile #{SERVER_BUNDLE}"
+    FileUtils.mkdir_p File.join(dir, 'server')
+    FileUtils.cp SERVER_BUNDLE, File.join(dir, 'server', 'main.js')
+    FileUtils.cp_r 'dist', File.join(dir, 'dist')
     File.write File.join(dir, 'version.txt'), "#{APP_VERSION}\n"
   end
 
@@ -381,16 +381,14 @@ task :icon do
 end
 
 task :payload do
-  desc 'Write payload-<version>.tar.gz: server/, dist/, version.txt - what an update replaces'
+  desc 'Write payload-<version>.tar.gz: server/main.js, dist/, version.txt - what an update replaces'
   proc do
     need_frontend!
-    File.write 'version.txt', "#{APP_VERSION}\n"
+    FileUtils.rm_rf PAYLOAD_STAGE
+    FileUtils.mkdir_p PAYLOAD_STAGE
+    stage_payload PAYLOAD_STAGE
     name = "payload-#{APP_VERSION}.tar.gz"
-    begin
-      sh "tar czf #{name} #{PAYLOAD_DIRS.join ' '} version.txt"
-    ensure
-      FileUtils.rm_f 'version.txt'
-    end
+    sh "tar czf #{name} -C #{PAYLOAD_STAGE} server dist version.txt"
     say.green "wrote ./#{name}"
   end
 end

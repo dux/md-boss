@@ -82,7 +82,55 @@ export interface NativePaths {
   home(): Promise<string>
   /** ~/.config/md-boss on every OS - plain text, meant to be edited by hand. */
   config(): Promise<string>
+  /** <os tmpdir>/md-boss - what may be lost, the AI chat sessions. */
+  temp(): Promise<string>
   join(...parts: string[]): Promise<string>
+}
+
+/** The `claude` the AI pane drives, and whether there is one. */
+export interface AiStatus {
+  /** Null when no `claude` was found. */
+  path: string | null
+  /** `claude --version`, null when it could not be read. */
+  version: string | null
+}
+
+/** One turn of an AI chat (server/claude.ts). */
+export interface AiRequest {
+  /** The CLI session to continue; null starts a new one. */
+  resume: string | null
+  systemPrompt: string
+  /** The whole user turn: the document context, the selections, the message. */
+  text: string
+  /** Absolute paths of PNG, JPEG, GIF or WebP images the turn shows the model; the server
+   *  reads the bytes. */
+  images: string[]
+  /** A JSON schema the turn answers in instead of streamed text. */
+  schema: Record<string, unknown> | null
+  /** Null: the CLI's default model. */
+  model: string | null
+  /** Null: found on PATH and in the usual install places. */
+  claudePath: string | null
+}
+
+/** `no-claude`: nothing to run. `no-session`: `resume` named a session the CLI no longer
+ *  has - start a new one. `failed`: anything else, `message` says what. */
+export type AiFailure = 'no-claude' | 'no-session' | 'failed'
+
+export type AiResult =
+  | { kind: 'done'; sessionId: string; text: string; structured: unknown }
+  | { kind: 'stopped'; sessionId: string | null }
+  | { kind: 'error'; reason: AiFailure; message: string; sessionId: string | null }
+
+/** A running turn: the text streams to `onDelta`, the outcome settles `result`. */
+export interface AiTurn {
+  result: Promise<AiResult>
+  stop(): void
+}
+
+export interface NativeAi {
+  status(claudePath: string | null): Promise<AiStatus>
+  run(request: AiRequest, onDelta: (text: string) => void): AiTurn
 }
 
 export interface ListedEntry {
@@ -248,6 +296,7 @@ export interface Native {
   commands: NativeCommands
   menu: NativeMenu
   cli: NativeCli
+  ai: NativeAi
   /** Files dragged in from the OS. An HTML5 drop never carries a native path, so the raw
    *  pane's "drop a file, get a link" listens here for anything from outside the window. */
   onFileDrag(listener: (drag: FileDrag) => void): Promise<Unwatch>

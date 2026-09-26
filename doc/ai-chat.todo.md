@@ -146,8 +146,8 @@ The parsed object arrives as `structured_output` on the success result.
                              {kind:'pick', line, next} (next = following block's data-line, for the range)
 ~ src/ui/fez/settings-panel.fez  AI section: claude path + version or install hint
 ~ src/main.ts                import ai-pane.fez
-~ Hammerfile                 payload stages a bundled server (bun build server/main.ts --target bun);
-                             src/models no longer staged
+~ Hammerfile                 stage_payload bundles the server (bun build server/main.ts --target bun) into server/main.js;
+                             hammer payload tars the same staging dir; src/models no longer staged
 ~ shell/src/paths.rs         server_main = server/main.js when present (bundle), else server/main.ts (checkout)
 ~ package.json               @anthropic-ai/claude-agent-sdk pinned exactly 0.3.283 (tracks CLI 2.1.283), diff
 ~ README.md                  AI section
@@ -166,11 +166,12 @@ Each step ends with a working app.
   * [x] `outputFormat` coming back as structured output on the result message
   * [x] `pathToClaudeCodeExecutable` pointing at the native `~/.local/bin/claude`
   * [x] a `bun build` bundle of it running
-* [ ] Server `claude.ts`, RPC, native seam, memory twin, tests
+* [x] Server `claude.ts`, RPC, native seam, memory twin, tests
+* [x] Bundled server in the Hammerfile and the shell path - pulled forward, so a package built after this step still starts
 * [ ] `aiPrompt.ts` and `aiChat.ts`: chat only, Ask/Write, persistence, reseed, tests
 * [ ] Pane, settings, menu, width; preview pick and "Ask AI" menus
 * [ ] Prepare, revise, proposal card, Apply (assets, notes shift, stale-base refusal), tests
-* [ ] Bundled server in the Hammerfile and the shell path; `hammer build`, then launch the bundle from Finder
+* [ ] `hammer build`, then launch the bundle from Finder and chat
 * [ ] README section
 
 ## Errors and edges

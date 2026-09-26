@@ -5,7 +5,7 @@
 // `window.__MDBOSS` before any script runs.
 
 import type { Platform } from '../models/platform'
-import type { FileDrag, Native, OpenRequest, Unwatch } from './bridge'
+import type { AiResult, FileDrag, Native, OpenRequest, Unwatch } from './bridge'
 
 interface Boot {
   port: number | null
@@ -175,6 +175,15 @@ socket.afterReconnect(() => {
   for (const w of watches) void registerWatch(w).catch(() => {})
 })
 
+/** Running AI turns' text listeners by turn id; the `ai.run` reply ends the turn. */
+const aiTurns = new Map<string, (text: string) => void>()
+let aiNextTurn = 1
+
+socket.on('ai', (data) => {
+  const { turn, text } = data as { turn: string; text: string }
+  aiTurns.get(turn)?.(text)
+})
+
 /** Connects to the server the shell started, and follows it through restarts. */
 export async function connectServer(): Promise<void> {
   const boot = window.__MDBOSS!
@@ -267,7 +276,21 @@ export const bunNative: Native = {
   paths: {
     home: () => socket.call('paths.home'),
     config: () => socket.call('paths.config'),
+    temp: () => socket.call('paths.temp'),
     join: (...parts) => socket.call('paths.join', ...parts),
+  },
+
+  // A lost connection mid-turn - a server restart - is a failed turn, not a hung one.
+  ai: {
+    status: (claudePath) => socket.call('ai.status', claudePath),
+    run: (request, onDelta) => {
+      const turn = `t${aiNextTurn++}`
+      aiTurns.set(turn, onDelta)
+      const result = socket.call<AiResult>('ai.run', turn, request)
+        .catch((e: Error): AiResult => ({ kind: 'error', reason: 'failed', message: e.message, sessionId: null }))
+        .finally(() => aiTurns.delete(turn))
+      return { result, stop: () => void socket.call('ai.stop', turn).catch(() => {}) }
+    },
   },
 
   commands: {

@@ -3,7 +3,9 @@ import { rewriting } from '../models/markdownLinks'
 import { parseAnnotationFile, serializeAnnotationFile } from '../models/notes'
 import { dirname } from '../models/paths'
 import type { MenuModel, MenuPatch } from '../models/appMenu'
-import type { Entry, Listing, Native, NativeApp, NativeCli, NativeMenu, NativeUpdater, OpenRequest, RewriteOutcome, Stat, Unwatch } from './bridge'
+import type {
+  AiRequest, AiResult, AiStatus, Entry, Listing, Native, NativeAi, NativeApp, NativeCli, NativeMenu, NativeUpdater, OpenRequest, RewriteOutcome, Stat, Unwatch,
+} from './bridge'
 
 /** The menu twin keeps what it was given, so a test can read the installed model, the
  *  patches that followed, and click an item the way the menu bar would. */
@@ -122,6 +124,69 @@ function memoryCli(cwd: string): MemoryCli {
   }
 }
 
+/** How a scripted turn ends. `text` streams word by word first; `hold` keeps the turn
+ *  running until `stop()` or `release()`, for a test that looks at it mid-turn. */
+export interface MemoryReply {
+  text?: string
+  structured?: unknown
+  error?: { reason: 'no-claude' | 'no-session' | 'failed'; message: string }
+  hold?: boolean
+}
+
+/** The AI twin: no `claude` here, so each turn plays the next scripted reply - "ok" when
+ *  none is queued - and every request is kept for the test to read. Session ids are
+ *  `session-1`, `session-2`, ... unless the request resumes one. */
+export interface MemoryAi extends NativeAi {
+  requests: AiRequest[]
+  claude: AiStatus
+  script(...replies: MemoryReply[]): void
+  /** Ends every held turn with its reply. */
+  release(): void
+}
+
+function memoryAi(): MemoryAi {
+  const queue: MemoryReply[] = []
+  const held = new Set<() => void>()
+  let sessions = 0
+  return {
+    requests: [],
+    claude: { path: '/usr/local/bin/claude', version: '0.0.0' },
+    script(...replies) {
+      queue.push(...replies)
+    },
+    release() {
+      for (const finish of [...held]) finish()
+    },
+    async status() {
+      return this.claude
+    },
+    run(request, onDelta) {
+      this.requests.push(request)
+      const reply = queue.shift() ?? { text: 'ok' }
+      const sessionId = request.resume ?? `session-${++sessions}`
+      let settle!: (result: AiResult) => void
+      const result = new Promise<AiResult>((resolve) => (settle = resolve))
+      const finish = () => {
+        held.delete(finish)
+        if (reply.error) return settle({ kind: 'error', ...reply.error, sessionId: null })
+        settle({ kind: 'done', sessionId, text: reply.text ?? '', structured: reply.structured ?? null })
+      }
+      queueMicrotask(() => {
+        for (const word of (reply.text ?? '').match(/\S+\s*/g) ?? []) onDelta(word)
+        if (reply.hold) held.add(finish)
+        else finish()
+      })
+      return {
+        result,
+        stop: () => {
+          held.delete(finish)
+          settle({ kind: 'stopped', sessionId })
+        },
+      }
+    },
+  }
+}
+
 // An in-memory Native over a { "/abs/path/file.md": "text" } map - what the tests and
 // the browser dev page (vite without Tauri) run against.
 export function memoryNative(files: Record<string, string>, home = '/home/dev'): Native {
@@ -236,6 +301,7 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
     paths: {
       home: async () => home,
       config: async () => `${home}/.config/md-boss`,
+      temp: async () => '/tmp/md-boss',
       join: async (...parts) => parts.join('/').replace(/\/{2,}/g, '/'),
     },
 
@@ -326,6 +392,7 @@ export function memoryNative(files: Record<string, string>, home = '/home/dev'):
 
     menu: memoryMenu(),
     cli: memoryCli(home),
+    ai: memoryAi(),
 
     watch: async (dir, cb): Promise<Unwatch> => {
       const entry = { dir: norm(dir), cb }
