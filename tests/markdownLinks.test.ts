@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { destinations, relativePath, rewriting, snippet } from '../src/models/markdownLinks'
+import { destinations, localImages, relativePath, rewriting, snippet } from '../src/models/markdownLinks'
 
 // Synthetic /work paths throughout, as in the Swift suite.
 const work = '/work/notes'
@@ -42,6 +42,21 @@ describe('relative paths', () => {
 
   test('backslashes are read as separators', () => {
     expect(relativePath('C:\\work\\notes', 'C:\\work\\notes\\sub\\a.md')).toBe('./sub/a.md')
+  })
+})
+
+describe('local images', () => {
+  test('embedded images resolve against the folder, each once; links, URLs and fences are left out', () => {
+    const text = [
+      '![flow](assets/flow.svg) and ![again](./assets/flow.svg)',
+      '[not an image](assets/x.png)',
+      '![remote](https://example.com/a.png) ![escaped](assets/my%20shot.png#top)',
+      '```',
+      '![in a fence](assets/fenced.png)',
+      '```',
+      '![up](../shared/logo.png)',
+    ].join('\n')
+    expect(localImages(text, work)).toEqual([at('assets/flow.svg'), at('assets/my shot.png'), '/work/shared/logo.png'])
   })
 })
 

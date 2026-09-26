@@ -131,6 +131,7 @@ The parsed object arrives as `structured_output` on the success result.
 + src/models/aiChat.ts       AIChat store: load/save session file, send/prepare/revise/stop/reset, attach(line range),
                              proposal + stats (via `diff`), states idle|streaming|preparing|error
 ~ src/models/aiStart.ts      extract markdownDialect(components); buildAIStartPrompt reuses it
+~ src/models/markdownLinks.ts  localImages(text, dir): the local images a document embeds
 ~ src/models/manager.ts      owns AIChat for the open document (swap on open); attachLine(start,end);
                              applyProposal(): base check -> write assets -> replaceBuffer -> shift notes
                              per diff hunk (noteShift Edit) -> saveDocument -> chat.markApplied
@@ -168,7 +169,7 @@ Each step ends with a working app.
   * [x] a `bun build` bundle of it running
 * [x] Server `claude.ts`, RPC, native seam, memory twin, tests
 * [x] Bundled server in the Hammerfile and the shell path - pulled forward, so a package built after this step still starts
-* [ ] `aiPrompt.ts` and `aiChat.ts`: chat only, Ask/Write, persistence, reseed, tests
+* [x] `aiPrompt.ts` and `aiChat.ts`: chat only, Ask/Write, persistence, reseed, tests
 * [ ] Pane, settings, menu, width; preview pick and "Ask AI" menus
 * [ ] Prepare, revise, proposal card, Apply (assets, notes shift, stale-base refusal), tests
 * [ ] `hammer build`, then launch the bundle from Finder and chat

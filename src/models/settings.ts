@@ -30,6 +30,10 @@ export interface SettingsData {
   lastOpenedFolder: string | null
   /** Never listed in the tree. Editable by hand in settings.json. */
   skipFolders: string[]
+  /** The AI pane's model, as `claude --model` takes it; null is the CLI's default. */
+  aiModel: string | null
+  /** The `claude` the AI pane runs; null finds it on PATH and in the usual places. */
+  claudePath: string | null
 }
 
 export function defaultSettings(): SettingsData {
@@ -52,6 +56,8 @@ export function defaultSettings(): SettingsData {
       'node_modules', '.build', '.git', 'DerivedData',
       'Pods', '__pycache__', '.next', 'vendor', 'dist', 'coverage',
     ],
+    aiModel: null,
+    claudePath: null,
   }
 }
 

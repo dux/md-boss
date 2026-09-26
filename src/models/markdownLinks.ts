@@ -116,15 +116,8 @@ function repointing(
   options: RewriteOptions,
 ): string | null {
   const { body, fragment } = splittingFragment(destination.raw)
-  const unescaped = unescaping(body)
-  let decoded: string
-  try {
-    decoded = decodeURIComponent(unescaped)
-  } catch {
-    decoded = unescaped
-  }
-
-  if (!decoded || decoded.startsWith('//') || hasScheme(decoded)) return null
+  const decoded = localPart(body)
+  if (decoded === null) return null
 
   const direct = resolving(decoded, directory, options)
   if (direct !== null && targets.has(direct)) {
@@ -138,6 +131,31 @@ function repointing(
   const resolved = resolving(decoded.slice(0, suffix.index), directory, options)
   if (resolved === null || !targets.has(resolved)) return null
   return relativePath(directory, targets.get(resolved)!) + suffix[0] + fragment
+}
+
+/** Absolute paths of the local images `text` embeds, each once, in source order. URLs are
+ *  left out; `directory` is the folder `text` was read from. */
+export function localImages(text: string, directory: string): string[] {
+  const found = new Set<string>()
+  for (const destination of destinations(text)) {
+    if (!destination.isImage) continue
+    const decoded = localPart(splittingFragment(destination.raw).body)
+    const path = decoded === null ? null : resolving(decoded, directory, {})
+    if (path !== null) found.add(path)
+  }
+  return [...found]
+}
+
+/** A destination body as a path: unescaped and percent-decoded. Null for a URL or nothing. */
+function localPart(body: string): string | null {
+  const unescaped = unescaping(body)
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(unescaped)
+  } catch {
+    decoded = unescaped
+  }
+  return !decoded || decoded.startsWith('//') || hasScheme(decoded) ? null : decoded
 }
 
 function resolving(path: string, directory: string, options: RewriteOptions): string | null {
