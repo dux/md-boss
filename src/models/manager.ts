@@ -945,7 +945,7 @@ export class Manager {
       this.settings.patch({ lastOpenedFile: null })
       return
     }
-    await this.open(path)
+    if (await this.open(path)) await this.reveal(path)
   }
 
   /** `pushingHistory` is false for exactly one caller - `goBack` - so walking back does not

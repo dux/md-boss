@@ -89,12 +89,14 @@ describe('manager editing', () => {
     expect(manager.document?.reloadToken).toBe(1)
   })
 
-  test('restoreSession opens the remembered file and forgets a missing one', async () => {
-    installNative(memoryNative({ '/w/a.md': 'one' }))
+  test('restoreSession opens the remembered file, puts the tree cursor on it, and forgets a missing one', async () => {
+    installNative(memoryNative({ '/w/doc/b.md': 'two', '/w/a.md': 'one' }))
     let manager = new Manager(await SettingsStore.load(), await RootFolders.load(), '/home/dev')
+    manager.addRoot('/w')
     manager.settings.patch({ lastOpenedFile: '/w/a.md' })
     await manager.restoreSession()
     expect(manager.document?.path).toBe('/w/a.md')
+    expect(manager.tree.cursorRow?.node.path).toBe('/w/a.md')
     manager = new Manager(await SettingsStore.load(), await RootFolders.load(), '/home/dev')
     manager.settings.patch({ lastOpenedFile: '/w/gone.md' })
     await manager.restoreSession()
