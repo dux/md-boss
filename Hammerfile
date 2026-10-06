@@ -55,7 +55,7 @@ HELPERS = proc do
     arch = RbConfig::CONFIG['host_cpu'].match?(/arm|aarch64/) ? 'arm64' : 'x64'
     case host_os
     when :macos   then "darwin-#{arch}"
-    when :windows then 'windows-x64'
+    when :windows then "windows-#{arch}"
     else               "linux-#{arch}"
     end
   end

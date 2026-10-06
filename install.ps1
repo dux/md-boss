@@ -64,12 +64,11 @@ if ($Uninstall) {
 # ---- what we are running on
 
 $arch = $env:PROCESSOR_ARCHITECTURE
-if ($arch -eq 'ARM64') {
-  Warn 'No native arm64 build yet - installing the x64 build, which Windows runs emulated.'
-} elseif ($arch -ne 'AMD64') {
-  Die "unsupported architecture $arch"
+$target = switch ($arch) {
+  'AMD64' { 'windows-x64' }
+  'ARM64' { 'windows-arm64' }
+  default { Die "unsupported architecture $arch" }
 }
-$target = 'windows-x64'
 
 # ---- which release
 

@@ -20,6 +20,7 @@ The scripts fetch the latest release, check its SHA256, and install the build fo
 architecture - no administrator, nothing outside your home folder except
 `/Applications/MdBoss.app` on macOS. They tell you if `bun` is missing and print the one
 command that fixes it.
+Releases are built for macOS (Apple Silicon and Intel), Windows (x64 and ARM64) and Linux (x64 and ARM64).
 `curl` and `Invoke-WebRequest` set no download-quarantine or Mark-of-the-Web flag, so the app
 opens without a Gatekeeper or SmartScreen prompt; `install.sh` also strips the flag from a copy
 that came through a browser.

@@ -38,10 +38,6 @@ case "$(uname -m)" in
   *)               die "unsupported architecture $(uname -m)" ;;
 esac
 
-if [ "$os-$arch" = "linux-arm64" ]; then
-  die "no linux-arm64 build yet - build from source, see the README"
-fi
-
 target="$os-$arch"
 share="$PREFIX/share/md-boss"
 desktop="$PREFIX/share/applications/md-boss.desktop"
