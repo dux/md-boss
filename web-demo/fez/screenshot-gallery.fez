@@ -9,6 +9,8 @@
         { src: 'assets/split.png', title: 'Raw and preview', desc: 'Both panes side by side, scrolling together on source lines rather than on percentages' },
         { src: 'assets/notes.png', title: 'Notes', desc: 'Right-click a line in either pane to mark it - notes live in a .md-boss file you can commit next to the documents' },
         { src: 'assets/tasks.png', title: 'Task lists', desc: 'Three states rather than two: not started, in progress as a spinner, and done. [o] is md-boss\'s own' },
+        { src: 'assets/github.png', title: 'GitHub layout', desc: 'The same document the way a README reads on GitHub - a sans body, ruled headings, GitHub\'s own alerts - picked on the Preview label beside Default' },
+        { src: 'assets/ai.png', title: 'AI pane', desc: 'Ask Claude about the open document with the lines you picked attached, or let it prepare a change you review before it lands' },
         { src: 'assets/dark.png', title: 'Default Dark', desc: 'The same hue family rotated dark - warm charcoal, not black, and never a blue-black. Compact keeps this palette and tightens the type' }
       ]
     }
