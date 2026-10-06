@@ -25,7 +25,7 @@
 * for text styles use only the classes in src/css/styles.css (`.text-default`, `.text-buttons`, `.text-small`, `.text-title`, `.text-mono`)
 * for colors use only the theme CSS custom properties (`var(--accent)` and the other tokens from src/theme/theme.ts) - never a literal colour in a component
 * only src/native/bun.ts talks to the shell and the server; models and UI go through the `Native` interface, and every new method gets a memory twin in src/native/memory.ts
-* read ~/dev/gems/fez/AGENTS.md before touching a .fez file
+* read ~/dev/libs/fez/AGENTS.md before touching a .fez file
 * the preview web view is *told* which theme to use - never add `prefers-color-scheme` to its CSS
 * src/models/exampleDoc.md is the Example page - the one document that shows every construct
   the preview renders. Any change to core markdown rendering (a new construct, a new state of
