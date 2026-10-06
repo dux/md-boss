@@ -1,5 +1,6 @@
-# Release pipeline. Tag `vX.Y.Z` (matching package.json) and this builds every platform
-# and publishes the assets the install scripts pull from.
+# Release pipeline. `hammer push` tags `v<commit count>` and this builds every platform and
+# publishes the assets the install scripts pull from. The version is that count, rendered
+# <a>.<b>.<c> by the Hammerfile (v94 ships as 0.9.4), so every checkout needs the whole history.
 #
 # The build steps themselves live in the Hammerfile, not here - this installs the gem and
 # calls the same `hammer` tasks you run locally, so there is one description of how the app
@@ -36,23 +37,24 @@ jobs:
   frontend:
     runs-on: ubuntu-22.04
     outputs:
-      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: oven-sh/setup-bun@v2
       - uses: ruby/setup-ruby@v1
         with: { ruby-version: '3.3' }
       - run: gem install lux-hammer -v "$HAMMER_VERSION"
 
       - id: meta
-        name: Version from package.json, checked against the tag
+        name: Tag from the commit count, checked against the pushed tag
         run: |
-          version=$(ruby -rjson -e 'puts JSON.parse(File.read("package.json"))["version"]')
-          if [ "$GITHUB_REF_TYPE" = tag ] && [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
-            echo "tag $GITHUB_REF_NAME does not match package.json $version" >&2
+          tag="v$(git rev-list --count HEAD)"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
+            echo "tag $GITHUB_REF_NAME is not $tag, the commit count at it" >&2
             exit 1
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       # Not `hammer install` - that also runs cargo fetch, and there is no Rust on this job.
       - run: bun install --frozen-lockfile
@@ -67,7 +69,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: icons, path: icons/icon_*.png, retention-days: 1 }
       - uses: actions/upload-artifact@v4
-        with: { name: asset-payload, path: payload-*.tar.gz, retention-days: 1 }
+        with: { name: asset-payload, path: payload.tar.gz, retention-days: 1 }
 
   shell:
     needs: frontend
@@ -87,6 +89,7 @@ jobs:
       APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: oven-sh/setup-bun@v2
       - uses: ruby/setup-ruby@v1
         with: { ruby-version: '3.3' }
@@ -188,7 +191,7 @@ jobs:
         working-directory: assets
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', needs.frontend.outputs.version) }}
+          TAG: ${{ needs.frontend.outputs.tag }}
         run: |
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
             && gh release upload "$TAG" ./* --repo "$GITHUB_REPOSITORY" --clobber \

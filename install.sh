@@ -8,7 +8,7 @@
 # macOS bundle opens without a Gatekeeper prompt - which is the whole reason the app is
 # distributed this way rather than as a download link.
 #
-# MD_BOSS_VERSION=v0.2.0   pin a release
+# MD_BOSS_VERSION=v94      pin a release
 # MD_BOSS_PREFIX=~/.local  where bin/ and share/ go
 # MD_BOSS_REPO=owner/name  pull from a fork
 
@@ -90,12 +90,11 @@ else
   case "$tag" in
     v[0-9]* | [0-9]*) ;;
     latest) die "$REPO has no published release yet" ;;
-    *)      die "unexpected release tag '$tag' in $REPO - expected vX.Y.Z" ;;
+    *)      die "unexpected release tag '$tag' in $REPO - expected v<number>" ;;
   esac
 fi
-version="${tag#v}"
 
-asset="md-boss-$version-$target.tar.gz"
+asset="md-boss-$target.tar.gz"
 base="https://github.com/$REPO/releases/download/$tag"
 
 # ---- fetch and verify
@@ -103,7 +102,7 @@ base="https://github.com/$REPO/releases/download/$tag"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/md-boss.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-say "md-boss $version ($target)"
+say "md-boss $tag ($target)"
 curl -fsSL --retry 3 -o "$tmp/$asset" "$base/$asset" || die "no $asset in release $tag"
 curl -fsSL --retry 3 -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" || die "release $tag has no SHA256SUMS"
 

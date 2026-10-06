@@ -151,12 +151,19 @@ inside it rather than as a `node_modules`; a checkout runs `server/main.ts` from
 | `hammer run` | launch the bundle built here |
 | `hammer run:win` | build the shell for x86_64 and launch it under Rosetta (macOS) |
 | `hammer install_app` | copy the bundle into `/Applications` (macOS) |
-| `hammer push` | bump the patch version, amend the last commit, push it, and tag the release |
+| `hammer push` | push the branch and tag its head `v<commit count>` - the tag starts the release |
 | `hammer server` | run the bun server alone on a fixed port, for poking at it with a WebSocket client |
-| `hammer payload` | write `payload-<version>.tar.gz` - the bundled `server/main.js`, `dist/`, `version.txt` |
+| `hammer payload` | write `payload.tar.gz` - the bundled `server/main.js`, `dist/`, `version.txt` |
 | `hammer icon` | regenerate `icons/` from `icons/AppIcon.svg` |
 | `hammer link` | put the `md-boss` command on PATH (`bin/md-boss` copied to `~/bin`) |
 | `hammer demo` | serve the repo and open the demo page |
+
+### Versions
+
+The version is the number of commits in `main` when the app was built, rendered as `<a>.<b>.<c>`, where `b` and `c` are the last two digits and `a` is everything before them: 94 commits is 0.9.4, 1123 is 11.2.3.
+The repo stores no version anywhere; the Hammerfile counts it at build time.
+A release is tagged with the raw count (`v94`), and its assets carry no version in their names.
+A checkout run from source reports `dev`.
 
 ## Notes
 

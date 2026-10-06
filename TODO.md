@@ -64,7 +64,7 @@ The working list. Phases in order; a phase is done when every box in it is ticke
 
 ## 9. Updates
 
-- [ ] `hammer payload` writes `payload-<version>.tar.gz` (`server/`, `dist/`, `version.txt`, `min_shell`)
+- [ ] `hammer payload` writes `payload.tar.gz` (`server/`, `dist/`, `version.txt`, `min_shell`)
 - [ ] shell resolves the payload from `~/.config/md-boss/app/current/`, falls back to the bundle
 - [ ] `server/update.ts`: `releases/latest` redirect -> tag, download, sha256, extract, flip `current`
 - [ ] page: "restart to update" toast; `min_shell` behind -> toast the install command

@@ -5,7 +5,7 @@ build
 shell/target
 MdBoss.app
 MdBoss-x86.app
-payload-*.tar.gz
+payload.tar.gz
 md-boss-*.tar.gz
 md-boss-*.zip
 SHA256SUMS

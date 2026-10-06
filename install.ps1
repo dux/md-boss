@@ -82,10 +82,8 @@ if (-not $Version) {
     Die "could not reach github.com, or $Repo has no published release yet"
   }
 }
-$tag     = $Version
-$version = $tag -replace '^v', ''
-
-$asset = "md-boss-$version-$target.zip"
+$tag   = $Version
+$asset = "md-boss-$target.zip"
 $base  = "https://github.com/$Repo/releases/download/$tag"
 
 # ---- fetch and verify
@@ -94,7 +92,7 @@ $tmp = Join-Path ([IO.Path]::GetTempPath()) ("md-boss-" + [Guid]::NewGuid().ToSt
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
 try {
-  Say "md-boss $version ($target)"
+  Say "md-boss $tag ($target)"
 
   $zip = Join-Path $tmp $asset
   try { Invoke-WebRequest "$base/$asset" -OutFile $zip -UseBasicParsing }

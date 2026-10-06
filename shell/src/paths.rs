@@ -46,11 +46,11 @@ impl Layout {
         }
     }
 
-    /// The payload's version, the shell's own when there is no payload file.
+    /// The payload's version; `dev` for a checkout, which has no payload file.
     pub fn version(&self) -> String {
         std::fs::read_to_string(self.app_dir.join("version.txt"))
             .map(|s| s.trim().to_string())
-            .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string())
+            .unwrap_or_else(|_| "dev".to_string())
     }
 }
 

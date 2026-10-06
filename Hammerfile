@@ -21,9 +21,17 @@ DEV_URL     ||= 'http://localhost:1430'
 MIN_BUN     ||= '1.2.0'
 ICON_SIZES  ||= [16, 32, 64, 128, 256, 512, 1024].freeze
 
+# The version is the number of commits in main, and the repo stores none: a version file
+# would name versions that have no release. HEAD and 0 only cover a checkout without a main
+# branch - CI checks out the tag detached, and there HEAD is the same commit.
+COMMIT_COUNT ||= %w[main HEAD].map { |ref| `git rev-list --count #{ref} 2>#{File::NULL}`.strip }
+                              .find { |n| n.match?(/\A\d+\z/) }.to_i
+
+# Rendered <a>.<b>.<c>: b and c are the count's last two digits, a is everything before them,
+# so 94 is 0.9.4 and 1123 is 11.2.3. The release tag is the raw count, v94.
 # Not VERSION: hammer defines one of its own, and `VERSION ||=` resolves to that rather
 # than assigning - which is how every build so far stamped hammer's version into the app.
-APP_VERSION ||= JSON.parse(File.read('package.json'))['version']
+APP_VERSION ||= COMMIT_COUNT.to_s.rjust(3, '0').then { |d| "#{d[0..-3].to_i}.#{d[-2]}.#{d[-1]}" }
 
 # The server as one file. node_modules is not shipped, so the Agent SDK has to travel inside
 # it, and so do the parsers server/ imports from src/models. A checkout runs server/main.ts
@@ -57,8 +65,10 @@ HELPERS = proc do
     File.join 'shell', 'target', cfg, exe
   end
 
+  # No version in it: the release tag already names one, and the install scripts need only the
+  # platform to find their asset.
   def archive_name(ext)
-    "#{BINARY_NAME}-#{APP_VERSION}-#{host_target}.#{ext}"
+    "#{BINARY_NAME}-#{host_target}.#{ext}"
   end
 
   # `which`, without shelling out to a `which` that Windows does not have.
@@ -334,33 +344,24 @@ task :install_app do
   end
 end
 
-# From "the work is committed" to "a release is building". The patch bump rides in the same
-# commit as the change it ships - never a version commit of its own - and the tag is what the
-# release workflow triggers on.
+# From "the work is committed" to "a release is building". Nothing is bumped: the tag is
+# v<commits up to HEAD>, the same count the release workflow checks it against.
 task :push do
-  desc 'Bump the patch version, amend the last commit, push it, and tag the release'
+  desc 'Push the branch and tag its head v<commit count> - the tag starts the release'
   proc do
     branch = `git rev-parse --abbrev-ref HEAD`.strip
     error 'detached HEAD - check out a branch first' if branch == 'HEAD'
-    dirty = `git status --porcelain`.split("\n").reject { |line| line.include?('package.json') }
+    dirty = `git status --porcelain`.split("\n")
     say.yellow "not in this push (commit them first):\n#{dirty.join("\n")}" unless dirty.empty?
-    body = File.read('package.json')
-    match = body.match(/"version":\s*"(\d+)\.(\d+)\.(\d+)"/) or error 'no version field in package.json'
-    old = "#{match[1]}.#{match[2]}.#{match[3]}"
-    version = "#{match[1]}.#{match[2]}.#{match[3].to_i + 1}"
-    tag = "v#{version}"
+    tag = "v#{`git rev-list --count HEAD`.strip}"
     if `git tag -l #{tag}`.strip != '' || `git ls-remote --tags origin #{tag} 2>/dev/null`.strip != ''
-      error "#{tag} already exists - nothing bumped"
+      error "#{tag} already exists - nothing new to release"
     end
 
-    say "version #{old} -> #{version}", :cyan
-    File.write('package.json', body.sub(match[0], %("version": "#{version}")))
-    sh 'git add package.json'
-    sh 'git commit --amend --no-edit'
-    sh "git push --force-with-lease origin #{branch}"
-    sh "git tag -a #{tag} -m \"#{APP_NAME} #{version}\""
+    sh "git push origin #{branch}"
+    sh "git tag -a #{tag} -m \"#{APP_NAME} #{APP_VERSION}\""
     sh "git push origin #{tag}"
-    say.green "pushed #{branch} and #{tag} - the release workflow is building"
+    say.green "pushed #{branch} and #{tag} (#{APP_VERSION}) - the release workflow is building"
   end
 end
 
@@ -381,13 +382,13 @@ task :icon do
 end
 
 task :payload do
-  desc 'Write payload-<version>.tar.gz: server/main.js, dist/, version.txt - what an update replaces'
+  desc 'Write payload.tar.gz: server/main.js, dist/, version.txt - what an update replaces'
   proc do
     need_frontend!
     FileUtils.rm_rf PAYLOAD_STAGE
     FileUtils.mkdir_p PAYLOAD_STAGE
     stage_payload PAYLOAD_STAGE
-    name = "payload-#{APP_VERSION}.tar.gz"
+    name = 'payload.tar.gz'
     sh "tar czf #{name} -C #{PAYLOAD_STAGE} server dist version.txt"
     say.green "wrote ./#{name}"
   end
