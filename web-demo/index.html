@@ -17,6 +17,7 @@
   <script fez="fez/shortcut-table.fez"></script>
   <script fez="fez/construct-gallery.fez"></script>
   <script fez="fez/fez-extend.fez"></script>
+  <script fez="fez/install-menu.fez"></script>
   <style>
     /* The page is painted out of the app's own Paper palette - the same hex values that
        live in src/theme/theme.ts. Tailwind is used for layout only, so a
@@ -28,6 +29,7 @@
       --muted: #756C61;
       --rule: #E3D9C6;
       --accent: #9A5B34;
+      --accent-hover: #86492A;
       --link: #1F5C8B;
       --night: #1E1C1A;
       --night-surface: #26231F;
@@ -81,7 +83,7 @@
     }
 
     .u-btn-primary { background: var(--accent); color: #FDFBF6; }
-    .u-btn-primary:hover { background: #86492A; }
+    .u-btn-primary:hover { background: var(--accent-hover); }
 
     .u-btn-quiet { background: var(--surface); color: var(--ink); border: 1px solid var(--rule); }
     .u-btn-quiet:hover { background: #EADFC9; }
@@ -134,10 +136,10 @@
       rendering done entirely offline. No network, no telemetry, no account.
     </p>
     <div class="flex flex-col md:flex-row gap-3 justify-center items-center mb-4">
-      <a href="#install" class="u-btn u-btn-primary px-6 py-3">Install</a>
+      <install-menu></install-menu>
       <a href="#screenshots" class="u-btn u-btn-quiet px-6 py-3">See it</a>
     </div>
-    <p class="text-sm u-muted">macOS, Windows and Linux. Needs <span class="u-mono">bun</span> on PATH.</p>
+    <p class="text-sm u-muted">macOS, Windows and Linux, on x64 and ARM64. Needs <span class="u-mono">bun</span> on PATH.</p>
   </section>
 
   <!-- Screenshots -->
