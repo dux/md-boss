@@ -1,6 +1,6 @@
-# Release pipeline. `hammer push` tags `v<commit count>` and this builds every platform and
-# publishes the assets the install scripts pull from. The version is that count, rendered
-# <a>.<b>.<c> by the Hammerfile (v94 ships as 0.9.4), so every checkout needs the whole history.
+# Release pipeline. `hammer deploy` stamps .version through vstamp and pushes the tag vX.Y.Z,
+# and this builds every platform and publishes the assets the install scripts pull from. The
+# version is read from .version, so the pushed tag must name the same one.
 #
 # The build steps themselves live in the Hammerfile, not here - this installs the gem and
 # calls the same `hammer` tasks you run locally, so there is one description of how the app
@@ -47,11 +47,11 @@ jobs:
       - run: gem install lux-hammer -v "$HAMMER_VERSION"
 
       - id: meta
-        name: Tag from the commit count, checked against the pushed tag
+        name: Tag from .version, checked against the pushed tag
         run: |
-          tag="v$(git rev-list --count HEAD)"
+          tag="v$(sed -n 's/^version: *\([^ #]*\).*/\1/p' .version)"
           if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
-            echo "tag $GITHUB_REF_NAME is not $tag, the commit count at it" >&2
+            echo "tag $GITHUB_REF_NAME is not $tag, the version in .version at it" >&2
             exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"

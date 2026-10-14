@@ -152,7 +152,7 @@ inside it rather than as a `node_modules`; a checkout runs `server/main.ts` from
 | `hammer run` | launch the bundle built here |
 | `hammer run:win` | build the shell for x86_64 and launch it under Rosetta (macOS) |
 | `hammer install_app` | copy the bundle into `/Applications` (macOS) |
-| `hammer push` | push the branch and tag its head `v<commit count>` - the tag starts the release |
+| `hammer deploy` | stamp `.version` with vstamp, tag `vX.Y.Z` and push branch and tag - the tag starts the release |
 | `hammer server` | run the bun server alone on a fixed port, for poking at it with a WebSocket client |
 | `hammer payload` | write `payload.tar.gz` - the bundled `server/main.js`, `dist/`, `version.txt` |
 | `hammer icon` | regenerate `icons/` from `icons/AppIcon.svg` |

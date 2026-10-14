@@ -21,17 +21,12 @@ DEV_URL     ||= 'http://localhost:1430'
 MIN_BUN     ||= '1.2.0'
 ICON_SIZES  ||= [16, 32, 64, 128, 256, 512, 1024].freeze
 
-# The version is the number of commits in main, and the repo stores none: a version file
-# would name versions that have no release. HEAD and 0 only cover a checkout without a main
-# branch - CI checks out the tag detached, and there HEAD is the same commit.
-COMMIT_COUNT ||= %w[main HEAD].map { |ref| `git rev-list --count #{ref} 2>#{File::NULL}`.strip }
-                              .find { |n| n.match?(/\A\d+\z/) }.to_i
-
-# Rendered <a>.<b>.<c>: b and c are the count's last two digits, a is everything before them,
-# so 94 is 0.9.4 and 1123 is 11.2.3. The release tag is the raw count, v94.
+# .version (YAML, `version: X.Y.Z`) holds the release version: the commit count on main
+# rendered dotted, 94 is 0.9.4 and 1123 is 11.2.3. Only `hammer deploy` writes it, through
+# vstamp, which also tags the release vX.Y.Z.
 # Not VERSION: hammer defines one of its own, and `VERSION ||=` resolves to that rather
 # than assigning - which is how every build so far stamped hammer's version into the app.
-APP_VERSION ||= COMMIT_COUNT.to_s.rjust(3, '0').then { |d| "#{d[0..-3].to_i}.#{d[-2]}.#{d[-1]}" }
+APP_VERSION ||= File.read('.version')[/^version: *(\S+)/, 1]
 
 # The server as one file. node_modules is not shipped, so the Agent SDK has to travel inside
 # it, and so do the parsers server/ imports from src/models. A checkout runs server/main.ts
@@ -344,24 +339,14 @@ task :install_app do
   end
 end
 
-# From "the work is committed" to "a release is building". Nothing is bumped: the tag is
-# v<commits up to HEAD>, the same count the release workflow checks it against.
-task :push do
-  desc 'Push the branch and tag its head v<commit count> - the tag starts the release'
+# From "the work is committed" to "a release is building": vstamp stamps .version, amends
+# it into HEAD while HEAD is unpushed (else adds a release commit), tags vX.Y.Z and pushes
+# branch and tag. The tag starts the release workflow.
+task :deploy do
+  desc 'Stamp + tag + push the version (vstamp count --release) - the tag starts the release'
   proc do
-    branch = `git rev-parse --abbrev-ref HEAD`.strip
-    error 'detached HEAD - check out a branch first' if branch == 'HEAD'
-    dirty = `git status --porcelain`.split("\n")
-    say.yellow "not in this push (commit them first):\n#{dirty.join("\n")}" unless dirty.empty?
-    tag = "v#{`git rev-list --count HEAD`.strip}"
-    if `git tag -l #{tag}`.strip != '' || `git ls-remote --tags origin #{tag} 2>/dev/null`.strip != ''
-      error "#{tag} already exists - nothing new to release"
-    end
-
-    sh "git push origin #{branch}"
-    sh "git tag -a #{tag} -m \"#{APP_NAME} #{APP_VERSION}\""
-    sh "git push origin #{tag}"
-    say.green "pushed #{branch} and #{tag} (#{APP_VERSION}) - the release workflow is building"
+    sh 'vstamp count --release'
+    say.green "pushed v#{File.read('.version')[/^version: *(\S+)/, 1]} - the release workflow is building"
   end
 end
 
