@@ -125,14 +125,14 @@
         divider.removeEventListener('pointerup', end)
         divider.removeEventListener('pointercancel', end)
         this.state.dragging = null
-        this.toggleClass('dragging', false)
+        this.root.classList.toggle('dragging', false)
       }
       divider.setPointerCapture(event.pointerId)
       divider.addEventListener('pointermove', move)
       divider.addEventListener('pointerup', end)
       divider.addEventListener('pointercancel', end)
       this.state.dragging = edge
-      this.toggleClass('dragging', true)
+      this.root.classList.toggle('dragging', true)
       event.preventDefault()
     }
   }
